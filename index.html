@@ -8,7 +8,8 @@
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 100% 0,#15375c,#0a1020 48%);min-height:100vh}
 header{padding:26px max(16px,calc((100vw - 1400px)/2));border-bottom:1px solid #2a3d56}
 h1{margin:0;font-size:clamp(27px,4vw,39px)}.sub{color:#9fb3d3;margin:7px 0 0}
-main{max-width:1400px;margin:18px auto;padding:0 14px;display:grid;grid-template-columns:minmax(295px,360px) minmax(0,1fr);gap:16px}
+main{max-width:1400px;margin:18px auto;padding:0 14px;display:grid;grid-template-columns:minmax(0,1fr) minmax(295px,360px);gap:16px}
+.preview-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px}.preview-toolbar h2{margin:0}.preview-actions{display:flex;gap:7px;flex-wrap:wrap}.preview-actions button{font-size:13px;padding:9px 11px}.preview-panel{align-self:start}.controls-panel{align-self:start}
 .panel{background:#121e31;border:1px solid #2c405b;border-radius:19px;padding:17px}
 h2{font-size:17px;margin:0 0 15px}h3{font-size:15px;margin:18px 0 10px}
 .drop{display:grid;place-items:center;text-align:center;min-height:128px;border:2px dashed #4986bc;border-radius:15px;background:#102640;cursor:pointer;padding:15px}
@@ -28,13 +29,21 @@ figcaption{padding:11px 12px;border-bottom:1px solid #304158;font-weight:600}
 canvas{display:block;max-width:100%;height:auto;max-height:75vh;border-radius:7px}
 #details{font-size:13px;color:#adbed5;margin:15px 0;line-height:1.6}
 .note{color:#96a8c4;font-size:12px;line-height:1.55;margin-top:16px}
-@media(max-width:950px){main{grid-template-columns:1fr}.viewer{grid-template-columns:1fr}.canvas{min-height:160px}}
+@media(max-width:950px){main{grid-template-columns:1fr}.preview-panel{order:0}.controls-panel{order:1}.viewer{grid-template-columns:1fr}.canvas{min-height:160px}}
 </style>
 </head>
 <body>
 <header><h1>DEHAZE <span style="color:#5bdcaa">WEB</span></h1><p class="sub">Покращення фото з туманом • AUTO / MANUAL • обробка локально</p></header>
 <main>
-<section class="panel">
+<section class="panel preview-panel" id="previewPanel">
+<div class="preview-toolbar"><h2>Результат обробки</h2><div class="preview-actions"><button id="uploadTop" type="button">Завантажити фото</button><button id="processTop" type="button" class="primary" disabled>Обробити</button></div></div>
+<div class="viewer">
+<figure><figcaption>Після обробки</figcaption><div class="canvas"><canvas id="after" width="640" height="360"></canvas></div></figure>
+<figure><figcaption>До обробки</figcaption><div class="canvas"><canvas id="before" width="640" height="360"></canvas></div></figure>
+</div>
+<p id="details">Завантаж фото, щоб порівняти результат.</p>
+</section>
+<section class="panel controls-panel">
 <h2>1. Завантаження</h2>
 <label id="drop" class="drop" for="photo"><span><strong>Вибрати фотографію</strong><br><span class="small">або перетягнути сюди<br>JPG · PNG · WEBP</span></span></label>
 <input id="photo" type="file" accept="image/jpeg,image/png,image/webp,image/*">
@@ -57,14 +66,6 @@ canvas{display:block;max-width:100%;height:auto;max-height:75vh;border-radius:7p
 <div class="actions"><button id="run" class="primary" disabled>Обробити фотографію</button><button id="save" disabled>Зберегти PNG</button><button id="reset">Скинути</button></div>
 <div role="status" aria-live="polite" id="status">Обери фотографію.</div>
 <p class="note">Фото не надсилається на сервер. AUTO Strong використовує guided DCP для густішого серпанку. Деталі, яких немає у вихідному фото, алгоритм не відновлює.</p>
-</section>
-<section class="panel">
-<h2>Порівняння</h2>
-<div class="viewer">
-<figure><figcaption>До обробки</figcaption><div class="canvas"><canvas id="before" width="640" height="360"></canvas></div></figure>
-<figure><figcaption>Після обробки</figcaption><div class="canvas"><canvas id="after" width="640" height="360"></canvas></div></figure>
-</div>
-<p id="details">Завантаж фото, щоб порівняти результат.</p>
 </section>
 </main>
 <script src="./dehaze-dcp.js?v=4"></script>
@@ -106,6 +107,8 @@ function setMode(m){
  ? 'AUTO Strong — guided DCP для густішого туману зі збереженням неба.'
  : 'MANUAL — налаштування сили, CLAHE, гами та різкості.';
 }
+$('uploadTop').onclick=()=>$('photo').click();
+$('processTop').onclick=()=>$('run').click();
 $('autoSoft').onclick=()=>setMode('autoSoft');
 $('autoStrong').onclick=()=>setMode('autoStrong');
 $('manual').onclick=()=>setMode('manual');
@@ -125,7 +128,7 @@ async function loadFile(file){
  const img=new Image();img.onload=()=>{
  image=img;showOriginal();placeholder(after,outctx,'Натисни «Обробити»');
  $('fileinfo').textContent=file.name+' • '+img.naturalWidth+' × '+img.naturalHeight+' • '+(file.size/1048576).toFixed(2)+' МБ';
- $('run').disabled=false;$('save').disabled=true;$('status').textContent='Фото готове до обробки.';$('details').textContent='Оригінал: '+img.naturalWidth+' × '+img.naturalHeight;
+ $('run').disabled=false;$('processTop').disabled=false;$('save').disabled=true;$('status').textContent='Фото готове до обробки.';$('details').textContent='Оригінал: '+img.naturalWidth+' × '+img.naturalHeight;
  };img.onerror=()=>$('status').textContent='Не вдалося відкрити фотографію.';img.src=objectURL;
 }
 $('photo').onchange=e=>loadFile(e.target.files[0]);
@@ -218,7 +221,7 @@ function sharpen(src,w,h,amount){
  }return dst;
 }
 $('run').onclick=async()=>{
- if(!image||busy)return;busy=true;$('run').disabled=true;$('save').disabled=true;$('status').textContent='Обробка…';
+ if(!image||busy)return;busy=true;$('run').disabled=true;$('processTop').disabled=true;$('save').disabled=true;$('status').textContent='Обробка…';
  await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
  try{
   const start=performance.now(),[w,h]=fit(image.naturalWidth,image.naturalHeight,+$('resolution').value);
@@ -236,15 +239,16 @@ $('run').onclick=async()=>{
   }
   // Avoid sharpening compression noise in dense fog.
   frame.data.set(sharpen(result,w,h,p.sharp*p.strength/100*(mode==='autoStrong'?.35:1)));after.width=w;after.height=h;outctx.putImageData(frame,0,0);
+  after.scrollIntoView({behavior:'smooth',block:'start'});
   const seconds=((performance.now()-start)/1000).toFixed(2);
   $('status').textContent='Готово за '+seconds+' с';$('details').textContent='Обробка '+w+' × '+h+' • '+(mode==='autoSoft'?'AUTO SOFT':mode==='autoStrong'?'AUTO STRONG':'MANUAL')+' • сила '+p.strength+'% • '+(mode==='autoStrong'?'guided DCP':'CLAHE '+p.clip.toFixed(1))+' • захист неба '+p.skyProtect+'%';
   $('save').disabled=false;
  }catch(err){$('status').textContent='Помилка обробки: '+err.message;console.error(err)}
- finally{busy=false;$('run').disabled=false}
+ finally{busy=false;$('run').disabled=false;$('processTop').disabled=false}
 };
 $('save').onclick=()=>{if($('save').disabled)return;after.toBlob(blob=>{if(!blob)return;const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='dehaze-result.png';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000)},'image/png')};
 $('reset').onclick=()=>{image=null;$('photo').value='';if(objectURL)URL.revokeObjectURL(objectURL);objectURL=null;
-placeholder(before,inctx,'Оригінал');placeholder(after,outctx,'Результат');$('fileinfo').textContent='Фото не завантажене.';$('run').disabled=true;$('save').disabled=true;$('status').textContent='Обери фотографію.';$('details').textContent='Завантаж фото, щоб порівняти результат.'};
+placeholder(before,inctx,'Оригінал');placeholder(after,outctx,'Результат');$('fileinfo').textContent='Фото не завантажене.';$('run').disabled=true;$('processTop').disabled=true;$('save').disabled=true;$('status').textContent='Обери фотографію.';$('details').textContent='Завантаж фото, щоб порівняти результат.'};
 </script>
 </body>
 </html>
