@@ -66,7 +66,9 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     private final FloatBuffer quad;
     private final AtomicBoolean framePending=new AtomicBoolean(false);
     private final float[] stMatrix=new float[16];
-    private volatile boolean enhanced=true,fill=true,full=false,frozen=false;
+    private volatile boolean enhanced=true,fill=true,frozen=false;
+    // 0: full-frame 50/50 wipe (no stretching), 1: separate FIT frames, 2: processed fullscreen.
+    private volatile int viewMode=0;
     private volatile float zoom=1f,panX=0f,panY=0f;
     private volatile int userRotation=0;
     private int cropLoc,panLoc;
@@ -91,7 +93,8 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
 
     void setEnhanced(boolean value){enhanced=value;}
     void setFill(boolean value){fill=value;}
-    void setFull(boolean value){full=value;}
+    void setViewMode(int value){viewMode=Math.max(0,Math.min(2,value));}
+    int getViewMode(){return viewMode;}
     void setFrozen(boolean value){frozen=value;}
     void setZoom(float value){zoom=Math.max(1f,Math.min(8f,value));}
     float getZoom(){return zoom;}
@@ -105,7 +108,11 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     void refresh(){view.requestRender();}
     void setStrength(float value){strength=Math.max(0f,Math.min(1f,value));}
     void setCameraInfo(int w,int h,int orient,boolean realtime) {
-        cameraWidth=w;cameraHeight=h;rotation=orient;realtimeTimestamps=realtime;
+        cameraWidth=Math.max(1,w);cameraHeight=Math.max(1,h);
+        // Fixed landscape UI. Sensor metadata controls frame orientation, not accelerometer.
+        rotation=((orient%360)+360)%360;userRotation=0;
+        realtimeTimestamps=realtime;
+        resetZoom();
     }
 
     private int compile(int kind,String source) {
@@ -161,34 +168,56 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         screenWidth=width;screenHeight=height;
     }
 
-    private void drawPane(int pane,boolean useFilter){
-        boolean portrait=screenHeight>screenWidth;
-        int pw,ph,left,bottom;
-        if(full){pw=screenWidth;ph=screenHeight;left=0;bottom=0;}
-        else if(portrait){pw=screenWidth;ph=screenHeight/2;left=0;bottom=pane==0?screenHeight-ph:0;}
-        else{pw=screenWidth/2;ph=screenHeight;left=pane==0?0:pw;bottom=0;}
+    // A viewport keeps its own aspect ratio; FILL crops source UVs, never stretches pixels.
+    private void drawImage(int x,int y,int width,int height,boolean useFilter,boolean cover){
+        if(width<=0||height<=0)return;
         int rot=effectiveRotation();
         int cw=cameraWidth,ch=cameraHeight;
-        if(rot==90||rot==270){int tmp=cw;cw=ch;ch=tmp;}
-        float cameraAspect=(float)cw/Math.max(1,ch);
-        float paneAspect=(float)pw/Math.max(1,ph);
+        if(rot==90||rot==270){int t=cw;cw=ch;ch=t;}
+        float sourceAspect=(float)cw/(float)Math.max(1,ch);
+        float screenAspect=(float)width/(float)Math.max(1,height);
         float cropX=1f,cropY=1f;
-        int vw=pw,vh=ph,vx=left,vy=bottom;
-        if(fill){
-            if(cameraAspect>paneAspect)cropX=paneAspect/cameraAspect;
-            else cropY=cameraAspect/paneAspect;
+        int vx=x,vy=y,vw=width,vh=height;
+        if(cover){
+            // Match the cropped image's aspect to the destination.
+            if(sourceAspect>screenAspect)cropX=screenAspect/sourceAspect;
+            else cropY=sourceAspect/screenAspect;
         }else{
-            float fit=Math.min((float)pw/cw,(float)ph/ch);
-            vw=Math.max(1,Math.round(cw*fit));vh=Math.max(1,Math.round(ch*fit));
-            vx=left+(pw-vw)/2;vy=bottom+(ph-vh)/2;
+            float scale=Math.min((float)width/(float)cw,(float)height/(float)ch);
+            vw=Math.max(1,Math.round(cw*scale));
+            vh=Math.max(1,Math.round(ch*scale));
+            vx=x+(width-vw)/2;vy=y+(height-vh)/2;
         }
-        float z=Math.max(1f,zoom);
         GLES20.glViewport(vx,vy,vw,vh);
         GLES20.glUniform1f(enhancedLoc,useFilter?1f:0f);
         GLES20.glUniform1f(strengthLoc,strength);
+        float z=Math.max(1f,zoom);
         GLES20.glUniform2f(cropLoc,cropX/z,cropY/z);
         GLES20.glUniform2f(panLoc,panX,panY);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP,0,4);
+    }
+
+    private void drawViews(){
+        final int mode=viewMode;
+        if(mode==0){
+            // Both draws use identical full-screen geometry. Scissor only decides
+            // which half of the same undistorted source frame is visible.
+            int middle=screenWidth/2;
+            GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
+            GLES20.glScissor(0,0,middle,screenHeight);
+            drawImage(0,0,screenWidth,screenHeight,false,true);
+            GLES20.glScissor(middle,0,screenWidth-middle,screenHeight);
+            drawImage(0,0,screenWidth,screenHeight,enhanced,true);
+            GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+        }else if(mode==1){
+            // Independent original and processed previews: FIT by default,
+            // preserving the complete 16:9 source with letterboxing as needed.
+            int half=screenWidth/2;
+            drawImage(0,0,half,screenHeight,false,fill);
+            drawImage(half,0,screenWidth-half,screenHeight,enhanced,fill);
+        }else{
+            drawImage(0,0,screenWidth,screenHeight,enhanced,true);
+        }
     }
 
     @Override public void onDrawFrame(GL10 unused) {
@@ -211,8 +240,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         GLES20.glUniform2f(pixelLoc,1f/Math.max(1,cameraWidth),1f/Math.max(1,cameraHeight));
         GLES20.glEnableVertexAttribArray(positionLoc);
         GLES20.glVertexAttribPointer(positionLoc,2,GLES20.GL_FLOAT,false,0,quad);
-        drawPane(0,full&&enhanced);
-        if(!full)drawPane(1,enhanced);
+        drawViews();
         CaptureCallback cb=capture;
         if(cb!=null){
             capture=null;
@@ -242,8 +270,8 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
                 if(ms>=0&&ms<5000)age=Long.toString(ms)+" мс";
             }
             final String stats=String.format(Locale.US,
-                "Вік кадру до показу: %s  |  CPU→GPU: %.1f мс  |  %.0f FPS",
-                age,submitMs,fps);
+                "%.0f FPS  •  кадр %s  •  подача %.1f мс  •  %d×%d",
+                fps,age,submitMs,cameraWidth,cameraHeight);
             statsCallback.onStats(stats);
             framesSinceStats=0;lastStatsNanos=submitted;
         }
