@@ -1,4 +1,4 @@
-name: Build Android LIVE APK
+name: Build and publish Dehaze LIVE APK
 
 on:
   push:
@@ -9,12 +9,16 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: dehaze-live-apk
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -22,17 +26,79 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
-      - name: Install required SDK
+      - name: Install required Android SDK
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'platform-tools'
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
-      - name: Build debug APK
+      - name: Compile debug APK
+        id: compile
         run: gradle -p android-live --no-daemon --stacktrace assembleDebug
-      - name: Upload APK
+      - name: Verify APK
+        id: verify
+        run: |
+          set -euo pipefail
+          apk=android-live/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          cp "$apk" Dehaze-Live-debug.apk
+          sha256sum Dehaze-Live-debug.apk > Dehaze-Live-debug.apk.sha256
+          ls -lh Dehaze-Live-debug.apk
+      - name: Upload APK as workflow artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Dehaze-Live-debug
-          path: android-live/app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            Dehaze-Live-debug.apk
+            Dehaze-Live-debug.apk.sha256
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90
+      - name: Publish stable direct-download release
+        id: publish
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=dehaze-live-latest
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "Dehaze LIVE Android (debug)" --notes "Native Camera2 + OpenGL ES split-screen prototype. Left original, right GPU dehaze. No INTERNET permission. Debug APK is for testing; use your own release signing for distribution." --prerelease
+          fi
+          gh release upload "$tag" Dehaze-Live-debug.apk Dehaze-Live-debug.apk.sha256 --clobber
+          gh release view "$tag" --json url,assets
+      - name: Publish build status to repository
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMPILE: ${{ steps.compile.outcome }}
+          VERIFY: ${{ steps.verify.outcome }}
+          PUBLISH: ${{ steps.publish.outcome }}
+        run: |
+          set -euo pipefail
+          if [ "$COMPILE" = success ] && [ "$VERIFY" = success ] && [ "$PUBLISH" = success ]; then
+            state=success
+          else
+            state=failure
+          fi
+          jq -nc \
+            --arg state "$state" \
+            --arg compile "$COMPILE" \
+            --arg verify "$VERIFY" \
+            --arg publish "$PUBLISH" \
+            --arg commit "$GITHUB_SHA" \
+            --arg url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --arg apk "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/dehaze-live-latest/Dehaze-Live-debug.apk" \
+            --arg time "$(date -u +%FT%TZ)" \
+            '{state:$state,compile:$compile,verify:$verify,publish:$publish,commit:$commit,workflow_url:$url,apk_url:(if $state=="success" then $apk else null end),updated_utc:$time}' > build-status.json
+          old_sha=$(gh api "repos/$GITHUB_REPOSITORY/contents/build-status.json" --jq .sha 2>/dev/null || true)
+          if [ -n "$old_sha" ]; then
+            gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/build-status.json" \
+              -f message="Record latest Dehaze LIVE APK build" \
+              -f content="$(base64 -w0 < build-status.json)" \
+              -f sha="$old_sha" -f branch=main >/dev/null
+          else
+            gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/build-status.json" \
+              -f message="Record latest Dehaze LIVE APK build" \
+              -f content="$(base64 -w0 < build-status.json)" \
+              -f branch=main >/dev/null
+          fi
