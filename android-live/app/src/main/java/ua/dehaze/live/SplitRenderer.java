@@ -35,13 +35,15 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         "uniform vec2 uPixel;\n" +
         "uniform float uEnhanced;\n" +
         "uniform float uStrength;\n" +
+        "uniform vec2 uCrop;\n" +
+        "uniform vec2 uPan;\n" +
         "vec2 rotateUV(vec2 uv){\n" +
         "  if(uRotation<45.0) return uv;\n" +
         "  if(uRotation<135.0) return vec2(uv.y,1.0-uv.x);\n" +
         "  if(uRotation<225.0) return vec2(1.0-uv.x,1.0-uv.y);\n" +
         "  return vec2(1.0-uv.y,uv.x);\n" +
         "}\n" +
-        "vec3 grab(vec2 uv){return texture2D(uCamera,(uMatrix*vec4(rotateUV(uv),0.0,1.0)).xy).rgb;}\n" +
+        "vec3 grab(vec2 uv){vec2 p=clamp((uv-.5)*uCrop+.5+uPan,vec2(.001),vec2(.999));return texture2D(uCamera,(uMatrix*vec4(rotateUV(p),0.0,1.0)).xy).rgb;}\n" +
         "void main(){\n" +
         " vec3 color=grab(vUV);\n" +
         " if(uEnhanced<0.5||uStrength<0.001){gl_FragColor=vec4(color,1.0);return;}\n" +
@@ -64,7 +66,10 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     private final FloatBuffer quad;
     private final AtomicBoolean framePending=new AtomicBoolean(false);
     private final float[] stMatrix=new float[16];
-    private volatile boolean enhanced=true;
+    private volatile boolean enhanced=true,fill=true,full=false,frozen=false;
+    private volatile float zoom=1f,panX=0f,panY=0f;
+    private volatile int userRotation=0;
+    private int cropLoc,panLoc;
     private volatile float strength=.60f;
     private volatile int cameraWidth=1280,cameraHeight=720,rotation=0;
     private volatile boolean realtimeTimestamps=false;
@@ -85,6 +90,19 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     }
 
     void setEnhanced(boolean value){enhanced=value;}
+    void setFill(boolean value){fill=value;}
+    void setFull(boolean value){full=value;}
+    void setFrozen(boolean value){frozen=value;}
+    void setZoom(float value){zoom=Math.max(1f,Math.min(8f,value));}
+    float getZoom(){return zoom;}
+    void panBy(float dx,float dy){float range=.5f*(1f-1f/Math.max(1,zoom));panX=Math.max(-range,Math.min(range,panX+dx));panY=Math.max(-range,Math.min(range,panY+dy));}
+    void resetZoom(){zoom=1f;panX=0;panY=0;}
+    void rotate90(){userRotation=(userRotation+90)%360;}
+    int effectiveRotation(){return (rotation+userRotation)%360;}
+    interface CaptureCallback{void onCaptured(android.graphics.Bitmap bitmap);}
+    private volatile CaptureCallback capture;
+    void captureNext(CaptureCallback c){capture=c;}
+    void refresh(){view.requestRender();}
     void setStrength(float value){strength=Math.max(0f,Math.min(1f,value));}
     void setCameraInfo(int w,int h,int orient,boolean realtime) {
         cameraWidth=w;cameraHeight=h;rotation=orient;realtimeTimestamps=realtime;
@@ -120,6 +138,8 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         rotationLoc=GLES20.glGetUniformLocation(program,"uRotation");
         enhancedLoc=GLES20.glGetUniformLocation(program,"uEnhanced");
         strengthLoc=GLES20.glGetUniformLocation(program,"uStrength");
+        cropLoc=GLES20.glGetUniformLocation(program,"uCrop");
+        panLoc=GLES20.glGetUniformLocation(program,"uPan");
         int[] textures=new int[1];GLES20.glGenTextures(1,textures,0);
         textureId=textures[0];
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES,textureId);
@@ -142,22 +162,38 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     }
 
     private void drawPane(int pane,boolean useFilter){
-        int half=screenWidth/2,xStart=pane==0?0:half;
-        int paneWidth=pane==0?half:screenWidth-half;
-        int camW=cameraWidth,camH=cameraHeight;
-        if(rotation==90||rotation==270){int tmp=camW;camW=camH;camH=tmp;}
-        float factor=Math.min((float)paneWidth/camW,(float)screenHeight/camH);
-        int dw=Math.max(1,Math.round(camW*factor)),dh=Math.max(1,Math.round(camH*factor));
-        int x=xStart+(paneWidth-dw)/2,y=(screenHeight-dh)/2;
-        GLES20.glViewport(x,y,dw,dh);
+        boolean portrait=screenHeight>screenWidth;
+        int pw,ph,left,bottom;
+        if(full){pw=screenWidth;ph=screenHeight;left=0;bottom=0;}
+        else if(portrait){pw=screenWidth;ph=screenHeight/2;left=0;bottom=pane==0?screenHeight-ph:0;}
+        else{pw=screenWidth/2;ph=screenHeight;left=pane==0?0:pw;bottom=0;}
+        int rot=effectiveRotation();
+        int cw=cameraWidth,ch=cameraHeight;
+        if(rot==90||rot==270){int tmp=cw;cw=ch;ch=tmp;}
+        float cameraAspect=(float)cw/Math.max(1,ch);
+        float paneAspect=(float)pw/Math.max(1,ph);
+        float cropX=1f,cropY=1f;
+        int vw=pw,vh=ph,vx=left,vy=bottom;
+        if(fill){
+            if(cameraAspect>paneAspect)cropX=paneAspect/cameraAspect;
+            else cropY=cameraAspect/paneAspect;
+        }else{
+            float fit=Math.min((float)pw/cw,(float)ph/ch);
+            vw=Math.max(1,Math.round(cw*fit));vh=Math.max(1,Math.round(ch*fit));
+            vx=left+(pw-vw)/2;vy=bottom+(ph-vh)/2;
+        }
+        float z=Math.max(1f,zoom);
+        GLES20.glViewport(vx,vy,vw,vh);
         GLES20.glUniform1f(enhancedLoc,useFilter?1f:0f);
         GLES20.glUniform1f(strengthLoc,strength);
+        GLES20.glUniform2f(cropLoc,cropX/z,cropY/z);
+        GLES20.glUniform2f(panLoc,panX,panY);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP,0,4);
     }
 
     @Override public void onDrawFrame(GL10 unused) {
         if(surfaceTexture==null||screenWidth<2||screenHeight<2)return;
-        if(framePending.getAndSet(false)){
+        if(framePending.getAndSet(false)&&!frozen){
             try{surfaceTexture.updateTexImage();surfaceTexture.getTransformMatrix(stMatrix);textureHasFrame=true;}
             catch(RuntimeException e){return;}
         }
@@ -171,12 +207,28 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES,textureId);
         GLES20.glUniform1i(GLES20.glGetUniformLocation(program,"uCamera"),0);
         GLES20.glUniformMatrix4fv(matrixLoc,1,false,stMatrix,0);
-        GLES20.glUniform1f(rotationLoc,(float)rotation);
+        GLES20.glUniform1f(rotationLoc,(float)effectiveRotation());
         GLES20.glUniform2f(pixelLoc,1f/Math.max(1,cameraWidth),1f/Math.max(1,cameraHeight));
         GLES20.glEnableVertexAttribArray(positionLoc);
         GLES20.glVertexAttribPointer(positionLoc,2,GLES20.GL_FLOAT,false,0,quad);
-        drawPane(0,false);
-        drawPane(1,enhanced);
+        drawPane(0,full&&enhanced);
+        if(!full)drawPane(1,enhanced);
+        CaptureCallback cb=capture;
+        if(cb!=null){
+            capture=null;
+            java.nio.ByteBuffer pixels=java.nio.ByteBuffer.allocateDirect(screenWidth*screenHeight*4);
+            pixels.order(java.nio.ByteOrder.nativeOrder());
+            GLES20.glReadPixels(0,0,screenWidth,screenHeight,GLES20.GL_RGBA,GLES20.GL_UNSIGNED_BYTE,pixels);
+            android.graphics.Bitmap bitmap=android.graphics.Bitmap.createBitmap(screenWidth,screenHeight,android.graphics.Bitmap.Config.ARGB_8888);
+            int[] vals=new int[screenWidth*screenHeight];
+            pixels.rewind();
+            for(int y=0;y<screenHeight;y++)for(int x=0;x<screenWidth;x++){
+                int rr=pixels.get()&255,gg=pixels.get()&255,bb=pixels.get()&255,aa=pixels.get()&255;
+                vals[(screenHeight-1-y)*screenWidth+x]=(aa<<24)|(rr<<16)|(gg<<8)|bb;
+            }
+            bitmap.setPixels(vals,0,screenWidth,0,0,screenWidth,screenHeight);
+            cb.onCaptured(bitmap);
+        }
         GLES20.glDisableVertexAttribArray(positionLoc);
         long submitted=SystemClock.elapsedRealtimeNanos();
         framesSinceStats++;
