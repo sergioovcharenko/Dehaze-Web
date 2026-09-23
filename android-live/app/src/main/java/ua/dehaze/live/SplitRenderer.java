@@ -73,6 +73,12 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     private volatile int userRotation=0;
     private int cropLoc,panLoc;
     private volatile float strength=.60f;
+    private volatile boolean manualMode=false;
+    private int analysisTexture=0,analysisFbo=0;
+    private static final int SAMPLE_W=64,SAMPLE_H=36;
+    private final java.nio.ByteBuffer analysisPixels=java.nio.ByteBuffer.allocateDirect(SAMPLE_W*SAMPLE_H*4);
+    private long lastAnalysisNs=0;
+    private boolean analysisReady=false;
     private volatile int cameraWidth=1280,cameraHeight=720,rotation=0;
     private volatile boolean realtimeTimestamps=false;
     private SurfaceTexture surfaceTexture;
@@ -107,6 +113,8 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     void captureNext(CaptureCallback c){capture=c;}
     void refresh(){view.requestRender();}
     void setStrength(float value){strength=Math.max(0f,Math.min(1f,value));}
+    void setManualMode(boolean value){manualMode=value;lastAnalysisNs=0;}
+    boolean isManualMode(){return manualMode;}
     void setCameraInfo(int w,int h,int orient,boolean realtime) {
         cameraWidth=Math.max(1,w);cameraHeight=Math.max(1,h);
         // Fixed landscape UI. Sensor metadata controls frame orientation, not accelerometer.
@@ -161,7 +169,103 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
             view.requestRender();
         },new Handler(Looper.getMainLooper()));
         framePending.set(false);textureHasFrame=false;lastStatsNanos=0;
+        lastAnalysisNs=0;initAnalysisTarget();
         activity.runOnUiThread(()->textureCallback.onReady(surfaceTexture));
+    }
+
+
+    // Sample a downscaled original frame roughly once a second. This is an
+    // inexpensive image heuristic, not a calibrated fog-density measurement.
+    private void initAnalysisTarget(){
+        analysisReady=false;
+        try{
+            int[] ids=new int[1];
+            GLES20.glGenTextures(1,ids,0);
+            analysisTexture=ids[0];
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,analysisTexture);
+            GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D,0,GLES20.GL_RGBA,SAMPLE_W,SAMPLE_H,0,
+                GLES20.GL_RGBA,GLES20.GL_UNSIGNED_BYTE,null);
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_MIN_FILTER,GLES20.GL_LINEAR);
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_MAG_FILTER,GLES20.GL_LINEAR);
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_WRAP_S,GLES20.GL_CLAMP_TO_EDGE);
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_WRAP_T,GLES20.GL_CLAMP_TO_EDGE);
+            GLES20.glGenFramebuffers(1,ids,0);
+            analysisFbo=ids[0];
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER,analysisFbo);
+            GLES20.glFramebufferTexture2D(GLES20.GL_FRAMEBUFFER,GLES20.GL_COLOR_ATTACHMENT0,
+                GLES20.GL_TEXTURE_2D,analysisTexture,0);
+            analysisReady=GLES20.glCheckFramebufferStatus(GLES20.GL_FRAMEBUFFER)
+                ==GLES20.GL_FRAMEBUFFER_COMPLETE;
+        }catch(RuntimeException ex){analysisReady=false;}
+        finally{
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER,0);
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,0);
+        }
+        if(!analysisReady)activity.onAutoUnavailable();
+    }
+
+    private static float clamp01(float value){return Math.max(0f,Math.min(1f,value));}
+
+    private void updateAutomaticStrength(long nowNs){
+        if(manualMode||!enhanced||frozen||!analysisReady||!textureHasFrame)return;
+        if(lastAnalysisNs!=0&&nowNs-lastAnalysisNs<1_250_000_000L)return;
+        lastAnalysisNs=nowNs;
+        // Reading only 64x36 pixels. Sampling the same Camera2 OES texture,
+        // without uploading data or generating an extra camera/video stream.
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER,analysisFbo);
+        GLES20.glViewport(0,0,SAMPLE_W,SAMPLE_H);
+        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+        GLES20.glUniform1f(enhancedLoc,0f);
+        GLES20.glUniform1f(strengthLoc,0f);
+        GLES20.glUniform2f(cropLoc,1f,1f);
+        GLES20.glUniform2f(panLoc,0f,0f);
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP,0,4);
+        analysisPixels.position(0);
+        GLES20.glReadPixels(0,0,SAMPLE_W,SAMPLE_H,GLES20.GL_RGBA,
+            GLES20.GL_UNSIGNED_BYTE,analysisPixels);
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER,0);
+        analysisPixels.rewind();
+
+        final int count=SAMPLE_W*SAMPLE_H;
+        final int[] hist=new int[256];
+        final int[] previousRow=new int[SAMPLE_W];
+        float sum=0f,edgeSum=0f,saturation=0f;
+        int edgeCount=0;
+        for(int y=0;y<SAMPLE_H;y++){
+            int left=0;
+            for(int x=0;x<SAMPLE_W;x++){
+                int red=analysisPixels.get()&255;
+                int green=analysisPixels.get()&255;
+                int blue=analysisPixels.get()&255;
+                analysisPixels.get(); // alpha
+                int luminance=Math.min(255,Math.round(.299f*red+.587f*green+.114f*blue));
+                int min=Math.min(red,Math.min(green,blue));
+                int max=Math.max(red,Math.max(green,blue));
+                saturation+=max-min;
+                hist[luminance]++;
+                sum+=luminance;
+                if(x>0){edgeSum+=Math.abs(luminance-left);edgeCount++;}
+                if(y>0){edgeSum+=Math.abs(luminance-previousRow[x]);edgeCount++;}
+                left=luminance;previousRow[x]=luminance;
+            }
+        }
+        int acc=0,p10=0,p90=255;
+        for(int i=0;i<256;i++){acc+=hist[i];if(acc>=count*.10){p10=i;break;}}
+        acc=0;
+        for(int i=0;i<256;i++){acc+=hist[i];if(acc>=count*.90){p90=i;break;}}
+        float contrastScore=clamp01((105f-(p90-p10))/100f);
+        float edgeMean=edgeSum/Math.max(1,edgeCount);
+        float textureScore=clamp01((18f-edgeMean)/18f);
+        float saturationMean=saturation/count;
+        float grayScore=clamp01((48f-saturationMean)/48f);
+        float hazeProxy=contrastScore*.45f+textureScore*.35f+grayScore*.20f;
+        float target=.22f+.64f*hazeProxy;
+        float mean=sum/count;
+        if(mean<65f)target=.22f+(target-.22f)*.65f;
+        // Smooth per-frame changes to avoid pulsing when the camera pans.
+        strength=clamp01(strength*.72f+target*.28f);
+        activity.onAutoStrength(strength);
     }
 
     @Override public void onSurfaceChanged(GL10 unused,int width,int height){
@@ -257,6 +361,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
             bitmap.setPixels(vals,0,screenWidth,0,0,screenWidth,screenHeight);
             cb.onCaptured(bitmap);
         }
+        updateAutomaticStrength(started);
         GLES20.glDisableVertexAttribArray(positionLoc);
         long submitted=SystemClock.elapsedRealtimeNanos();
         framesSinceStats++;
