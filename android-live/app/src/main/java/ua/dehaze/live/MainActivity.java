@@ -60,7 +60,9 @@ public final class MainActivity extends Activity {
     private TextView toggle;
     private TextView videoLabelsLeft,videoLabelsRight,zoomBadge,modeBadge;
     private FrameLayout root,drawer,videoArea;
-    private boolean fillMode=true,fullMode=false,frozen=false,drawerVisible=false;
+    private boolean fillMode=false,frozen=false,drawerVisible=false;
+    private int viewMode=0;  // 0 = undistorted 50/50, 1 = separate full FIT frames, 2 = processed fullscreen
+    private View drawerScrim;
     private boolean usingFile=false;
     private Uri fileUri;
     private MediaPlayer mediaPlayer;
@@ -75,6 +77,8 @@ public final class MainActivity extends Activity {
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+        showImmersive();
         cameraManager = (CameraManager)getSystemService(Context.CAMERA_SERVICE);
         cameraThread = new HandlerThread("camera2-preview");
         cameraThread.start();
@@ -107,33 +111,39 @@ public final class MainActivity extends Activity {
         return t;
     }
 
+    private void showImmersive(){
+        // Landscape stays locked; hide both Android bars until an edge swipe.
+        getWindow().getDecorView().setSystemUiVisibility(
+            View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+    }
+
     private void drawHeader(){
         LinearLayout bar=new LinearLayout(this);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(9),dp(5),dp(9),dp(5));
-        bar.setBackgroundColor(Color.rgb(37,40,44));
-        TextView logo=text("◉",23,ACCENT);
-        logo.setPadding(dp(5),0,dp(10),0);
+        bar.setPadding(dp(10),dp(3),dp(8),dp(3));
+        bar.setBackgroundColor(Color.rgb(40,43,47));
+        TextView logo=text("◉",19,ACCENT);
+        logo.setGravity(Gravity.CENTER_VERTICAL);
+        logo.setPadding(dp(4),0,dp(10),0);
         bar.addView(logo);
-        TextView title=text("Dehaze LIVE",17,INK);
+        TextView title=text("Меті Туман",17,INK);
         title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         bar.addView(title);
-        LinearLayout.LayoutParams stretch=new LinearLayout.LayoutParams(0,dp(2),1f);
-        bar.addView(new View(this),stretch);
-        statsView=text("FPS —  •  — мс  •  GPU  •  720p",11,MUTED);
+        bar.addView(new View(this),new LinearLayout.LayoutParams(0,dp(1),1f));
+        statsView=text("Очікування камери",11,MUTED);
+        statsView.setSingleLine(true);
         bar.addView(statsView);
         TextView menu=button("☰",()->setDrawer(!drawerVisible));
-        LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(dp(47),dp(40));
-        mp.leftMargin=dp(8);
+        LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(dp(44),dp(36));
+        mp.leftMargin=dp(9);
         bar.addView(menu,mp);
-        FrameLayout.LayoutParams top=new FrameLayout.LayoutParams(-1,dp(52),Gravity.TOP);
-        root.addView(bar,top);
+        root.addView(bar,new FrameLayout.LayoutParams(-1,dp(46),Gravity.TOP));
     }
 
     private void drawLabels(){
         LinearLayout overlay=new LinearLayout(this);
-        boolean portrait=getResources().getConfiguration().orientation==Configuration.ORIENTATION_PORTRAIT;
-        overlay.setOrientation(portrait?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL);
+        overlay.setOrientation(LinearLayout.HORIZONTAL);
         overlay.setGravity(Gravity.TOP);
         overlay.setPadding(dp(9),dp(9),dp(9),0);
         videoLabelsLeft=text("ОРИГІНАЛ",12,INK);
@@ -148,13 +158,9 @@ public final class MainActivity extends Activity {
         FrameLayout l=new FrameLayout(this),right=new FrameLayout(this);
         l.addView(videoLabelsLeft,new FrameLayout.LayoutParams(-2,-2,Gravity.TOP|Gravity.LEFT));
         right.addView(videoLabelsRight,new FrameLayout.LayoutParams(-2,-2,Gravity.TOP|Gravity.LEFT));
-        LinearLayout.LayoutParams share=portrait
-            ?new LinearLayout.LayoutParams(-1,0,1f)
-            :new LinearLayout.LayoutParams(0,-1,1f);
+        LinearLayout.LayoutParams share=new LinearLayout.LayoutParams(0,-1,1f);
         overlay.addView(l,share);
-        LinearLayout.LayoutParams share2=portrait
-            ?new LinearLayout.LayoutParams(-1,0,1f)
-            :new LinearLayout.LayoutParams(0,-1,1f);
+        LinearLayout.LayoutParams share2=new LinearLayout.LayoutParams(0,-1,1f);
         overlay.addView(right,share2);
         videoArea.addView(overlay,new FrameLayout.LayoutParams(-1,-1));
         zoomBadge=text("1.0×",11,INK);
@@ -167,84 +173,105 @@ public final class MainActivity extends Activity {
 
     private void menuItem(LinearLayout list,String title,Runnable callback){
         TextView t=button(title,callback);
-        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(45));
-        lp.bottomMargin=dp(8);
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(39));
+        lp.bottomMargin=dp(6);
         list.addView(t,lp);
     }
 
     private void menuTitle(LinearLayout list,String title){
         TextView t=text(title,12,MUTED);
-        t.setPadding(0,dp(9),0,dp(6));
+        t.setPadding(0,dp(10),0,dp(5));
         list.addView(t);
     }
 
+    private void selectMode(int mode){
+        viewMode=mode;
+        renderer.setViewMode(mode);
+        // Both 50/50 and full-screen sample exactly the same full-frame geometry.
+        videoLabelsLeft.setVisibility(mode==2?View.GONE:View.VISIBLE);
+        videoLabelsRight.setText(mode==2?"АНТИТУМАН":"АНТИТУМАН");
+        renderer.refresh();
+        setDrawer(false);
+        setState(mode==0?"Порівняння 50/50 без деформації":
+            mode==1?"Два повні кадри зі збереженням пропорцій":
+                    "Оброблене відео на весь екран");
+    }
+
     private void makeDrawer(){
+        drawerScrim=new View(this);
+        drawerScrim.setBackgroundColor(Color.argb(78,0,0,0));
+        drawerScrim.setOnClickListener(v->setDrawer(false));
+        FrameLayout.LayoutParams scrim=new FrameLayout.LayoutParams(-1,-1);
+        scrim.topMargin=dp(46);
+        root.addView(drawerScrim,scrim);
+
         drawer=new FrameLayout(this);
-        drawer.setBackgroundColor(Color.rgb(42,45,49));
+        drawer.setBackgroundColor(Color.rgb(47,50,54));
         ScrollView scroll=new ScrollView(this);
+        scroll.setFillViewport(false);
         LinearLayout list=new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
-        list.setPadding(dp(15),dp(12),dp(15),dp(16));
+        list.setPadding(dp(11),dp(5),dp(11),dp(13));
         scroll.addView(list);
         drawer.addView(scroll);
-        menuTitle(list,"КЕРУВАННЯ");
-        menuItem(list,"✕  Закрити меню",()->setDrawer(false));
-        toggle=button("Антитуман: УВІМКНЕНО",()->{
-            enhanced=!enhanced;
-            renderer.setEnhanced(enhanced);
-            toggle.setText(enhanced?"Антитуман: УВІМКНЕНО":"Антитуман: ВИМКНЕНО");
+
+        menuTitle(list,"МЕТІ ТУМАН  •  ОФЛАЙН");
+        menuItem(list,"✕  Сховати",()->setDrawer(false));
+        toggle=button("Антитуман: ON",()->{
+            enhanced=!enhanced;renderer.setEnhanced(enhanced);
+            toggle.setText(enhanced?"Антитуман: ON":"Антитуман: OFF");
             renderer.refresh();
         });
-        LinearLayout.LayoutParams basic=new LinearLayout.LayoutParams(-1,dp(45));
-        list.addView(toggle,basic);
-        menuTitle(list,"ДЖЕРЕЛО ВІДЕО");
-        menuItem(list,"◉  Камера пристрою",this::useCamera);
-        menuItem(list,"▣  Відкрити відеофайл",this::pickVideo);
-        menuTitle(list,"ВІДОБРАЖЕННЯ");
-        menuItem(list,"FIT / FILL",()->{
-            fillMode=!fillMode;renderer.setFill(fillMode);
-            setState(fillMode?"Режим FILL":"Режим FIT");
-            renderer.refresh();
+        LinearLayout.LayoutParams toggleParams=new LinearLayout.LayoutParams(-1,dp(40));
+        toggleParams.bottomMargin=dp(4);
+        list.addView(toggle,toggleParams);
+
+        menuTitle(list,"ДЖЕРЕЛО");
+        menuItem(list,"◉  Камера",this::useCamera);
+        menuItem(list,"▣  Відкрити відео",this::pickVideo);
+
+        menuTitle(list,"ПОРІВНЯННЯ");
+        menuItem(list,"50/50  •  весь кадр",()->selectMode(0));
+        menuItem(list,"Два кадри  •  FIT",()->{
+            fillMode=false;renderer.setFill(false);selectMode(1);
         });
-        menuItem(list,"SPLIT / FULL",()->{
-            fullMode=!fullMode;renderer.setFull(fullMode);
-            videoLabelsLeft.setVisibility(fullMode?View.GONE:View.VISIBLE);
-            videoLabelsRight.setText(fullMode?"АНТИТУМАН • FULL":"АНТИТУМАН");
-            renderer.refresh();
+        menuItem(list,"Два кадри  •  FILL",()->{
+            fillMode=true;renderer.setFill(true);selectMode(1);
         });
-        menuItem(list,"↻  Повернути зображення на 90°",()->{
-            renderer.rotate90();renderer.refresh();setState("Поворот зображення змінено");
+        menuItem(list,"Тільки оброблене",()->selectMode(2));
+        menuItem(list,"Скинути зум  •  1×",()->{
+            renderer.resetZoom();zoomBadge.setText("1.0×");renderer.refresh();setDrawer(false);
         });
-        menuItem(list,"Зум 1× / Скинути",()->{
-            renderer.resetZoom();zoomBadge.setText("1.0×");renderer.refresh();
-        });
-        menuTitle(list,"СИЛА ОБРОБКИ");
-        final TextView amount=text(strength+"%",13,INK);
+
+        menuTitle(list,"СИЛА АНТИТУМАНУ");
+        TextView amount=text(strength+"%",13,INK);
         list.addView(amount);
         SeekBar seek=new SeekBar(this);
         seek.setMax(100);seek.setProgress(strength);
-        if(Build.VERSION.SDK_INT>=21)seek.setProgressTintList(android.content.res.ColorStateList.valueOf(ACCENT));
-        list.addView(seek,new LinearLayout.LayoutParams(-1,dp(42)));
+        seek.setProgressTintList(android.content.res.ColorStateList.valueOf(ACCENT));
+        list.addView(seek,new LinearLayout.LayoutParams(-1,dp(35)));
         seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
             @Override public void onProgressChanged(SeekBar b,int value,boolean fromUser){
-                strength=value;renderer.setStrength(value/100f);amount.setText(value+"%");
-                renderer.refresh();
+                strength=value;renderer.setStrength(value/100f);amount.setText(value+"%");renderer.refresh();
             }
             @Override public void onStartTrackingTouch(SeekBar b){}
             @Override public void onStopTrackingTouch(SeekBar b){}
         });
-        menuTitle(list,"ЗНІМКИ");
-        menuItem(list,"▣  Зберегти знімок",this::takeSnapshot);
-        menuItem(list,"Ⅱ  Стоп-кадр / Продовжити",()->{
+
+        menuTitle(list,"ДІЇ");
+        menuItem(list,"▣  Знімок",this::takeSnapshot);
+        menuItem(list,"Ⅱ  Стоп-кадр / Play",()->{
             frozen=!frozen;renderer.setFrozen(frozen);
             if(!frozen)renderer.refresh();
-            setState(frozen?"Стоп-кадр":"Відтворення відновлено");
+            setState(frozen?"Стоп-кадр":"Камера працює");
+            setDrawer(false);
         });
-        stateView=text("Локальна обробка • офлайн",11,MUTED);
-        stateView.setPadding(0,dp(13),0,dp(13));
+        stateView=text("Камера та відеофайли • без інтернету",10,MUTED);
+        stateView.setPadding(0,dp(10),0,dp(5));
         list.addView(stateView);
-        FrameLayout.LayoutParams side=new FrameLayout.LayoutParams(dp(264),-1,Gravity.RIGHT);
-        side.topMargin=dp(52);
+
+        FrameLayout.LayoutParams side=new FrameLayout.LayoutParams(dp(229),-1,Gravity.RIGHT);
+        side.topMargin=dp(46);
         root.addView(drawer,side);
         setDrawer(false);
     }
@@ -252,6 +279,7 @@ public final class MainActivity extends Activity {
     private void setDrawer(boolean show){
         drawerVisible=show;
         drawer.setVisibility(show?View.VISIBLE:View.GONE);
+        drawerScrim.setVisibility(show?View.VISIBLE:View.GONE);
     }
 
     private void makeUi(){
@@ -263,13 +291,14 @@ public final class MainActivity extends Activity {
         glView.setPreserveEGLContextOnPause(true);
         renderer=new SplitRenderer(this,glView,this::onCameraTextureReady,this::onFrameStats);
         renderer.setStrength(strength/100f);
-        renderer.setFill(true);
+        renderer.setFill(false);
+        renderer.setViewMode(0);
         glView.setRenderer(renderer);
         glView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
         videoArea.addView(glView,new FrameLayout.LayoutParams(-1,-1));
         drawLabels();
         FrameLayout.LayoutParams area=new FrameLayout.LayoutParams(-1,-1);
-        area.topMargin=dp(52);
+        area.topMargin=dp(46);
         root.addView(videoArea,area);
         drawHeader();
         makeDrawer();
@@ -362,7 +391,7 @@ public final class MainActivity extends Activity {
     private void takeSnapshot(){
         renderer.captureNext(bitmap->new Thread(()->{
             try{
-                String name="Dehaze-"+System.currentTimeMillis()+".png";
+                String name="Miti-Tuman-"+System.currentTimeMillis()+".png";
                 if(Build.VERSION.SDK_INT>=29){
                     ContentValues values=new ContentValues();
                     values.put(MediaStore.Images.Media.DISPLAY_NAME,name);
@@ -404,7 +433,7 @@ public final class MainActivity extends Activity {
     }
 
     @Override protected void onResume() {
-        super.onResume();active=true;glView.onResume();
+        super.onResume();showImmersive();active=true;glView.onResume();
         if(usingFile)startVideoFile();else maybeOpenCamera();
     }
 
