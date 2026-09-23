@@ -38,6 +38,8 @@ import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
+import android.widget.CheckBox;
+import android.content.res.ColorStateList;
 import android.widget.TextView;
 import android.util.Size;
 
@@ -73,6 +75,11 @@ public final class MainActivity extends Activity {
     private boolean active, opening;
     private boolean enhanced = true;
     private int strength = 60;
+    private volatile int autoStrength = 60;
+    private boolean manualMode = false;
+    private CheckBox manualCheck;
+    private SeekBar strengthSeek;
+    private TextView strengthLabel;
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -244,19 +251,58 @@ public final class MainActivity extends Activity {
         });
 
         menuTitle(list,"СИЛА АНТИТУМАНУ");
-        TextView amount=text(strength+"%",13,INK);
-        list.addView(amount);
-        SeekBar seek=new SeekBar(this);
-        seek.setMax(100);seek.setProgress(strength);
-        seek.setProgressTintList(android.content.res.ColorStateList.valueOf(ACCENT));
-        list.addView(seek,new LinearLayout.LayoutParams(-1,dp(35)));
-        seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
-            @Override public void onProgressChanged(SeekBar b,int value,boolean fromUser){
-                strength=value;renderer.setStrength(value/100f);amount.setText(value+"%");renderer.refresh();
+        LinearLayout strengthRow=new LinearLayout(this);
+        strengthRow.setOrientation(LinearLayout.HORIZONTAL);
+        strengthRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView autoName=text("AUTO",13,ACCENT);
+        autoName.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        strengthRow.addView(autoName);
+        strengthRow.addView(new View(this),new LinearLayout.LayoutParams(0,1,1f));
+        manualCheck=new CheckBox(this);
+        manualCheck.setText("Ручний");
+        manualCheck.setTextColor(INK);
+        manualCheck.setTextSize(13);
+        manualCheck.setButtonTintList(ColorStateList.valueOf(ACCENT));
+        manualCheck.setChecked(false);
+        strengthRow.addView(manualCheck);
+        list.addView(strengthRow,new LinearLayout.LayoutParams(-1,dp(38)));
+        strengthLabel=text("AUTO • "+autoStrength+"%",13,INK);
+        list.addView(strengthLabel);
+        strengthSeek=new SeekBar(this);
+        strengthSeek.setMax(100);
+        strengthSeek.setProgress(autoStrength);
+        strengthSeek.setProgressTintList(ColorStateList.valueOf(ACCENT));
+        strengthSeek.setEnabled(false);
+        strengthSeek.setAlpha(.40f);
+        list.addView(strengthSeek,new LinearLayout.LayoutParams(-1,dp(35)));
+        manualCheck.setOnCheckedChangeListener((box,checked)->{
+            manualMode=checked;
+            renderer.setManualMode(checked);
+            strengthSeek.setEnabled(checked);
+            strengthSeek.setAlpha(checked?1f:.40f);
+            autoName.setTextColor(checked?MUTED:ACCENT);
+            if(checked){
+                strengthSeek.setProgress(strength);
+                strengthLabel.setText("РУЧНИЙ • "+strength+"%");
+                renderer.setStrength(strength/100f);
+            }else{
+                strengthSeek.setProgress(autoStrength);
+                strengthLabel.setText("AUTO • "+autoStrength+"%");
+            }
+            renderer.refresh();
+        });
+        strengthSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
+            @Override public void onProgressChanged(SeekBar bar,int value,boolean fromUser){
+                if(!manualMode)return;
+                strength=value;
+                renderer.setStrength(value/100f);
+                strengthLabel.setText("РУЧНИЙ • "+value+"%");
+                renderer.refresh();
             }
             @Override public void onStartTrackingTouch(SeekBar b){}
             @Override public void onStopTrackingTouch(SeekBar b){}
         });
+        renderer.setManualMode(false);
 
         menuTitle(list,"ДІЇ");
         menuItem(list,"▣  Знімок",this::takeSnapshot);
@@ -419,8 +465,26 @@ public final class MainActivity extends Activity {
         renderer.refresh();
     }
 
+    // AUTO is a local video contrast/texture estimate, not a calibrated
+    // atmospheric fog sensor. Update UI only when the checkbox is unchecked.
+    public void onAutoStrength(float value){
+        autoStrength=Math.round(value*100f);
+        runOnUiThread(()->{
+            if(!active||manualMode||strengthLabel==null)return;
+            strengthLabel.setText("AUTO • "+autoStrength+"%");
+            if(strengthSeek!=null)strengthSeek.setProgress(autoStrength);
+        });
+    }
+
+    public void onAutoUnavailable(){
+        runOnUiThread(()->{
+            if(strengthLabel!=null&&!manualMode)
+                strengthLabel.setText("AUTO недоступний на цьому GPU • встанови Ручний");
+        });
+    }
+
     private void onFrameStats(final String stats) {
-        runOnUiThread(()->{if(active)statsView.setText(stats);});
+        runOnUiThread(()->{if(active)statsView.setText(stats+" • "+(manualMode?"РУЧНИЙ "+strength:"AUTO "+autoStrength)+"%");});
     }
 
     private void setState(final String info){
