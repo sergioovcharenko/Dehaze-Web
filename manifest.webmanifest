@@ -1,0 +1,19 @@
+{
+  "name": "Dehaze Web — Антитуман",
+  "short_name": "Антитуман",
+  "description": "Локальна обробка фото й відео з туманом без інтернету після встановлення",
+  "lang": "uk",
+  "start_url": "./?app=1",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0a1020",
+  "theme_color": "#0a1020",
+  "icons": [
+    {
+      "src": "./offline-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
