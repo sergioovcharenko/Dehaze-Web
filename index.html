@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dehaze Web — Anti Fog</title>
+<style>
+:root{color-scheme:dark;font:15px system-ui,-apple-system,Segoe UI,sans-serif;background:#0a1020;color:#e9f1ff}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 100% 0,#15375c,#0a1020 48%);min-height:100vh}
+header{padding:26px max(16px,calc((100vw - 1400px)/2));border-bottom:1px solid #2a3d56}
+h1{margin:0;font-size:clamp(27px,4vw,39px)}.sub{color:#9fb3d3;margin:7px 0 0}
+main{max-width:1400px;margin:18px auto;padding:0 14px;display:grid;grid-template-columns:minmax(295px,360px) minmax(0,1fr);gap:16px}
+.panel{background:#121e31;border:1px solid #2c405b;border-radius:19px;padding:17px}
+h2{font-size:17px;margin:0 0 15px}h3{font-size:15px;margin:18px 0 10px}
+.drop{display:grid;place-items:center;text-align:center;min-height:128px;border:2px dashed #4986bc;border-radius:15px;background:#102640;cursor:pointer;padding:15px}
+.drop:hover,.drag{border-color:#61daa6;background:#173847}.small{font-size:12px;color:#9bb0ca;margin-top:8px;line-height:1.5}
+input[type=file]{position:absolute;width:1px;height:1px;opacity:0}
+.modes{display:grid;grid-template-columns:1fr 1fr;gap:9px}button{border:1px solid #395475;background:#223653;color:#fff;font:inherit;border-radius:12px;padding:11px;cursor:pointer}
+button.selected,button.primary{background:#2773c8;border-color:#4499fc}button:disabled{opacity:.42;cursor:not-allowed}
+.control{margin:12px 0}.line{display:flex;align-items:center;justify-content:space-between;gap:8px}
+output{color:#5ee0b0;font-variant-numeric:tabular-nums;font-weight:650}
+input[type=range]{width:100%;accent-color:#57a8ff;margin:10px 0 2px}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:18px}.actions #run{grid-column:1/-1}
+#status{color:#a9c2e4;min-height:35px;font-size:13px;margin-top:11px;white-space:pre-wrap}
+.viewer{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+figure{margin:0;background:#0b1424;border:1px solid #32415d;border-radius:13px;overflow:hidden;min-width:0}
+figcaption{padding:11px 12px;border-bottom:1px solid #304158;font-weight:600}
+.canvas{min-height:260px;display:grid;place-items:center;padding:8px}
+canvas{display:block;max-width:100%;height:auto;max-height:75vh;border-radius:7px}
+#details{font-size:13px;color:#adbed5;margin:15px 0;line-height:1.6}
+.note{color:#96a8c4;font-size:12px;line-height:1.55;margin-top:16px}
+@media(max-width:950px){main{grid-template-columns:1fr}.viewer{grid-template-columns:1fr}.canvas{min-height:160px}}
+</style>
+</head>
+<body>
+<header><h1>DEHAZE <span style="color:#5bdcaa">WEB</span></h1><p class="sub">Покращення фото з туманом • AUTO / MANUAL • обробка локально</p></header>
+<main>
+<section class="panel">
+<h2>1. Завантаження</h2>
+<label id="drop" class="drop" for="photo"><span><strong>Вибрати фотографію</strong><br><span class="small">або перетягнути сюди<br>JPG · PNG · WEBP</span></span></label>
+<input id="photo" type="file" accept="image/jpeg,image/png,image/webp,image/*">
+<div id="fileinfo" class="small">Фото не завантажене.</div>
+<h3>2. Режим</h3>
+<div class="modes"><button id="auto" class="selected" aria-pressed="true">AUTO</button><button id="manual" aria-pressed="false">MANUAL</button></div>
+<div class="small" id="modehelp">Автоматичне визначення контрасту, яскравості та сили обробки.</div>
+<h3>3. Налаштування</h3>
+<div id="sliders">
+<div class="control"><div class="line"><label for="strength">Сила ефекту</label><output id="strengthVal"></output></div><input id="strength" type="range" min="0" max="100" value="60"></div>
+<div class="control"><div class="line"><label for="contrast">Контраст</label><output id="contrastVal"></output></div><input id="contrast" type="range" min="0" max="100" value="35"></div>
+<div class="control"><div class="line"><label for="gamma">Гамма</label><output id="gammaVal"></output></div><input id="gamma" type="range" min="70" max="130" value="95"></div>
+<div class="control"><div class="line"><label for="clip">CLAHE / локальний контраст</label><output id="clipVal"></output></div><input id="clip" type="range" min="10" max="40" value="22"></div>
+<div class="control"><div class="line"><label for="tiles">Розмір сітки CLAHE</label><output id="tilesVal"></output></div><input id="tiles" type="range" min="4" max="16" value="8"></div>
+<div class="control"><div class="line"><label for="sharp">Різкість</label><output id="sharpVal"></output></div><input id="sharp" type="range" min="0" max="100" value="15"></div>
+</div>
+<div class="control"><div class="line"><label for="resolution">Максимальна сторона фото</label><output id="resolutionVal"></output></div><input id="resolution" type="range" min="1000" max="3000" step="250" value="2000"></div>
+<div class="actions"><button id="run" class="primary" disabled>Обробити фотографію</button><button id="save" disabled>Зберегти PNG</button><button id="reset">Скинути</button></div>
+<div role="status" aria-live="polite" id="status">Обери фотографію.</div>
+<p class="note">Фото не надсилається на сервер. Обробка відновлює контраст видимих деталей, але не дозволяє побачити крізь повністю непрозорий туман.</p>
+</section>
+<section class="panel">
+<h2>Порівняння</h2>
+<div class="viewer">
+<figure><figcaption>До обробки</figcaption><div class="canvas"><canvas id="before" width="640" height="360"></canvas></div></figure>
+<figure><figcaption>Після обробки</figcaption><div class="canvas"><canvas id="after" width="640" height="360"></canvas></div></figure>
+</div>
+<p id="details">Завантаж фото, щоб порівняти результат.</p>
+</section>
+</main>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const before=$('before'),after=$('after'),inctx=before.getContext('2d',{willReadFrequently:true}),outctx=after.getContext('2d',{willReadFrequently:true});
+let image=null, mode='auto', objectURL=null, busy=false;
+const ids=['strength','contrast','gamma','clip','tiles','sharp','resolution'];
+function clamp(x,a=0,b=255){return Math.min(b,Math.max(a,x))}
+function updateLabels(){
+  $('strengthVal').textContent=$('strength').value+'%';
+  $('contrastVal').textContent=$('contrast').value+'%';
+  $('gammaVal').textContent=(Number($('gamma').value)/100).toFixed(2);
+  $('clipVal').textContent=(Number($('clip').value)/10).toFixed(1);
+  $('tilesVal').textContent=$('tiles').value;
+  $('sharpVal').textContent=$('sharp').value+'%';
+  $('resolutionVal').textContent=$('resolution').value+' px';
+}
+ids.forEach(id=>$(id).addEventListener('input',updateLabels));
+function setMode(m){
+ mode=m;$('auto').classList.toggle('selected',m==='auto');$('manual').classList.toggle('selected',m==='manual');
+ $('auto').setAttribute('aria-pressed',String(m==='auto'));$('manual').setAttribute('aria-pressed',String(m==='manual'));
+ $('sliders').style.opacity=m==='auto'?.45:1;
+ $('sliders').querySelectorAll('input').forEach(el=>el.disabled=m==='auto');
+ $('modehelp').textContent=m==='auto'?'Автоматичне визначення контрасту, яскравості та сили обробки.':'Ручне налаштування всіх параметрів.';
+}
+$('auto').onclick=()=>setMode('auto');$('manual').onclick=()=>setMode('manual');
+function placeholder(c,ctx,text){
+ c.width=640;c.height=360;ctx.fillStyle='#0b1424';ctx.fillRect(0,0,640,360);
+ ctx.fillStyle='#9aafca';ctx.font='19px system-ui';ctx.textAlign='center';ctx.fillText(text,320,180);
+}
+placeholder(before,inctx,'Оригінал');placeholder(after,outctx,'Результат');setMode('auto');updateLabels();
+function fit(w,h,max){const k=Math.min(1,max/Math.max(w,h));return [Math.max(1,Math.round(w*k)),Math.max(1,Math.round(h*k))]}
+function showOriginal(){
+ const [w,h]=fit(image.naturalWidth,image.naturalHeight,1600);
+ before.width=w;before.height=h;inctx.drawImage(image,0,0,w,h);
+}
+async function loadFile(file){
+ if(!file||!file.type.startsWith('image/')){$('status').textContent='Вибери файл зображення.';return}
+ if(objectURL)URL.revokeObjectURL(objectURL);objectURL=URL.createObjectURL(file);
+ const img=new Image();img.onload=()=>{
+ image=img;showOriginal();placeholder(after,outctx,'Натисни «Обробити»');
+ $('fileinfo').textContent=file.name+' • '+img.naturalWidth+' × '+img.naturalHeight+' • '+(file.size/1048576).toFixed(2)+' МБ';
+ $('run').disabled=false;$('save').disabled=true;$('status').textContent='Фото готове до обробки.';$('details').textContent='Оригінал: '+img.naturalWidth+' × '+img.naturalHeight;
+ };img.onerror=()=>$('status').textContent='Не вдалося відкрити фотографію.';img.src=objectURL;
+}
+$('photo').onchange=e=>loadFile(e.target.files[0]);
+const drop=$('drop');
+['dragenter','dragover'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add('drag')}));
+['dragleave','drop'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove('drag')}));
+drop.addEventListener('drop',e=>loadFile(e.dataTransfer.files[0]));
+function autoParams(d){
+ let sum=0,sumSq=0;const hist=new Uint32Array(256),n=d.length/4;
+ for(let i=0;i<d.length;i+=4){let y=Math.round(.299*d[i]+.587*d[i+1]+.114*d[i+2]);hist[y]++;sum+=y;sumSq+=y*y}
+ const mean=sum/n,std=Math.sqrt(Math.max(0,sumSq/n-mean*mean));
+ const haze=clamp((mean-110)/90+(70-std)/50,0,1);let acc=0,p2=0,p98=255;
+ for(let k=0;k<256;k++){acc+=hist[k];if(acc>=n*.02&&p2===0)p2=k;if(acc>=n*.98){p98=k;break}}
+ return {strength:Math.round(42+haze*38),contrast:Math.round(18+haze*40),gamma:.96-haze*.12,clip:1.8+haze*1.2,tiles:Math.round(6+haze*4),sharp:Math.round(8+haze*18),black:Math.min(p2,80),white:Math.max(p98,180)};
+}
+function manualParams(){return {strength:+$('strength').value,contrast:+$('contrast').value,gamma:+$('gamma').value/100,clip:+$('clip').value/10,tiles:+$('tiles').value,sharp:+$('sharp').value,black:8,white:248}}
+function globalAdjust(src,p){
+ const dst=new Uint8ClampedArray(src.length),contrast=1+p.contrast/100,range=Math.max(20,p.white-p.black);
+ for(let i=0;i<src.length;i+=4){
+  for(let c=0;c<3;c++){let v=clamp((src[i+c]-p.black)/range,0,1);v=clamp((v-.5)*contrast+.5,0,1);dst[i+c]=Math.round(255*Math.pow(v,p.gamma))}
+  dst[i+3]=src[i+3]
+ }return dst;
+}
+// CLAHE: histogram clipping per tile, followed by bilinear interpolation of adjacent LUTs.
+function clahe(src,w,h,p){
+ const nx=p.tiles,ny=Math.max(2,Math.round(nx*h/w)),tw=Math.ceil(w/nx),th=Math.ceil(h/ny);
+ const luts=[];
+ for(let ty=0;ty<ny;ty++)for(let tx=0;tx<nx;tx++){
+  const x0=tx*tw,y0=ty*th,x1=Math.min(w,x0+tw),y1=Math.min(h,y0+th);
+  const hist=new Float32Array(256);let n=0;
+  for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){let i=(y*w+x)*4;hist[Math.round(.299*src[i]+.587*src[i+1]+.114*src[i+2])]++;n++}
+  const limit=Math.max(1,p.clip*n/256);let excess=0;
+  for(let k=0;k<256;k++)if(hist[k]>limit){excess+=hist[k]-limit;hist[k]=limit}
+  let acc=0;const lut=new Uint8Array(256);
+  for(let k=0;k<256;k++){acc+=hist[k]+excess/256;lut[k]=clamp(Math.round(acc*255/Math.max(1,n)))}
+  luts.push(lut);
+ }
+ const dst=new Uint8ClampedArray(src.length);
+ for(let y=0;y<h;y++){
+  const fy=(y+.5)/th-.5,ty0=clamp(Math.floor(fy),0,ny-1),ty1=clamp(ty0+1,0,ny-1),wy=clamp(fy-ty0,0,1);
+  for(let x=0;x<w;x++){
+   const fx=(x+.5)/tw-.5,tx0=clamp(Math.floor(fx),0,nx-1),tx1=clamp(tx0+1,0,nx-1),wx=clamp(fx-tx0,0,1);
+   let i=(y*w+x)*4,r=src[i],g=src[i+1],b=src[i+2],lum=Math.round(.299*r+.587*g+.114*b);
+   const a=luts[ty0*nx+tx0][lum]*(1-wx)+luts[ty0*nx+tx1][lum]*wx;
+   const z=luts[ty1*nx+tx0][lum]*(1-wx)+luts[ty1*nx+tx1][lum]*wx;
+   const mapped=a*(1-wy)+z*wy,ratio=lum?Math.min(3,mapped/lum):1;
+   dst[i]=clamp(r*ratio);dst[i+1]=clamp(g*ratio);dst[i+2]=clamp(b*ratio);dst[i+3]=src[i+3];
+  }
+ }return dst;
+}
+function blend(a,b,p){const out=new Uint8ClampedArray(a.length),s=p/100;for(let i=0;i<a.length;i+=4){for(let k=0;k<3;k++)out[i+k]=a[i+k]*(1-s)+b[i+k]*s;out[i+3]=a[i+3]}return out}
+function sharpen(src,w,h,amount){
+ if(!amount)return src;const dst=new Uint8ClampedArray(src),a=amount/100;
+ for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
+  let i=(y*w+x)*4;
+  for(let k=0;k<3;k++){let edge=5*src[i+k]-src[i+k-4]-src[i+k+4]-src[i+k-w*4]-src[i+k+w*4];dst[i+k]=clamp(src[i+k]*(1-a)+clamp(edge)*a)}
+ }return dst;
+}
+$('run').onclick=async()=>{
+ if(!image||busy)return;busy=true;$('run').disabled=true;$('save').disabled=true;$('status').textContent='Обробка…';
+ await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
+ try{
+  const start=performance.now(),[w,h]=fit(image.naturalWidth,image.naturalHeight,+$('resolution').value);
+  const work=document.createElement('canvas');work.width=w;work.height=h;
+  const ctx=work.getContext('2d',{willReadFrequently:true});ctx.drawImage(image,0,0,w,h);
+  const frame=ctx.getImageData(0,0,w,h),source=new Uint8ClampedArray(frame.data),p=mode==='auto'?autoParams(source):manualParams();
+  const adjusted=globalAdjust(source,p),local=clahe(adjusted,w,h,p),mixed=blend(source,local,p.strength);
+  frame.data.set(sharpen(mixed,w,h,p.sharp));after.width=w;after.height=h;outctx.putImageData(frame,0,0);
+  const seconds=((performance.now()-start)/1000).toFixed(2);
+  $('status').textContent='Готово за '+seconds+' с';$('details').textContent='Обробка '+w+' × '+h+' • '+mode.toUpperCase()+' • сила '+p.strength+'% • CLAHE '+p.clip.toFixed(1);
+  $('save').disabled=false;
+ }catch(err){$('status').textContent='Помилка обробки: '+err.message;console.error(err)}
+ finally{busy=false;$('run').disabled=false}
+};
+$('save').onclick=()=>{if($('save').disabled)return;after.toBlob(blob=>{if(!blob)return;const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='dehaze-result.png';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000)},'image/png')};
+$('reset').onclick=()=>{image=null;$('photo').value='';if(objectURL)URL.revokeObjectURL(objectURL);objectURL=null;
+placeholder(before,inctx,'Оригінал');placeholder(after,outctx,'Результат');$('fileinfo').textContent='Фото не завантажене.';$('run').disabled=true;$('save').disabled=true;$('status').textContent='Обери фотографію.';$('details').textContent='Завантаж фото, щоб порівняти результат.'};
+</script>
+</body>
+</html>
