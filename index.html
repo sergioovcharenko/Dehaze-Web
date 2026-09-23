@@ -56,7 +56,7 @@ canvas{display:block;max-width:100%;height:auto;max-height:75vh;border-radius:7p
 <div class="control"><div class="line"><label for="resolution">Максимальна сторона фото</label><output id="resolutionVal"></output></div><input id="resolution" type="range" min="1000" max="3000" step="250" value="2000"></div>
 <div class="actions"><button id="run" class="primary" disabled>Обробити фотографію</button><button id="save" disabled>Зберегти PNG</button><button id="reset">Скинути</button></div>
 <div role="status" aria-live="polite" id="status">Обери фотографію.</div>
-<p class="note">Фото не надсилається на сервер. Обробка відновлює контраст видимих деталей, але не дозволяє побачити крізь повністю непрозорий туман.</p>
+<p class="note">Фото не надсилається на сервер. AUTO Strong використовує guided DCP для густішого серпанку. Деталі, яких немає у вихідному фото, алгоритм не відновлює.</p>
 </section>
 <section class="panel">
 <h2>Порівняння</h2>
@@ -67,6 +67,7 @@ canvas{display:block;max-width:100%;height:auto;max-height:75vh;border-radius:7p
 <p id="details">Завантаж фото, щоб порівняти результат.</p>
 </section>
 </main>
+<script src="./dehaze-dcp.js?v=4"></script>
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
@@ -96,13 +97,13 @@ function setMode(m){
  $('sliders').querySelectorAll('input').forEach(el=>el.disabled=!isManual);
  if(previous!==m){
    if(m==='autoSoft')$('skyProtect').value=75;
-   if(m==='autoStrong')$('skyProtect').value=60;
+   if(m==='autoStrong')$('skyProtect').value=85;
    updateLabels();
  }
  $('modehelp').textContent=m==='autoSoft'
  ? 'AUTO Soft — делікатна обробка без пересвіту.'
  : m==='autoStrong'
- ? 'AUTO Strong — підсилює контраст у серпанку, зберігаючи деталі неба.'
+ ? 'AUTO Strong — guided DCP для густішого туману зі збереженням неба.'
  : 'MANUAL — налаштування сили, CLAHE, гами та різкості.';
 }
 $('autoSoft').onclick=()=>setMode('autoSoft');
@@ -225,10 +226,18 @@ $('run').onclick=async()=>{
   const ctx=work.getContext('2d',{willReadFrequently:true});ctx.drawImage(image,0,0,w,h);
   const frame=ctx.getImageData(0,0,w,h),source=new Uint8ClampedArray(frame.data);
   const p=mode==='manual'?manualParams():autoParams(source,mode==='autoStrong'?'strong':'soft');
-  const adjusted=globalAdjust(source,p),local=clahe(adjusted,w,h,p),mixed=blend(source,local,p.strength);
-  frame.data.set(sharpen(mixed,w,h,p.sharp*p.strength/100));after.width=w;after.height=h;outctx.putImageData(frame,0,0);
+  let result;
+  if(mode==='autoStrong'){
+    if(typeof dehazeStrongDCP!=='function')throw new Error('Не завантажився модуль DCP — онови сторінку.');
+    result=dehazeStrongDCP(source,w,h,p);
+  }else{
+    const adjusted=globalAdjust(source,p),local=clahe(adjusted,w,h,p);
+    result=blend(source,local,p.strength);
+  }
+  // Avoid sharpening compression noise in dense fog.
+  frame.data.set(sharpen(result,w,h,p.sharp*p.strength/100*(mode==='autoStrong'?.35:1)));after.width=w;after.height=h;outctx.putImageData(frame,0,0);
   const seconds=((performance.now()-start)/1000).toFixed(2);
-  $('status').textContent='Готово за '+seconds+' с';$('details').textContent='Обробка '+w+' × '+h+' • '+(mode==='autoSoft'?'AUTO SOFT':mode==='autoStrong'?'AUTO STRONG':'MANUAL')+' • сила '+p.strength+'% • CLAHE '+p.clip.toFixed(1)+' • захист неба '+p.skyProtect+'%';
+  $('status').textContent='Готово за '+seconds+' с';$('details').textContent='Обробка '+w+' × '+h+' • '+(mode==='autoSoft'?'AUTO SOFT':mode==='autoStrong'?'AUTO STRONG':'MANUAL')+' • сила '+p.strength+'% • '+(mode==='autoStrong'?'guided DCP':'CLAHE '+p.clip.toFixed(1))+' • захист неба '+p.skyProtect+'%';
   $('save').disabled=false;
  }catch(err){$('status').textContent='Помилка обробки: '+err.message;console.error(err)}
  finally{busy=false;$('run').disabled=false}
