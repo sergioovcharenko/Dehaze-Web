@@ -2,7 +2,7 @@
 <html lang="uk">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Dehaze Web — Anti Fog</title>
+<title>Dehaze Web — Фото і відео</title><meta name="theme-color" content="#0a1020"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="manifest" href="./manifest.webmanifest"><link rel="icon" href="./offline-icon.svg" type="image/svg+xml">
 <style>
 :root{color-scheme:dark;font:15px system-ui,-apple-system,Segoe UI,sans-serif;background:#0a1020;color:#e9f1ff}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 100% 0,#15375c,#0a1020 48%);min-height:100vh}
@@ -29,21 +29,50 @@ figcaption{padding:11px 12px;border-bottom:1px solid #304158;font-weight:600}
 canvas{display:block;max-width:100%;height:auto;max-height:75vh;border-radius:7px}
 #details{font-size:13px;color:#adbed5;margin:15px 0;line-height:1.6}
 .note{color:#96a8c4;font-size:12px;line-height:1.55;margin-top:16px}
+
+[hidden]{display:none!important}
+.mode-tabs{display:flex;gap:8px;margin-bottom:14px}.mode-tabs button{flex:1;font-weight:700}
+#offlineState{font-size:12px;display:inline-block;margin-top:10px;padding:6px 11px;border-radius:999px;border:1px solid #3b876b;background:#17362f}
+.video-stack{display:grid;grid-template-columns:1fr;gap:12px}
+.video-stack figure{width:100%}
+.video-stack .canvas{min-height:160px;padding:6px}
+.video-stack canvas,.video-stack video{display:block;width:100%;height:auto;max-height:65vh;object-fit:contain;background:#050c16}
+.video-controls{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:14px 0}
+.video-controls label{display:flex;align-items:center;gap:8px;font-weight:600}
+.video-controls input{width:22px;height:22px;accent-color:#5ee0b0}
+.video-options{display:flex;gap:9px;flex-wrap:wrap}
+#videoStatus{min-height:24px}
 @media(max-width:950px){main{grid-template-columns:1fr}.preview-panel{order:0}.controls-panel{order:1}.viewer{grid-template-columns:1fr}.canvas{min-height:160px}}
 </style>
 </head>
 <body>
-<header><h1>DEHAZE <span style="color:#5bdcaa">WEB</span></h1><p class="sub">Покращення фото з туманом • AUTO / MANUAL • обробка локально</p></header>
+<header><h1>DEHAZE <span style="color:#5bdcaa">WEB</span></h1><p class="sub">Антитуман для фото та відео • обробка на пристрої</p><span id="offlineState" role="status">Підготовка офлайн-режиму…</span></header>
 <main>
 <section class="panel preview-panel" id="previewPanel">
-<div class="preview-toolbar"><h2>Результат обробки</h2><div class="preview-actions"><button id="uploadTop" type="button">Завантажити фото</button><button id="processTop" type="button" class="primary" disabled>Обробити</button></div></div>
+<div class="mode-tabs"><button id="photoTab" class="selected" aria-pressed="true">Фото</button><button id="videoTab" aria-pressed="false">Відео LIVE</button></div>
+<div class="preview-toolbar"><h2>Результат обробки</h2>
+<div class="preview-actions" id="photoQuick"><button id="uploadTop" type="button">Завантажити фото</button><button id="processTop" type="button" class="primary" disabled>Обробити</button></div>
+<div class="preview-actions" id="videoQuick" hidden><button id="videoChoose" type="button">Відкрити відео</button><button id="videoCamera" class="primary" type="button">Камера</button><button id="videoStop" type="button">Стоп</button></div></div>
+<input type="file" id="videoFile" accept="video/mp4,video/webm,video/quicktime,video/*" hidden>
+<div id="photoPreview">
 <div class="viewer">
 <figure><figcaption>Після обробки</figcaption><div class="canvas"><canvas id="after" width="640" height="360"></canvas></div></figure>
 <figure><figcaption>До обробки</figcaption><div class="canvas"><canvas id="before" width="640" height="360"></canvas></div></figure>
 </div>
 <p id="details">Завантаж фото, щоб порівняти результат.</p>
+</div>
+<div id="videoPreview" hidden>
+ <div class="video-stack" id="videoViewer">
+   <figure id="videoProcessedFig"><figcaption>Антитуман • WebGL</figcaption><div class="canvas"><canvas id="videoAfter" width="640" height="360"></canvas></div></figure>
+   <figure><figcaption>Оригінал</figcaption><div class="canvas"><video id="videoSource" playsinline muted controls></video></div></figure>
+ </div>
+ <div class="video-controls"><label><input type="checkbox" id="videoEnabled" checked>Антитуман</label><span id="videoFps">— FPS</span></div>
+ <div class="control"><div class="line"><label for="videoStrength">Сила відеообробки</label><output id="videoStrengthVal">55%</output></div><input type="range" id="videoStrength" min="0" max="100" value="55"></div>
+ <p class="small" id="videoStatus" role="status">Відкрий локальний відеофайл або ввімкни камеру. Кадри не передаються на сервер.</p>
+ <p class="note">Для LIVE використовується швидкий WebGL-фільтр, а не повний фотографічний Fusion. RTSP з Topotek у браузері напряму не підтримується; інтеграція з QGC — окремий етап.</p>
+</div>
 </section>
-<section class="panel controls-panel">
+<section class="panel controls-panel" id="photoControls">
 <h2>1. Завантаження</h2>
 <label id="drop" class="drop" for="photo"><span><strong>Вибрати фотографію</strong><br><span class="small">або перетягнути сюди<br>JPG · PNG · WEBP</span></span></label>
 <input id="photo" type="file" accept="image/jpeg,image/png,image/webp,image/*">
@@ -128,6 +157,7 @@ async function loadFile(file){
  const img=new Image();img.onload=()=>{
  image=img;showOriginal();placeholder(after,outctx,'Натисни «Обробити»');
  $('fileinfo').textContent=file.name+' • '+img.naturalWidth+' × '+img.naturalHeight+' • '+(file.size/1048576).toFixed(2)+' МБ';
+ if(window.dehazeShowPhoto)window.dehazeShowPhoto();
  $('run').disabled=false;$('processTop').disabled=false;$('save').disabled=true;$('status').textContent='Фото готове до обробки.';$('details').textContent='Оригінал: '+img.naturalWidth+' × '+img.naturalHeight;
  };img.onerror=()=>$('status').textContent='Не вдалося відкрити фотографію.';img.src=objectURL;
 }
@@ -249,6 +279,27 @@ $('run').onclick=async()=>{
 $('save').onclick=()=>{if($('save').disabled)return;after.toBlob(blob=>{if(!blob)return;const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='dehaze-result.png';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000)},'image/png')};
 $('reset').onclick=()=>{image=null;$('photo').value='';if(objectURL)URL.revokeObjectURL(objectURL);objectURL=null;
 placeholder(before,inctx,'Оригінал');placeholder(after,outctx,'Результат');$('fileinfo').textContent='Фото не завантажене.';$('run').disabled=true;$('processTop').disabled=true;$('save').disabled=true;$('status').textContent='Обери фотографію.';$('details').textContent='Завантаж фото, щоб порівняти результат.'};
+</script>
+<script src="./video-dehaze.js?v=2"></script>
+<script>
+(function(){
+ const el=document.getElementById('offlineState');
+ const update=()=>{
+  if(!navigator.onLine)el.textContent='Офлайн • кешовані файли';
+  else if(navigator.serviceWorker?.controller)el.textContent='Офлайн готовий • можна відключити інтернет';
+  else el.textContent='Для офлайн-режиму відкрий сайт один раз онлайн';
+ };
+ window.addEventListener('online',update);
+ window.addEventListener('offline',update);
+ update();
+ if('serviceWorker' in navigator){
+   navigator.serviceWorker.register('./sw.js',{scope:'./'})
+    .then(()=>navigator.serviceWorker.ready)
+    .then(async()=>{if(await caches.has('dehaze-offline-v1'))el.textContent=navigator.onLine?'Офлайн готовий • можна відключити інтернет':'Офлайн • кешовані файли';})
+    .catch(e=>{el.textContent='Офлайн-кеш недоступний: '+e.message;});
+   navigator.serviceWorker.addEventListener('controllerchange',update);
+ }else{el.textContent='Офлайн-кеш не підтримується цим браузером';}
+})();
 </script>
 </body>
 </html>
