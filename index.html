@@ -14,7 +14,7 @@ h2{font-size:17px;margin:0 0 15px}h3{font-size:15px;margin:18px 0 10px}
 .drop{display:grid;place-items:center;text-align:center;min-height:128px;border:2px dashed #4986bc;border-radius:15px;background:#102640;cursor:pointer;padding:15px}
 .drop:hover,.drag{border-color:#61daa6;background:#173847}.small{font-size:12px;color:#9bb0ca;margin-top:8px;line-height:1.5}
 input[type=file]{position:absolute;width:1px;height:1px;opacity:0}
-.modes{display:grid;grid-template-columns:1fr 1fr;gap:9px}button{border:1px solid #395475;background:#223653;color:#fff;font:inherit;border-radius:12px;padding:11px;cursor:pointer}
+.modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.modes button{font-size:12px;padding:11px 4px;font-weight:700}button{border:1px solid #395475;background:#223653;color:#fff;font:inherit;border-radius:12px;padding:11px;cursor:pointer}
 button.selected,button.primary{background:#2773c8;border-color:#4499fc}button:disabled{opacity:.42;cursor:not-allowed}
 .control{margin:12px 0}.line{display:flex;align-items:center;justify-content:space-between;gap:8px}
 output{color:#5ee0b0;font-variant-numeric:tabular-nums;font-weight:650}
@@ -40,8 +40,8 @@ canvas{display:block;max-width:100%;height:auto;max-height:75vh;border-radius:7p
 <input id="photo" type="file" accept="image/jpeg,image/png,image/webp,image/*">
 <div id="fileinfo" class="small">Фото не завантажене.</div>
 <h3>2. Режим</h3>
-<div class="modes"><button id="auto" class="selected" aria-pressed="true">AUTO</button><button id="manual" aria-pressed="false">MANUAL</button></div>
-<div class="small" id="modehelp">Обережний AUTO: зберігає світлі ділянки та не підсилює шум неба.</div>
+<div class="modes"><button id="autoSoft" class="selected" aria-pressed="true">AUTO SOFT</button><button id="autoStrong" aria-pressed="false">AUTO STRONG</button><button id="manual" aria-pressed="false">MANUAL</button></div>
+<div class="small" id="modehelp">AUTO Soft — делікатна обробка без пересвіту.</div>
 <h3>3. Налаштування</h3>
 <div id="sliders">
 <div class="control"><div class="line"><label for="strength">Сила ефекту</label><output id="strengthVal"></output></div><input id="strength" type="range" min="0" max="100" value="60"></div>
@@ -51,6 +51,8 @@ canvas{display:block;max-width:100%;height:auto;max-height:75vh;border-radius:7p
 <div class="control"><div class="line"><label for="tiles">Розмір сітки CLAHE</label><output id="tilesVal"></output></div><input id="tiles" type="range" min="4" max="16" value="8"></div>
 <div class="control"><div class="line"><label for="sharp">Різкість</label><output id="sharpVal"></output></div><input id="sharp" type="range" min="0" max="100" value="15"></div>
 </div>
+<div class="control"><div class="line"><label for="skyProtect">Захист неба</label><output id="skyProtectVal"></output></div><input id="skyProtect" type="range" min="0" max="100" value="75"></div>
+<div class="small">Захист неба доступний у всіх режимах: 100% — максимальне збереження світлих ділянок.</div>
 <div class="control"><div class="line"><label for="resolution">Максимальна сторона фото</label><output id="resolutionVal"></output></div><input id="resolution" type="range" min="1000" max="3000" step="250" value="2000"></div>
 <div class="actions"><button id="run" class="primary" disabled>Обробити фотографію</button><button id="save" disabled>Зберегти PNG</button><button id="reset">Скинути</button></div>
 <div role="status" aria-live="polite" id="status">Обери фотографію.</div>
@@ -69,8 +71,8 @@ canvas{display:block;max-width:100%;height:auto;max-height:75vh;border-radius:7p
 'use strict';
 const $=id=>document.getElementById(id);
 const before=$('before'),after=$('after'),inctx=before.getContext('2d',{willReadFrequently:true}),outctx=after.getContext('2d',{willReadFrequently:true});
-let image=null, mode='auto', objectURL=null, busy=false;
-const ids=['strength','contrast','gamma','clip','tiles','sharp','resolution'];
+let image=null, mode='autoSoft', objectURL=null, busy=false;
+const ids=['strength','contrast','gamma','clip','tiles','sharp','skyProtect','resolution'];
 function clamp(x,a=0,b=255){return Math.min(b,Math.max(a,x))}
 function updateLabels(){
   $('strengthVal').textContent=$('strength').value+'%';
@@ -79,22 +81,38 @@ function updateLabels(){
   $('clipVal').textContent=(Number($('clip').value)/10).toFixed(1);
   $('tilesVal').textContent=$('tiles').value;
   $('sharpVal').textContent=$('sharp').value+'%';
+  $('skyProtectVal').textContent=$('skyProtect').value+'%';
   $('resolutionVal').textContent=$('resolution').value+' px';
 }
 ids.forEach(id=>$(id).addEventListener('input',updateLabels));
 function setMode(m){
- mode=m;$('auto').classList.toggle('selected',m==='auto');$('manual').classList.toggle('selected',m==='manual');
- $('auto').setAttribute('aria-pressed',String(m==='auto'));$('manual').setAttribute('aria-pressed',String(m==='manual'));
- $('sliders').style.opacity=m==='auto'?.45:1;
- $('sliders').querySelectorAll('input').forEach(el=>el.disabled=m==='auto');
- $('modehelp').textContent=m==='auto'?'Обережний AUTO: зберігає світлі ділянки та не підсилює шум неба.':'Ручне налаштування всіх параметрів.';
+ const previous=mode;mode=m;
+ ['autoSoft','autoStrong','manual'].forEach(id=>{
+   const selected=(id===m);$(id).classList.toggle('selected',selected);
+   $(id).setAttribute('aria-pressed',String(selected));
+ });
+ const isManual=m==='manual';
+ $('sliders').style.opacity=isManual?'1':'.55';
+ $('sliders').querySelectorAll('input').forEach(el=>el.disabled=!isManual);
+ if(previous!==m){
+   if(m==='autoSoft')$('skyProtect').value=75;
+   if(m==='autoStrong')$('skyProtect').value=60;
+   updateLabels();
+ }
+ $('modehelp').textContent=m==='autoSoft'
+ ? 'AUTO Soft — делікатна обробка без пересвіту.'
+ : m==='autoStrong'
+ ? 'AUTO Strong — підсилює контраст у серпанку, зберігаючи деталі неба.'
+ : 'MANUAL — налаштування сили, CLAHE, гами та різкості.';
 }
-$('auto').onclick=()=>setMode('auto');$('manual').onclick=()=>setMode('manual');
+$('autoSoft').onclick=()=>setMode('autoSoft');
+$('autoStrong').onclick=()=>setMode('autoStrong');
+$('manual').onclick=()=>setMode('manual');
 function placeholder(c,ctx,text){
  c.width=640;c.height=360;ctx.fillStyle='#0b1424';ctx.fillRect(0,0,640,360);
  ctx.fillStyle='#9aafca';ctx.font='19px system-ui';ctx.textAlign='center';ctx.fillText(text,320,180);
 }
-placeholder(before,inctx,'Оригінал');placeholder(after,outctx,'Результат');setMode('auto');updateLabels();
+placeholder(before,inctx,'Оригінал');placeholder(after,outctx,'Результат');setMode('autoSoft');updateLabels();
 function fit(w,h,max){const k=Math.min(1,max/Math.max(w,h));return [Math.max(1,Math.round(w*k)),Math.max(1,Math.round(h*k))]}
 function showOriginal(){
  const [w,h]=fit(image.naturalWidth,image.naturalHeight,1600);
@@ -114,36 +132,40 @@ const drop=$('drop');
 ['dragenter','dragover'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add('drag')}));
 ['dragleave','drop'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove('drag')}));
 drop.addEventListener('drop',e=>loadFile(e.dataTransfer.files[0]));
-function autoParams(d){
- // Conservative automatic settings: protect highlights.
+function autoParams(d,variant='soft'){
  let sum=0,sumSq=0;const hist=new Uint32Array(256),n=d.length/4;
  for(let i=0;i<d.length;i+=4){
    const y=Math.round(.299*d[i]+.587*d[i+1]+.114*d[i+2]);
    hist[y]++;sum+=y;sumSq+=y*y;
  }
- const mean=sum/n;let acc=0,p10=0,p90=255,seen10=false;
+ const mean=sum/n,std=Math.sqrt(Math.max(0,sumSq/n-mean*mean));
+ let acc=0,p10=0,p90=255,seen10=false;
  for(let k=0;k<256;k++){
    acc+=hist[k];
    if(!seen10&&acc>=n*.10){p10=k;seen10=true;}
    if(acc>=n*.90){p90=k;break;}
  }
- const haze=clamp((95-(p90-p10))/125+Math.max(0,mean-130)/240,0,1);
- return {
-  strength:Math.round(45+haze*14),contrast:Math.round(8+haze*8),
-  gamma:1.01+haze*.025,clip:1.35+haze*.35,
-  tiles:8,sharp:Math.round(5+haze*5),black:0,white:255
- };
+ const haze=clamp((95-(p90-p10))/125+Math.max(0,mean-130)/240+Math.max(0,55-std)/110,0,1);
+ if(variant==='strong'){
+  return {strength:Math.round(70+haze*13),contrast:Math.round(20+haze*12),
+    gamma:1.03+haze*.02,clip:2.05+haze*.4,tiles:8,
+    skyProtect:+$('skyProtect').value,sharp:Math.round(8+haze*5),black:0,white:255};
+ }
+ return {strength:Math.round(48+haze*12),contrast:Math.round(8+haze*8),
+  gamma:1.01+haze*.02,clip:1.35+haze*.3,tiles:8,
+  skyProtect:+$('skyProtect').value,sharp:Math.round(5+haze*5),black:0,white:255};
 }
-function manualParams(){return {strength:+$('strength').value,contrast:+$('contrast').value,gamma:+$('gamma').value/100,clip:+$('clip').value/10,tiles:+$('tiles').value,sharp:+$('sharp').value,black:0,white:255}}
+function manualParams(){return {strength:+$('strength').value,contrast:+$('contrast').value,gamma:+$('gamma').value/100,clip:+$('clip').value/10,tiles:+$('tiles').value,sharp:+$('sharp').value,skyProtect:+$('skyProtect').value,black:0,white:255}}
 function globalAdjust(src,p){
- const dst=new Uint8ClampedArray(src.length),contrast=1+p.contrast/100,gamma=clamp(p.gamma,.7,1.3);
+ const dst=new Uint8ClampedArray(src.length),contrast=1+p.contrast/100,gamma=clamp(p.gamma,.7,1.3),sky=clamp(p.skyProtect/100,0,1);
  for(let i=0;i<src.length;i+=4){
-   const r=src[i],g=src[i+1],b=src[i+2],y=.299*r+.587*g+.114*b;
-   const highlightProtect=1-clamp((y-155)/75,0,1);
-   const corrected=255*Math.pow(y/255,gamma);
-   const target=128+(corrected-128)*contrast;
-   const delta=clamp(target-y,-36,22)*highlightProtect;
-   dst[i]=clamp(r+delta);dst[i+1]=clamp(g+delta);dst[i+2]=clamp(b+delta);dst[i+3]=src[i+3];
+  const r=src[i],g=src[i+1],b=src[i+2],y=.299*r+.587*g+.114*b;
+  const bright=clamp((y-145)/80,0,1);
+  const highlightProtect=1-bright*sky;
+  const corrected=255*Math.pow(y/255,gamma);
+  const target=128+(corrected-128)*contrast;
+  const delta=clamp(target-y,-42,24)*highlightProtect;
+  dst[i]=clamp(r+delta);dst[i+1]=clamp(g+delta);dst[i+2]=clamp(b+delta);dst[i+3]=src[i+3];
  }
  return dst;
 }
@@ -179,8 +201,8 @@ function clahe(src,w,h,p){
    const texA=weights[k00]*(1-wx)+weights[k10]*wx;
    const texB=weights[k01]*(1-wx)+weights[k11]*wx;
    const texture=texA*(1-wy)+texB*wy;
-   const highlightProtect=1-clamp((lum-162)/72,0,1);
-   const delta=clamp(mapped-lum,-35,35)*(.36+clamp(p.clip-1.2,0,3)*.06)*texture*highlightProtect;
+   const highlightProtect=1-clamp((lum-155)/78,0,1)*clamp(p.skyProtect/100,0,1);
+   const delta=clamp(mapped-lum,-48,45)*(.48+clamp(p.clip-1.2,0,3)*.13)*texture*highlightProtect;
    dst[i]=clamp(r+delta);dst[i+1]=clamp(g+delta);dst[i+2]=clamp(b+delta);dst[i+3]=src[i+3];
   }
  }
@@ -201,11 +223,12 @@ $('run').onclick=async()=>{
   const start=performance.now(),[w,h]=fit(image.naturalWidth,image.naturalHeight,+$('resolution').value);
   const work=document.createElement('canvas');work.width=w;work.height=h;
   const ctx=work.getContext('2d',{willReadFrequently:true});ctx.drawImage(image,0,0,w,h);
-  const frame=ctx.getImageData(0,0,w,h),source=new Uint8ClampedArray(frame.data),p=mode==='auto'?autoParams(source):manualParams();
+  const frame=ctx.getImageData(0,0,w,h),source=new Uint8ClampedArray(frame.data);
+  const p=mode==='manual'?manualParams():autoParams(source,mode==='autoStrong'?'strong':'soft');
   const adjusted=globalAdjust(source,p),local=clahe(adjusted,w,h,p),mixed=blend(source,local,p.strength);
-  frame.data.set(sharpen(mixed,w,h,p.sharp));after.width=w;after.height=h;outctx.putImageData(frame,0,0);
+  frame.data.set(sharpen(mixed,w,h,p.sharp*p.strength/100));after.width=w;after.height=h;outctx.putImageData(frame,0,0);
   const seconds=((performance.now()-start)/1000).toFixed(2);
-  $('status').textContent='Готово за '+seconds+' с';$('details').textContent='Обробка '+w+' × '+h+' • '+mode.toUpperCase()+' • сила '+p.strength+'% • CLAHE '+p.clip.toFixed(1);
+  $('status').textContent='Готово за '+seconds+' с';$('details').textContent='Обробка '+w+' × '+h+' • '+(mode==='autoSoft'?'AUTO SOFT':mode==='autoStrong'?'AUTO STRONG':'MANUAL')+' • сила '+p.strength+'% • CLAHE '+p.clip.toFixed(1)+' • захист неба '+p.skyProtect+'%';
   $('save').disabled=false;
  }catch(err){$('status').textContent='Помилка обробки: '+err.message;console.error(err)}
  finally{busy=false;$('run').disabled=false}
