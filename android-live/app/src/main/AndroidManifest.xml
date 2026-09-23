@@ -4,7 +4,7 @@
     <uses-feature android:name="android.hardware.camera.any" android:required="true"/>
     <!-- No INTERNET permission: camera frames always remain on device. -->
     <application
-        android:label="Dehaze LIVE"
+        android:label="Меті Туман"
         android:icon="@drawable/ic_launcher"
         android:allowBackup="false"
         android:usesCleartextTraffic="false"
