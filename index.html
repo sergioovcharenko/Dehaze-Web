@@ -41,12 +41,12 @@ canvas{display:block;max-width:100%;height:auto;max-height:75vh;border-radius:7p
 <div id="fileinfo" class="small">Фото не завантажене.</div>
 <h3>2. Режим</h3>
 <div class="modes"><button id="auto" class="selected" aria-pressed="true">AUTO</button><button id="manual" aria-pressed="false">MANUAL</button></div>
-<div class="small" id="modehelp">Автоматичне визначення контрасту, яскравості та сили обробки.</div>
+<div class="small" id="modehelp">Обережний AUTO: зберігає світлі ділянки та не підсилює шум неба.</div>
 <h3>3. Налаштування</h3>
 <div id="sliders">
 <div class="control"><div class="line"><label for="strength">Сила ефекту</label><output id="strengthVal"></output></div><input id="strength" type="range" min="0" max="100" value="60"></div>
 <div class="control"><div class="line"><label for="contrast">Контраст</label><output id="contrastVal"></output></div><input id="contrast" type="range" min="0" max="100" value="35"></div>
-<div class="control"><div class="line"><label for="gamma">Гамма</label><output id="gammaVal"></output></div><input id="gamma" type="range" min="70" max="130" value="95"></div>
+<div class="control"><div class="line"><label for="gamma">Гамма</label><output id="gammaVal"></output></div><input id="gamma" type="range" min="70" max="130" value="100"></div>
 <div class="control"><div class="line"><label for="clip">CLAHE / локальний контраст</label><output id="clipVal"></output></div><input id="clip" type="range" min="10" max="40" value="22"></div>
 <div class="control"><div class="line"><label for="tiles">Розмір сітки CLAHE</label><output id="tilesVal"></output></div><input id="tiles" type="range" min="4" max="16" value="8"></div>
 <div class="control"><div class="line"><label for="sharp">Різкість</label><output id="sharpVal"></output></div><input id="sharp" type="range" min="0" max="100" value="15"></div>
@@ -87,7 +87,7 @@ function setMode(m){
  $('auto').setAttribute('aria-pressed',String(m==='auto'));$('manual').setAttribute('aria-pressed',String(m==='manual'));
  $('sliders').style.opacity=m==='auto'?.45:1;
  $('sliders').querySelectorAll('input').forEach(el=>el.disabled=m==='auto');
- $('modehelp').textContent=m==='auto'?'Автоматичне визначення контрасту, яскравості та сили обробки.':'Ручне налаштування всіх параметрів.';
+ $('modehelp').textContent=m==='auto'?'Обережний AUTO: зберігає світлі ділянки та не підсилює шум неба.':'Ручне налаштування всіх параметрів.';
 }
 $('auto').onclick=()=>setMode('auto');$('manual').onclick=()=>setMode('manual');
 function placeholder(c,ctx,text){
@@ -115,47 +115,76 @@ const drop=$('drop');
 ['dragleave','drop'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove('drag')}));
 drop.addEventListener('drop',e=>loadFile(e.dataTransfer.files[0]));
 function autoParams(d){
+ // Conservative automatic settings: protect highlights.
  let sum=0,sumSq=0;const hist=new Uint32Array(256),n=d.length/4;
- for(let i=0;i<d.length;i+=4){let y=Math.round(.299*d[i]+.587*d[i+1]+.114*d[i+2]);hist[y]++;sum+=y;sumSq+=y*y}
- const mean=sum/n,std=Math.sqrt(Math.max(0,sumSq/n-mean*mean));
- const haze=clamp((mean-110)/90+(70-std)/50,0,1);let acc=0,p2=0,p98=255;
- for(let k=0;k<256;k++){acc+=hist[k];if(acc>=n*.02&&p2===0)p2=k;if(acc>=n*.98){p98=k;break}}
- return {strength:Math.round(42+haze*38),contrast:Math.round(18+haze*40),gamma:.96-haze*.12,clip:1.8+haze*1.2,tiles:Math.round(6+haze*4),sharp:Math.round(8+haze*18),black:Math.min(p2,80),white:Math.max(p98,180)};
+ for(let i=0;i<d.length;i+=4){
+   const y=Math.round(.299*d[i]+.587*d[i+1]+.114*d[i+2]);
+   hist[y]++;sum+=y;sumSq+=y*y;
+ }
+ const mean=sum/n;let acc=0,p10=0,p90=255,seen10=false;
+ for(let k=0;k<256;k++){
+   acc+=hist[k];
+   if(!seen10&&acc>=n*.10){p10=k;seen10=true;}
+   if(acc>=n*.90){p90=k;break;}
+ }
+ const haze=clamp((95-(p90-p10))/125+Math.max(0,mean-130)/240,0,1);
+ return {
+  strength:Math.round(45+haze*14),contrast:Math.round(8+haze*8),
+  gamma:1.01+haze*.025,clip:1.35+haze*.35,
+  tiles:8,sharp:Math.round(5+haze*5),black:0,white:255
+ };
 }
-function manualParams(){return {strength:+$('strength').value,contrast:+$('contrast').value,gamma:+$('gamma').value/100,clip:+$('clip').value/10,tiles:+$('tiles').value,sharp:+$('sharp').value,black:8,white:248}}
+function manualParams(){return {strength:+$('strength').value,contrast:+$('contrast').value,gamma:+$('gamma').value/100,clip:+$('clip').value/10,tiles:+$('tiles').value,sharp:+$('sharp').value,black:0,white:255}}
 function globalAdjust(src,p){
- const dst=new Uint8ClampedArray(src.length),contrast=1+p.contrast/100,range=Math.max(20,p.white-p.black);
+ const dst=new Uint8ClampedArray(src.length),contrast=1+p.contrast/100,gamma=clamp(p.gamma,.7,1.3);
  for(let i=0;i<src.length;i+=4){
-  for(let c=0;c<3;c++){let v=clamp((src[i+c]-p.black)/range,0,1);v=clamp((v-.5)*contrast+.5,0,1);dst[i+c]=Math.round(255*Math.pow(v,p.gamma))}
-  dst[i+3]=src[i+3]
- }return dst;
+   const r=src[i],g=src[i+1],b=src[i+2],y=.299*r+.587*g+.114*b;
+   const highlightProtect=1-clamp((y-155)/75,0,1);
+   const corrected=255*Math.pow(y/255,gamma);
+   const target=128+(corrected-128)*contrast;
+   const delta=clamp(target-y,-36,22)*highlightProtect;
+   dst[i]=clamp(r+delta);dst[i+1]=clamp(g+delta);dst[i+2]=clamp(b+delta);dst[i+3]=src[i+3];
+ }
+ return dst;
 }
 // CLAHE: histogram clipping per tile, followed by bilinear interpolation of adjacent LUTs.
 function clahe(src,w,h,p){
  const nx=p.tiles,ny=Math.max(2,Math.round(nx*h/w)),tw=Math.ceil(w/nx),th=Math.ceil(h/ny);
- const luts=[];
+ const luts=[],weights=[];
  for(let ty=0;ty<ny;ty++)for(let tx=0;tx<nx;tx++){
   const x0=tx*tw,y0=ty*th,x1=Math.min(w,x0+tw),y1=Math.min(h,y0+th);
-  const hist=new Float32Array(256);let n=0;
-  for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){let i=(y*w+x)*4;hist[Math.round(.299*src[i]+.587*src[i+1]+.114*src[i+2])]++;n++}
+  const hist=new Float32Array(256);let n=0,sum=0,sumSq=0;
+  for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){
+    const i=(y*w+x)*4,lum=Math.round(.299*src[i]+.587*src[i+1]+.114*src[i+2]);
+    hist[lum]++;sum+=lum;sumSq+=lum*lum;n++;
+  }
+  const std=Math.sqrt(Math.max(0,sumSq/Math.max(1,n)-(sum/Math.max(1,n))**2));
+  weights.push(clamp((std-7)/28,.03,1));
   const limit=Math.max(1,p.clip*n/256);let excess=0;
-  for(let k=0;k<256;k++)if(hist[k]>limit){excess+=hist[k]-limit;hist[k]=limit}
-  let acc=0;const lut=new Uint8Array(256);
-  for(let k=0;k<256;k++){acc+=hist[k]+excess/256;lut[k]=clamp(Math.round(acc*255/Math.max(1,n)))}
+  for(let k=0;k<256;k++)if(hist[k]>limit){excess+=hist[k]-limit;hist[k]=limit;}
+  let cumulative=0;const lut=new Uint8Array(256);
+  for(let k=0;k<256;k++){cumulative+=hist[k]+excess/256;lut[k]=clamp(Math.round(cumulative*255/Math.max(1,n)));}
   luts.push(lut);
  }
  const dst=new Uint8ClampedArray(src.length);
  for(let y=0;y<h;y++){
-  const fy=(y+.5)/th-.5,ty0=clamp(Math.floor(fy),0,ny-1),ty1=clamp(ty0+1,0,ny-1),wy=clamp(fy-ty0,0,1);
+  const fy=(y+.5)/th-.5,y0=clamp(Math.floor(fy),0,ny-1),y1=clamp(y0+1,0,ny-1),wy=clamp(fy-y0,0,1);
   for(let x=0;x<w;x++){
-   const fx=(x+.5)/tw-.5,tx0=clamp(Math.floor(fx),0,nx-1),tx1=clamp(tx0+1,0,nx-1),wx=clamp(fx-tx0,0,1);
-   let i=(y*w+x)*4,r=src[i],g=src[i+1],b=src[i+2],lum=Math.round(.299*r+.587*g+.114*b);
-   const a=luts[ty0*nx+tx0][lum]*(1-wx)+luts[ty0*nx+tx1][lum]*wx;
-   const z=luts[ty1*nx+tx0][lum]*(1-wx)+luts[ty1*nx+tx1][lum]*wx;
-   const mapped=a*(1-wy)+z*wy,ratio=lum?Math.min(3,mapped/lum):1;
-   dst[i]=clamp(r*ratio);dst[i+1]=clamp(g*ratio);dst[i+2]=clamp(b*ratio);dst[i+3]=src[i+3];
+   const fx=(x+.5)/tw-.5,x0=clamp(Math.floor(fx),0,nx-1),x1=clamp(x0+1,0,nx-1),wx=clamp(fx-x0,0,1);
+   const i=(y*w+x)*4,r=src[i],g=src[i+1],b=src[i+2],lum=Math.round(.299*r+.587*g+.114*b);
+   const k00=y0*nx+x0,k10=y0*nx+x1,k01=y1*nx+x0,k11=y1*nx+x1;
+   const a=luts[k00][lum]*(1-wx)+luts[k10][lum]*wx;
+   const z=luts[k01][lum]*(1-wx)+luts[k11][lum]*wx;
+   const mapped=a*(1-wy)+z*wy;
+   const texA=weights[k00]*(1-wx)+weights[k10]*wx;
+   const texB=weights[k01]*(1-wx)+weights[k11]*wx;
+   const texture=texA*(1-wy)+texB*wy;
+   const highlightProtect=1-clamp((lum-162)/72,0,1);
+   const delta=clamp(mapped-lum,-35,35)*(.36+clamp(p.clip-1.2,0,3)*.06)*texture*highlightProtect;
+   dst[i]=clamp(r+delta);dst[i+1]=clamp(g+delta);dst[i+2]=clamp(b+delta);dst[i+3]=src[i+3];
   }
- }return dst;
+ }
+ return dst;
 }
 function blend(a,b,p){const out=new Uint8ClampedArray(a.length),s=p/100;for(let i=0;i<a.length;i+=4){for(let k=0;k<3;k++)out[i+k]=a[i+k]*(1-s)+b[i+k]*s;out[i+3]=a[i+3]}return out}
 function sharpen(src,w,h,amount){
