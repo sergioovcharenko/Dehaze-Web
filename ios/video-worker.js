@@ -51,7 +51,7 @@ function clahe(gray){
   let excess=0;
   for(let k=0;k<256;k++)if(hist[k]>maxBin){excess+=hist[k]-maxBin;hist[k]=maxBin;}
   let acc=0;
-  const row=ty*NX+tx;
+  const row=(NY-1-ty)*NX+tx;
   for(let k=0;k<256;k++){
    acc+=hist[k]+excess/256;
    const value=clamp(k/255+(acc/Math.max(1,n)-k/255)*(.35+.65*tex));
@@ -108,12 +108,12 @@ function calculate(frame,epoch){
  let haze=.45*contrast+.35*texture+.2*muted;
  const map=new Uint8Array(N*4);
  for(let y=0;y<HEIGHT;y++)for(let x=0;x<WIDTH;x++){
-  const i=y*WIDTH+x,p=i*4,mean=localI[i];
+  const i=y*WIDTH+x,p=((HEIGHT-1-y)*WIDTH+x)*4,mean=localI[i];
   const transmission=clamp(meanA[i]*gray[i]+meanB[i],.24,1);
   const std=Math.sqrt(Math.max(0,localSq[i]-mean*mean));
   const detail=clamp((std-.009)/.078);
-  // Canvas pixels are top to bottom. WebGL upload uses UNPACK_FLIP_Y_WEBGL
-  // so shader texture's lower-left samples still correspond to lower image.
+  // Reverse rows explicitly: typed-array texImage2D ignores UNPACK_FLIP_Y_WEBGL.
+  // The shader's lower-left UV must represent the image's actual bottom.
   const upper=clamp((.62-y/HEIGHT)/.36);
   const light=clamp((gray[i]-.57)/.32);
   const sky=upper*light*(1-clamp((std-.018)/.09));
