@@ -331,7 +331,10 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
 
     @Override public void onDrawFrame(GL10 unused) {
         if(surfaceTexture==null||screenWidth<2||screenHeight<2)return;
-        if(framePending.getAndSet(false)&&!frozen){
+        // Always consume queued camera frames even while the freeze overlay is visible.
+// Otherwise SurfaceTexture's buffer queue fills and Camera2 can stall permanently
+// after the user taps "Stop-frame"; drawing is hidden by the native overlay.
+        if(framePending.getAndSet(false)){
             try{surfaceTexture.updateTexImage();surfaceTexture.getTransformMatrix(stMatrix);textureHasFrame=true;}
             catch(RuntimeException e){return;}
         }
