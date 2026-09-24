@@ -68,6 +68,8 @@ public final class MainActivity extends Activity {
     private View drawerScrim;
     private ImageView freezeOverlay;
     private TextView resumeOverlay;
+    private TextView headerResumeButton;
+    private TextView drawerFreezeButton;
     private Bitmap heldFrame;
     private boolean pausedFileForFreeze=false;
     private boolean usingFile=false;
@@ -176,6 +178,15 @@ public final class MainActivity extends Activity {
         statsView=text("Очікування камери",11,MUTED);
         statsView.setSingleLine(true);
         bar.addView(statsView);
+        headerResumeButton=button("▶ ПРОДОВЖИТИ",this::resumeFreeze);
+        headerResumeButton.setTextColor(Color.WHITE);
+        headerResumeButton.setBackgroundColor(Color.rgb(43,108,87));
+        headerResumeButton.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        headerResumeButton.setVisibility(View.GONE);
+        LinearLayout.LayoutParams resumeHeaderSize=
+            new LinearLayout.LayoutParams(dp(161),dp(38));
+        resumeHeaderSize.leftMargin=dp(8);
+        bar.addView(headerResumeButton,resumeHeaderSize);
         TextView menu=button("☰",()->setDrawer(!drawerVisible));
         LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(dp(44),dp(36));
         mp.leftMargin=dp(9);
@@ -342,7 +353,11 @@ public final class MainActivity extends Activity {
 
         menuTitle(list,"ДІЇ");
         menuItem(list,"▣  Знімок",this::takeSnapshot);
-        menuItem(list,"Ⅱ  Стоп-кадр / Play",this::toggleFreeze);
+        drawerFreezeButton=button("Ⅱ  Стоп-кадр",this::toggleFreeze);
+        LinearLayout.LayoutParams freezeMenuParams=
+            new LinearLayout.LayoutParams(-1,dp(44));
+        freezeMenuParams.bottomMargin=dp(6);
+        list.addView(drawerFreezeButton,freezeMenuParams);
         stateView=text("Камера та відеофайли • без інтернету",10,MUTED);
         stateView.setPadding(0,dp(10),0,dp(5));
         list.addView(stateView);
@@ -390,12 +405,14 @@ public final class MainActivity extends Activity {
         FrameLayout.LayoutParams resumeLayout=
             new FrameLayout.LayoutParams(dp(180),dp(49),Gravity.CENTER_HORIZONTAL|Gravity.BOTTOM);
         resumeLayout.bottomMargin=dp(56);
-        videoArea.addView(resumeOverlay,resumeLayout);
         FrameLayout.LayoutParams area=new FrameLayout.LayoutParams(-1,-1);
         area.topMargin=dp(46);
         root.addView(videoArea,area);
         drawHeader();
         makeDrawer();
+        // Root-level action is always above both the video and scrolling drawer.
+        root.addView(resumeOverlay,resumeLayout);
+        syncFreezeUi();
         setContentView(root);
         scaleDetector=new ScaleGestureDetector(this,new ScaleGestureDetector.SimpleOnScaleGestureListener(){
             @Override public boolean onScale(ScaleGestureDetector d){
@@ -425,6 +442,19 @@ public final class MainActivity extends Activity {
         });
     }
 
+    private void syncFreezeUi(){
+        if(headerResumeButton!=null)
+            headerResumeButton.setVisibility(frozen?View.VISIBLE:View.GONE);
+        if(resumeOverlay!=null)
+            resumeOverlay.setVisibility(frozen?View.VISIBLE:View.GONE);
+        if(drawerFreezeButton!=null){
+            drawerFreezeButton.setText(frozen
+                ? "▶  ПРОДОВЖИТИ ВІДЕО" : "Ⅱ  Стоп-кадр");
+            drawerFreezeButton.setBackgroundColor(frozen
+                ? Color.rgb(43,108,87) : PANEL);
+        }
+    }
+
     private void toggleFreeze(){
         if(frozen){resumeFreeze();return;}
         if(!active||cameraTexture==null){
@@ -443,7 +473,7 @@ public final class MainActivity extends Activity {
             }catch(IllegalStateException ignored){}
         }
         renderer.setFrozen(true); // pauses only AUTO analysis, not input frame updates
-        resumeOverlay.setVisibility(View.VISIBLE);
+        syncFreezeUi();
         setDrawer(false);
         setState("Стоп-кадр • ▶ Продовжити на екрані");
         renderer.captureNext(bitmap->runOnUiThread(()->{
@@ -471,7 +501,7 @@ public final class MainActivity extends Activity {
             freezeOverlay.setVisibility(View.GONE);
             freezeOverlay.setImageDrawable(null);
         }
-        if(resumeOverlay!=null)resumeOverlay.setVisibility(View.GONE);
+        syncFreezeUi();
         Bitmap old=heldFrame;heldFrame=null;
         if(old!=null)old.recycle();
         renderer.refresh();
@@ -486,7 +516,7 @@ public final class MainActivity extends Activity {
             freezeOverlay.setVisibility(View.GONE);
             freezeOverlay.setImageDrawable(null);
         }
-        if(resumeOverlay!=null)resumeOverlay.setVisibility(View.GONE);
+        syncFreezeUi();
         Bitmap old=heldFrame;heldFrame=null;
         if(old!=null)old.recycle();
     }
