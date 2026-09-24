@@ -1,0 +1,112 @@
+name: Build Меті Туман VIDEO MAX (third APK)
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android-video-max/**'
+      - '.github/workflows/build-android-video-max.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: meti-tuman-video-max-apk
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Configure Android SDK
+        run: |
+          set -euo pipefail
+          sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$sdk" >> "$GITHUB_ENV"
+          tool="$sdk/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$tool"
+          yes | "$tool" --licenses >/dev/null 2>&1 || true
+          "$tool" 'platforms;android-35' 'build-tools;35.0.0' 'platform-tools'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Compile independent VIDEO MAX APK
+        id: compile
+        run: gradle -p android-video-max --no-daemon --stacktrace assembleDebug
+      - name: Verify separate package and APK
+        id: verify
+        run: |
+          set -euo pipefail
+          apk=android-video-max/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          "${ANDROID_HOME}/build-tools/35.0.0/aapt" dump badging "$apk" | grep '^package:' | tee package.txt
+          grep "name='ua.meti.tuman.videomax'" package.txt
+          cp "$apk" Meti-Tuman-VIDEO-MAX.apk
+          sha256sum Meti-Tuman-VIDEO-MAX.apk > Meti-Tuman-VIDEO-MAX.apk.sha256
+          ls -lh Meti-Tuman-VIDEO-MAX.apk
+      - name: Upload MAX APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Meti-Tuman-VIDEO-MAX-debug
+          path: |
+            Meti-Tuman-VIDEO-MAX.apk
+            Meti-Tuman-VIDEO-MAX.apk.sha256
+          if-no-files-found: error
+          retention-days: 90
+      - name: Publish separate MAX release (never overwrite original)
+        id: publish
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=meti-tuman-video-max-latest
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "Меті Туман MAX — окрема APK (debug)" --notes "Independent Android package ua.meti.tuman.videomax. Photo AUTO MAX + offline live dehaze. Installs alongside the original ua.meti.tuman. Debug builds are for testing." --prerelease
+          fi
+          gh release upload "$tag" Meti-Tuman-VIDEO-MAX.apk Meti-Tuman-VIDEO-MAX.apk.sha256 --clobber
+          gh release view "$tag" --json url,assets
+      - name: Record MAX build status
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMPILE: ${{ steps.compile.outcome }}
+          VERIFY: ${{ steps.verify.outcome }}
+          PUBLISH: ${{ steps.publish.outcome }}
+        run: |
+          set -euo pipefail
+          if [ "$COMPILE" = success ] && [ "$VERIFY" = success ] && [ "$PUBLISH" = success ]; then
+            state=success
+          else
+            state=failure
+          fi
+          jq -nc \
+            --arg state "$state" \
+            --arg compile "$COMPILE" \
+            --arg verify "$VERIFY" \
+            --arg publish "$PUBLISH" \
+            --arg commit "$GITHUB_SHA" \
+            --arg url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --arg apk "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/meti-tuman-video-max-latest/Meti-Tuman-VIDEO-MAX.apk" \
+            --arg time "$(date -u +%FT%TZ)" \
+            '{state:$state,compile:$compile,verify:$verify,publish:$publish,commit:$commit,workflow_url:$url,apk_url:(if $state=="success" then $apk else null end),updated_utc:$time}' > video-max-build-status.json
+          old_sha=$(gh api "repos/$GITHUB_REPOSITORY/contents/video-max-build-status.json" --jq .sha 2>/dev/null || true)
+          if [ -n "$old_sha" ]; then
+            gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/video-max-build-status.json" \
+              -f message="Record third independent VIDEO MAX APK build" \
+              -f content="$(base64 -w0 < video-max-build-status.json)" \
+              -f sha="$old_sha" -f branch=main >/dev/null
+          else
+            gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/video-max-build-status.json" \
+              -f message="Record independent MAX APK build" \
+              -f content="$(base64 -w0 < video-max-build-status.json)" \
+              -f branch=main >/dev/null
+          fi
