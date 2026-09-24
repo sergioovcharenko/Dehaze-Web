@@ -44,6 +44,7 @@ function syncUI(){
  $('fileControls').hidden=state.source!=='file';
  $('playPause').textContent=state.paused?'▶':'Ⅱ';
  $('playPause').setAttribute('aria-label',state.paused?'Відтворити':'Пауза');
+ $('resumeOverlay').hidden=!state.source||!state.paused;
  $('zoomIndicator').hidden=state.zoom<=1.01;
  $('zoomIndicator').textContent=state.zoom.toFixed(1)+'×';
  updateMediaGeometry();
@@ -341,6 +342,7 @@ async function cleanup(){
  try{video.load();}catch(_){}
  if(state.objectUrl){URL.revokeObjectURL(state.objectUrl);state.objectUrl=null;}
  state.source=null;state.paused=false;
+ $('resumeOverlay').hidden=true;
  state.rotation=0;state.zoom=1;state.panX=0;state.panY=0;
  $('fileControls').hidden=true;
 }
@@ -415,6 +417,7 @@ function togglePause(){
  }
  drawer(false);
 }
+$('resumeOverlay').onclick=togglePause;
 $('playPause').onclick=togglePause;
 $('drawerPause').onclick=togglePause;
 $('videoPlay').onclick=togglePause;
