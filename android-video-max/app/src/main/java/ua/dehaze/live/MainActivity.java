@@ -800,6 +800,7 @@ public final class MainActivity extends Activity {
     @Override protected void onDestroy(){
         clearFreeze();stopMedia();closeCamera();
         if(cameraThread!=null)cameraThread.quitSafely();
+        if(renderer!=null)renderer.shutdown();
         super.onDestroy();
     }
 
