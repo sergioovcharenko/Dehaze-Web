@@ -80,17 +80,47 @@ public final class MainActivity extends Activity {
     private CheckBox manualCheck;
     private SeekBar strengthSeek;
     private TextView strengthLabel;
+    private int cameraCorrectionDegrees; // saved hardware camera alignment; never rotates the UI
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
         showImmersive();
+        cameraCorrectionDegrees=getPreferences(MODE_PRIVATE).getInt(
+            "camera_alignment_degrees",defaultCameraCorrection());
         cameraManager = (CameraManager)getSystemService(Context.CAMERA_SERVICE);
         cameraThread = new HandlerThread("camera2-preview");
         cameraThread.start();
         cameraHandler = new Handler(cameraThread.getLooper());
         makeUi();
+    }
+
+    private static int defaultCameraCorrection(){
+        // The Active 10 Pro's rear-camera buffer is sideways with Android's
+        // generic preview calculation in this fixed-landscape UI. It previously
+        // required a manual quarter-turn. Make that correction automatic.
+        String model=Build.MODEL==null?"":Build.MODEL.toLowerCase(Locale.ROOT)
+            .replace(" ","").replace("-","");
+        return model.contains("active10pro")?90:0;
+    }
+
+    private void calibrateCamera(){
+        if(usingFile){
+            android.widget.Toast.makeText(this,
+                "Відкрий камеру для калібрування її положення",android.widget.Toast.LENGTH_SHORT).show();
+            return;
+        }
+        cameraCorrectionDegrees=(cameraCorrectionDegrees+90)%360;
+        getPreferences(MODE_PRIVATE).edit()
+            .putInt("camera_alignment_degrees",cameraCorrectionDegrees).apply();
+        renderer.setUserRotation(cameraCorrectionDegrees);
+        renderer.resetZoom();
+        zoomBadge.setText("1.0×");
+        renderer.refresh();
+        android.widget.Toast.makeText(this,
+            "Корекція камери +"+cameraCorrectionDegrees+"° збережена",
+            android.widget.Toast.LENGTH_SHORT).show();
     }
 
     private TextView text(String value, int sizeSp, int color) {
@@ -236,6 +266,7 @@ public final class MainActivity extends Activity {
         menuTitle(list,"ДЖЕРЕЛО");
         menuItem(list,"◉  Камера",this::useCamera);
         menuItem(list,"▣  Відкрити відео",this::pickVideo);
+        menuItem(list,"↻  Калібрування камери (+90°)",this::calibrateCamera);
 
         menuTitle(list,"ПОРІВНЯННЯ");
         menuItem(list,"50/50  •  весь кадр",()->selectMode(0));
@@ -406,6 +437,9 @@ public final class MainActivity extends Activity {
             int rotation=rawRotation==null?0:Integer.parseInt(rawRotation);
             meta.release();
             renderer.setCameraInfo(width,height,rotation,false);
+            // Media files carry their own orientation metadata; a camera-device
+            // calibration must NEVER rotate an imported movie.
+            renderer.setUserRotation(0);
             cameraTexture.setDefaultBufferSize(width,height);
             mediaPlayer=new MediaPlayer();
             mediaPlayer.setDataSource(this,fileUri);
@@ -542,9 +576,15 @@ public final class MainActivity extends Activity {
             Integer stamp=c.get(CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE);
             int display=getWindowManager().getDefaultDisplay().getRotation();
             int displayDeg=display==Surface.ROTATION_90?90:display==Surface.ROTATION_180?180:display==Surface.ROTATION_270?270:0;
-            int rotation=(((sensor==null?0:sensor)-displayDeg)%360+360)%360;
+            Integer facing=c.get(CameraCharacteristics.LENS_FACING);
+            int sensorDeg=(sensor==null?0:sensor);
+            // Camera2 relative rotation: back = sensor-display;
+            // front = sensor+display. The screen itself remains landscape.
+            boolean front=facing!=null&&facing==CameraCharacteristics.LENS_FACING_FRONT;
+            int rotation=((sensorDeg+(front?displayDeg:-displayDeg))%360+360)%360;
             renderer.setCameraInfo(size.getWidth(),size.getHeight(),rotation,
                 stamp!=null&&stamp==CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE_REALTIME);
+            renderer.setUserRotation(cameraCorrectionDegrees);
             cameraTexture.setDefaultBufferSize(size.getWidth(),size.getHeight());
             opening=true;
             cameraManager.openCamera(chosen,new CameraDevice.StateCallback(){
@@ -590,7 +630,8 @@ public final class MainActivity extends Activity {
                     if(!active||cameraDevice==null){cs.close();return;}
                     session=cs;
                     try{session.setRepeatingRequest(builder.build(),null,cameraHandler);
-                        opening=false;setState("Камера працює • один відеопотік • обробка на GPU без мережі");
+                        opening=false;setState("Камера • корекція "+cameraCorrectionDegrees+
+                            "° • GPU • офлайн");
                     }catch(CameraAccessException e){opening=false;setState("Помилка відеопотоку: "+e.getMessage());}
                 }
                 @Override public void onConfigureFailed(CameraCaptureSession cs){
