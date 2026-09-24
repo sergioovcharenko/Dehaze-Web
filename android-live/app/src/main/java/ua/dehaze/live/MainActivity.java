@@ -69,6 +69,7 @@ public final class MainActivity extends Activity {
     private ImageView freezeOverlay;
     private TextView resumeOverlay;
     private Bitmap heldFrame;
+    private boolean pausedFileForFreeze=false;
     private boolean usingFile=false;
     private Uri fileUri;
     private MediaPlayer mediaPlayer;
@@ -432,6 +433,15 @@ public final class MainActivity extends Activity {
         }
         // Do not stop camera capture or let its SurfaceTexture queue accumulate.
         frozen=true;
+        pausedFileForFreeze=false;
+        if(usingFile&&mediaPlayer!=null){
+            try{
+                if(mediaPlayer.isPlaying()){
+                    mediaPlayer.pause();
+                    pausedFileForFreeze=true;
+                }
+            }catch(IllegalStateException ignored){}
+        }
         renderer.setFrozen(true); // pauses only AUTO analysis, not input frame updates
         resumeOverlay.setVisibility(View.VISIBLE);
         setDrawer(false);
@@ -453,6 +463,10 @@ public final class MainActivity extends Activity {
         if(!frozen)return;
         frozen=false;
         renderer.setFrozen(false);
+        if(pausedFileForFreeze&&usingFile&&mediaPlayer!=null){
+            try{mediaPlayer.start();}catch(IllegalStateException ignored){}
+        }
+        pausedFileForFreeze=false;
         if(freezeOverlay!=null){
             freezeOverlay.setVisibility(View.GONE);
             freezeOverlay.setImageDrawable(null);
@@ -466,6 +480,7 @@ public final class MainActivity extends Activity {
 
     private void clearFreeze(){
         frozen=false;
+        pausedFileForFreeze=false;
         renderer.setFrozen(false);
         if(freezeOverlay!=null){
             freezeOverlay.setVisibility(View.GONE);
