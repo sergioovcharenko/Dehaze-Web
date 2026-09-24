@@ -74,7 +74,7 @@ final class VideoDehazeProcessor {
             int count=0;
             float sum=0f,sumSq=0f;
             for(int y=y0;y<y1;y++)for(int x=x0;x<x1;x++){
-                float v=gray[y*W+x],lum=byteValue(v);
+                float v=gray[y*W+x];int lum=byteValue(v);
                 hist[lum]++;count++;sum+=v;sumSq+=v*v;
             }
             float sigma=(float)Math.sqrt(Math.max(0,sumSq/Math.max(1,count)
