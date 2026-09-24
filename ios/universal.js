@@ -678,7 +678,7 @@ async function updateOffline(){
  if(!navigator.onLine){label.textContent='ОФЛАЙН • збережені файли';return;}
  try{
    const keys=await caches.keys();
-   label.textContent=keys.some(k=>k.startsWith('meti-universal-'))
+   label.textContent=keys.some(k=>k.startsWith('meti-ios-offline-'))
      ?'Офлайн готовий • інтернет необов’язковий'
      :'Перше завантаження • готуємо офлайн-кеш';
  }catch(e){label.textContent='Вебдодаток працює • перевір офлайн-кеш';}
