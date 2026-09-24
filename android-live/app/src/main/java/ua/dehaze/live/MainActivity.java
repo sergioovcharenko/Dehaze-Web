@@ -39,6 +39,7 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.CheckBox;
+import android.widget.ImageView;
 import android.content.res.ColorStateList;
 import android.widget.TextView;
 import android.util.Size;
@@ -65,6 +66,9 @@ public final class MainActivity extends Activity {
     private boolean fillMode=true,frozen=false,drawerVisible=false;
     private int viewMode=1;  // 0 = 50/50 wipe, 1 = two identical FILL previews, 2 = processed fullscreen
     private View drawerScrim;
+    private ImageView freezeOverlay;
+    private TextView resumeOverlay;
+    private Bitmap heldFrame;
     private boolean usingFile=false;
     private Uri fileUri;
     private MediaPlayer mediaPlayer;
@@ -337,12 +341,7 @@ public final class MainActivity extends Activity {
 
         menuTitle(list,"ДІЇ");
         menuItem(list,"▣  Знімок",this::takeSnapshot);
-        menuItem(list,"Ⅱ  Стоп-кадр / Play",()->{
-            frozen=!frozen;renderer.setFrozen(frozen);
-            if(!frozen)renderer.refresh();
-            setState(frozen?"Стоп-кадр":"Камера працює");
-            setDrawer(false);
-        });
+        menuItem(list,"Ⅱ  Стоп-кадр / Play",this::toggleFreeze);
         stateView=text("Камера та відеофайли • без інтернету",10,MUTED);
         stateView.setPadding(0,dp(10),0,dp(5));
         list.addView(stateView);
@@ -373,7 +372,24 @@ public final class MainActivity extends Activity {
         glView.setRenderer(renderer);
         glView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
         videoArea.addView(glView,new FrameLayout.LayoutParams(-1,-1));
+        // Freeze is an Android bitmap overlay, not a paused Camera2 consumer.
+        // Camera frames continue to be drained behind it, so resume never
+        // needs to restart a potentially blocked SurfaceTexture pipeline.
+        freezeOverlay=new ImageView(this);
+        freezeOverlay.setScaleType(ImageView.ScaleType.FIT_XY);
+        freezeOverlay.setVisibility(View.GONE);
+        freezeOverlay.setContentDescription("Зупинений кадр. Натисни, щоб продовжити.");
+        freezeOverlay.setOnClickListener(v->resumeFreeze());
+        videoArea.addView(freezeOverlay,new FrameLayout.LayoutParams(-1,-1));
         drawLabels();
+        resumeOverlay=button("▶  ПРОДОВЖИТИ",this::resumeFreeze);
+        resumeOverlay.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        resumeOverlay.setVisibility(View.GONE);
+        resumeOverlay.setBackgroundColor(Color.rgb(56,98,106));
+        FrameLayout.LayoutParams resumeLayout=
+            new FrameLayout.LayoutParams(dp(180),dp(49),Gravity.CENTER_HORIZONTAL|Gravity.BOTTOM);
+        resumeLayout.bottomMargin=dp(56);
+        videoArea.addView(resumeOverlay,resumeLayout);
         FrameLayout.LayoutParams area=new FrameLayout.LayoutParams(-1,-1);
         area.topMargin=dp(46);
         root.addView(videoArea,area);
@@ -408,6 +424,58 @@ public final class MainActivity extends Activity {
         });
     }
 
+    private void toggleFreeze(){
+        if(frozen){resumeFreeze();return;}
+        if(!active||cameraTexture==null){
+            setState("Спочатку запусти камеру або відкрий відео");
+            setDrawer(false);return;
+        }
+        // Do not stop camera capture or let its SurfaceTexture queue accumulate.
+        frozen=true;
+        renderer.setFrozen(true); // pauses only AUTO analysis, not input frame updates
+        resumeOverlay.setVisibility(View.VISIBLE);
+        setDrawer(false);
+        setState("Стоп-кадр • ▶ Продовжити на екрані");
+        renderer.captureNext(bitmap->runOnUiThread(()->{
+            if(!frozen||freezeOverlay==null){
+                bitmap.recycle();return;
+            }
+            Bitmap old=heldFrame;
+            heldFrame=bitmap;
+            freezeOverlay.setImageBitmap(bitmap);
+            freezeOverlay.setVisibility(View.VISIBLE);
+            if(old!=null&&old!=bitmap)old.recycle();
+        }));
+        renderer.refresh();
+    }
+
+    private void resumeFreeze(){
+        if(!frozen)return;
+        frozen=false;
+        renderer.setFrozen(false);
+        if(freezeOverlay!=null){
+            freezeOverlay.setVisibility(View.GONE);
+            freezeOverlay.setImageDrawable(null);
+        }
+        if(resumeOverlay!=null)resumeOverlay.setVisibility(View.GONE);
+        Bitmap old=heldFrame;heldFrame=null;
+        if(old!=null)old.recycle();
+        renderer.refresh();
+        setState(usingFile?"Відтворення відеофайлу":"Камера працює • LIVE");
+    }
+
+    private void clearFreeze(){
+        frozen=false;
+        renderer.setFrozen(false);
+        if(freezeOverlay!=null){
+            freezeOverlay.setVisibility(View.GONE);
+            freezeOverlay.setImageDrawable(null);
+        }
+        if(resumeOverlay!=null)resumeOverlay.setVisibility(View.GONE);
+        Bitmap old=heldFrame;heldFrame=null;
+        if(old!=null)old.recycle();
+    }
+
     private void pickVideo(){
         Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.setType("video/*");intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -418,6 +486,7 @@ public final class MainActivity extends Activity {
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
         if(request==FILE_REQUEST&&result==RESULT_OK&&data!=null&&data.getData()!=null){
+            clearFreeze();
             fileUri=data.getData();
             usingFile=true;
             closeCamera();
@@ -464,6 +533,7 @@ public final class MainActivity extends Activity {
     }
 
     private void useCamera(){
+        clearFreeze();
         stopMedia();usingFile=false;fileUri=null;
         setDrawer(false);maybeOpenCamera();
     }
@@ -536,7 +606,7 @@ public final class MainActivity extends Activity {
     }
 
     @Override protected void onPause() {
-        active=false;stopMedia();closeCamera();glView.onPause();
+        clearFreeze();active=false;stopMedia();closeCamera();glView.onPause();
         super.onPause();
     }
 
@@ -659,7 +729,7 @@ public final class MainActivity extends Activity {
     }
 
     @Override protected void onDestroy(){
-        stopMedia();closeCamera();
+        clearFreeze();stopMedia();closeCamera();
         if(cameraThread!=null)cameraThread.quitSafely();
         super.onDestroy();
     }
