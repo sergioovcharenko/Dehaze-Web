@@ -62,28 +62,28 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         " float edge=length(color-local);\n" +
         " float sky=smoothstep(.62,.84,luminance)*(1.0-smoothstep(.01,.065,edge))*smoothstep(.18,.85,vUV.y);\n" +
         " float protect=1.0-.95*sky;\n" +
-        " if(uHybrid>0.5){\\n" +
-        "  vec4 m=texture2D(uTransmission,aligned);\\n" +
-        "  float transmission=max(.26,m.r);\\n" +
-        "  float protectedSky=clamp(m.g,0.0,1.0);\\n" +
-        "  float blend=clamp(uStrength*1.02*(1.0-.91*protectedSky),0.0,.96);\\n" +
-        "  vec3 restored=clamp((color-uAir)/transmission+uAir,0.0,1.0);\\n" +
-        "  vec3 dcp=mix(color,restored,blend);\\n" +
-        "  float lum=dot(dcp,vec3(.299,.587,.114));\\n" +
-        "  vec2 loc=clamp(aligned*vec2(8.0,6.0)-.5,vec2(0.0),vec2(7.0,5.0));\\n" +
-        "  vec2 low=floor(loc),high=min(low+vec2(1.0),vec2(7.0,5.0));\\n" +
-        "  vec2 factor=fract(loc);\\n" +
-        "  float bin=floor(clamp(lum,0.0,1.0)*255.0+.5);\\n" +
-        "  float a=texture2D(uClahe,vec2((bin+.5)/256.0,(low.y*8.0+low.x+.5)/48.0)).r;\\n" +
-        "  float b=texture2D(uClahe,vec2((bin+.5)/256.0,(low.y*8.0+high.x+.5)/48.0)).r;\\n" +
-        "  float c=texture2D(uClahe,vec2((bin+.5)/256.0,(high.y*8.0+low.x+.5)/48.0)).r;\\n" +
-        "  float d=texture2D(uClahe,vec2((bin+.5)/256.0,(high.y*8.0+high.x+.5)/48.0)).r;\\n" +
-        "  float mapped=mix(mix(a,b,factor.x),mix(c,d,factor.x),factor.y);\\n" +
-        "  float delta=clamp(mapped-lum,-.18,.18)*.39*blend*(1.0-protectedSky);\\n" +
-        "  dcp=clamp(dcp+vec3(delta),0.0,1.0);\\n" +
-        "  dcp=clamp(dcp+clamp(color-local,vec3(-.09),vec3(.09))*(.35*blend*m.a),0.0,1.0);\\n" +
-        "  gl_FragColor=vec4(dcp,1.0);return;\\n" +
-        " }\\n" +
+        " if(uHybrid>0.5){\n" +
+        "  vec4 m=texture2D(uTransmission,aligned);\n" +
+        "  float transmission=max(.26,m.r);\n" +
+        "  float protectedSky=clamp(m.g,0.0,1.0);\n" +
+        "  float blend=clamp(uStrength*1.02*(1.0-.91*protectedSky),0.0,.96);\n" +
+        "  vec3 restored=clamp((color-uAir)/transmission+uAir,0.0,1.0);\n" +
+        "  vec3 dcp=mix(color,restored,blend);\n" +
+        "  float lum=dot(dcp,vec3(.299,.587,.114));\n" +
+        "  vec2 loc=clamp(aligned*vec2(8.0,6.0)-.5,vec2(0.0),vec2(7.0,5.0));\n" +
+        "  vec2 low=floor(loc),high=min(low+vec2(1.0),vec2(7.0,5.0));\n" +
+        "  vec2 factor=fract(loc);\n" +
+        "  float bin=floor(clamp(lum,0.0,1.0)*255.0+.5);\n" +
+        "  float a=texture2D(uClahe,vec2((bin+.5)/256.0,(low.y*8.0+low.x+.5)/48.0)).r;\n" +
+        "  float b=texture2D(uClahe,vec2((bin+.5)/256.0,(low.y*8.0+high.x+.5)/48.0)).r;\n" +
+        "  float c=texture2D(uClahe,vec2((bin+.5)/256.0,(high.y*8.0+low.x+.5)/48.0)).r;\n" +
+        "  float d=texture2D(uClahe,vec2((bin+.5)/256.0,(high.y*8.0+high.x+.5)/48.0)).r;\n" +
+        "  float mapped=mix(mix(a,b,factor.x),mix(c,d,factor.x),factor.y);\n" +
+        "  float delta=clamp(mapped-lum,-.18,.18)*.39*blend*(1.0-protectedSky);\n" +
+        "  dcp=clamp(dcp+vec3(delta),0.0,1.0);\n" +
+        "  dcp=clamp(dcp+clamp(color-local,vec3(-.09),vec3(.09))*(.35*blend*m.a),0.0,1.0);\n" +
+        "  gl_FragColor=vec4(dcp,1.0);return;\n" +
+        " }\n" +
         " float level=mix(uStrength,min(1.0,uStrength*1.16),uMax);\n" +
         " float t=max(mix(.60,.48,uMax),1.0-level*mix(.24+.13*luminance,.32+.17*luminance,uMax));\n" +
         " vec3 corrected=clamp((color-vec3(.84))/t+vec3(.84),0.0,1.0);\n" +
