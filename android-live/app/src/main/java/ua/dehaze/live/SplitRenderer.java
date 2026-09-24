@@ -106,7 +106,12 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     float getZoom(){return zoom;}
     void panBy(float dx,float dy){float range=.5f*(1f-1f/Math.max(1,zoom));panX=Math.max(-range,Math.min(range,panX+dx));panY=Math.max(-range,Math.min(range,panY+dy));}
     void resetZoom(){zoom=1f;panX=0;panY=0;}
-    void rotate90(){userRotation=(userRotation+90)%360;}
+    // One-time per-device camera alignment is stored by the Activity.
+    // It changes the image texture only, never the Android screen orientation.
+    void setUserRotation(int degrees){
+        userRotation=((degrees%360)+360)%360;
+    }
+    void rotate90(){setUserRotation(userRotation+90);}
     int effectiveRotation(){return (rotation+userRotation)%360;}
     interface CaptureCallback{void onCaptured(android.graphics.Bitmap bitmap);}
     private volatile CaptureCallback capture;
