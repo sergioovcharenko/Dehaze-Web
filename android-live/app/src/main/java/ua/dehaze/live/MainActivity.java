@@ -62,8 +62,8 @@ public final class MainActivity extends Activity {
     private TextView toggle;
     private TextView videoLabelsLeft,videoLabelsRight,zoomBadge,modeBadge;
     private FrameLayout root,drawer,videoArea;
-    private boolean fillMode=false,frozen=false,drawerVisible=false;
-    private int viewMode=0;  // 0 = undistorted 50/50, 1 = separate full FIT frames, 2 = processed fullscreen
+    private boolean fillMode=true,frozen=false,drawerVisible=false;
+    private int viewMode=1;  // 0 = 50/50 wipe, 1 = two identical FILL previews, 2 = processed fullscreen
     private View drawerScrim;
     private boolean usingFile=false;
     private Uri fileUri;
@@ -368,8 +368,8 @@ public final class MainActivity extends Activity {
         glView.setPreserveEGLContextOnPause(true);
         renderer=new SplitRenderer(this,glView,this::onCameraTextureReady,this::onFrameStats);
         renderer.setStrength(strength/100f);
-        renderer.setFill(false);
-        renderer.setViewMode(0);
+        renderer.setFill(true);
+        renderer.setViewMode(1);
         glView.setRenderer(renderer);
         glView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
         videoArea.addView(glView,new FrameLayout.LayoutParams(-1,-1));
@@ -570,8 +570,6 @@ public final class MainActivity extends Activity {
             CameraCharacteristics c=cameraManager.getCameraCharacteristics(chosen);
             StreamConfigurationMap map=c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
             if(map==null)throw new IllegalStateException("Немає підтримуваних розмірів камери");
-            Size size=pickSize(map.getOutputSizes(SurfaceTexture.class));
-            if(size==null)throw new IllegalStateException("Немає SurfaceTexture preview для цієї камери");
             Integer sensor=c.get(CameraCharacteristics.SENSOR_ORIENTATION);
             Integer stamp=c.get(CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE);
             int display=getWindowManager().getDefaultDisplay().getRotation();
@@ -582,6 +580,8 @@ public final class MainActivity extends Activity {
             // front = sensor+display. The screen itself remains landscape.
             boolean front=facing!=null&&facing==CameraCharacteristics.LENS_FACING_FRONT;
             int rotation=((sensorDeg+(front?displayDeg:-displayDeg))%360+360)%360;
+            Size size=pickSize(map.getOutputSizes(SurfaceTexture.class),rotation+cameraCorrectionDegrees);
+            if(size==null)throw new IllegalStateException("Немає SurfaceTexture preview для цієї камери");
             renderer.setCameraInfo(size.getWidth(),size.getHeight(),rotation,
                 stamp!=null&&stamp==CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE_REALTIME);
             renderer.setUserRotation(cameraCorrectionDegrees);
@@ -603,18 +603,28 @@ public final class MainActivity extends Activity {
         }catch(Exception e){opening=false;setState("Не вдалося відкрити камеру: "+e.getMessage());}
     }
 
-    private static Size pickSize(Size[] choices){
+    private static Size pickSize(Size[] choices,int correctedRotation){
         if(choices==null||choices.length==0)return null;
-        Size winner=choices[0];double best=Double.POSITIVE_INFINITY;
-        for(Size s:choices){
-            double a=(double)s.getWidth()/s.getHeight();
-            double pixels=(double)s.getWidth()*s.getHeight();
-            double cost=Math.abs(a-16.0/9)*3+
-              Math.abs(Math.log(Math.max(1,pixels)/(1280.0*720)))*.4+
-              (pixels>1920.0*1080?2:0);
-            if(cost<best){best=cost;winner=s;}
+        // Prefer a camera buffer that becomes landscape AFTER the sensor's
+        // orientation correction. On some tablets the available buffers are
+        // all landscape and become portrait when rotated; in that case we
+        // crop the upright picture (FILL), rather than stretch it sideways.
+        final boolean quarterTurn=((correctedRotation%180)+180)%180==90;
+        Size chosen=choices[0];
+        double best=Double.POSITIVE_INFINITY;
+        for(Size size:choices){
+            int w=quarterTurn?size.getHeight():size.getWidth();
+            int h=quarterTurn?size.getWidth():size.getHeight();
+            if(w<=0||h<=0)continue;
+            double ratio=(double)w/h;
+            double pixels=(double)size.getWidth()*size.getHeight();
+            double targetAspect=16d/9d;
+            double cost=Math.abs(Math.log(ratio/targetAspect))*3.0
+                +Math.abs(Math.log(pixels/(1280d*720d)))*.30
+                +(pixels>1920d*1080d?1.5:0.0);
+            if(cost<best){best=cost;chosen=size;}
         }
-        return winner;
+        return chosen;
     }
 
     private void startPreview(){
