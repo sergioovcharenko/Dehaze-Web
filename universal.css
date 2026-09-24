@@ -35,6 +35,8 @@ button:disabled{opacity:.42;cursor:not-allowed}
 .floattools{position:absolute;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));display:flex;gap:7px;z-index:2}
 .float-btn{display:flex;align-items:center;justify-content:center;gap:6px;min-width:38px;min-height:38px;padding:0 10px;color:#f3f4f5;background:#25292ddf;border:1px solid #626970aa;border-radius:9px;font-weight:600;font-size:12px}
 .float-btn.primary{background:#47616adf}
+.resume-overlay{position:absolute;z-index:7;left:50%;bottom:calc(66px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#4b6973;border:2px solid #a2c4d0;border-radius:11px;padding:13px 24px;color:#fff;font-size:15px;font-weight:750;box-shadow:0 7px 24px #0009;white-space:nowrap}
+.resume-overlay:hover{background:#587b85}
 .zoom-indicator{position:absolute;left:50%;bottom:calc(13px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:2;font-size:12px;font-variant-numeric:tabular-nums;color:#fff;background:#1d2023c9;border-radius:7px;padding:7px 10px;pointer-events:none}
 .empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;background:#25282ce8;z-index:2;padding:18px}
 .empty-inner{width:min(440px,95%);display:grid;justify-items:center;gap:12px}
