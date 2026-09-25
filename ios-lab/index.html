@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#292c30">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Туман VIDEO MAX">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="Меті Туман VIDEO MAX — локальний антитуман для живої камери й відеофайлів. Працює на Android, iPhone, планшетах і комп'ютерах після офлайн-кешування.">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icon.svg">
+<link rel="stylesheet" href="./style.css?v=3">
+<title>Меті Туман VIDEO MAX · iOS</title>
+</head>
+<body>
+<div class="shell">
+ <header class="topbar">
+  <div class="brand">
+   <img class="brand-icon" src="./icon.svg" alt="" width="32" height="32">
+   <span class="brand-name">Меті Туман VIDEO MAX</span>
+  </div>
+  <div class="info" aria-live="polite">
+   <span id="sourceBadge" class="detail"><span class="dot"></span>ГОТОВИЙ</span>
+   <span><strong id="fps">—</strong> FPS</span>
+   <span class="detail">Обробка <strong id="procMs">—</strong> мс</span>
+   <span class="res" id="resolution">—</span>
+   <span class="detail" id="autoBadge">AUTO</span>
+  </div>
+  <button type="button" class="hbtn text-action" id="quickCamera">Камера</button>
+  <button type="button" class="hbtn text-action" id="quickFile">Відео</button>
+  <a class="hbtn text-action" href="./photo.html" style="display:inline-flex;align-items:center;text-decoration:none">Фото MAX</a>
+  <button type="button" class="hbtn" id="menuButton" aria-expanded="false" aria-controls="drawer" aria-label="Відкрити налаштування">☰</button>
+ </header>
+
+ <main class="workarea">
+  <div class="stage" id="stage" data-view="split" aria-label="Порівняння звичайної камери й антитуману">
+   <div class="comparison" id="comparison">
+    <div class="pane original" id="originalPane">
+     <video class="media" id="sourceVideo" playsinline webkit-playsinline muted autoplay preload="metadata" disablepictureinpicture aria-label="Відео до обробки"></video>
+     <span class="pane-label">ОРИГІНАЛ</span>
+    </div>
+    <div class="pane processed" id="processedPane">
+     <canvas class="media" id="processedCanvas" width="640" height="360" aria-label="Відео після обробки"></canvas>
+     <span class="pane-label">АНТИТУМАН</span>
+    </div>
+   </div>
+   <span class="zoom-indicator" id="zoomIndicator" hidden>1.0×</span>
+   <div class="floattools" id="floattools" hidden>
+    <button class="float-btn optional" id="cameraSwitch" type="button" title="Передня / задня камера" aria-label="Змінити камеру">⇄</button>
+    <button class="float-btn" id="playPause" type="button" aria-label="Пауза">Ⅱ</button>
+    <button class="float-btn" id="screenshot" type="button" title="Зберегти порівняння">Знімок</button>
+    <button class="float-btn primary" id="quickSettings" type="button" aria-label="Налаштування">⚙</button>
+   </div>
+   <div id="empty" class="empty">
+    <div class="empty-inner">
+     <img class="empty-icon" src="./icon.svg" width="62" height="62" alt="">
+     <div class="empty-title">Меті Туман VIDEO MAX</div>
+     <p>LIVE MAX: DCP + guided filter + CLAHE на відео. Камера та локальне відео з антитуманом. Один застосунок для iPhone, Android, планшета й комп'ютера.</p>
+     <div class="empty-actions">
+      <button class="primary" type="button" id="startCamera">Увімкнути камеру</button>
+      <button type="button" id="startFile">Відкрити відео</button>
+     </div>
+     <span class="empty-hint" id="offlineHint">Вперше відкрий онлайн, потім працює офлайн.</span>
+    </div>
+   </div>
+   <button class="resume-overlay" id="resumeOverlay" type="button" hidden>▶ Продовжити відео</button>
+   <div class="notice" role="status" id="notice" hidden></div>
+  </div>
+ </main>
+
+ <div class="backdrop" id="backdrop" hidden></div>
+ <aside id="drawer" class="drawer" aria-label="Налаштування" hidden>
+  <div class="drawer-head">
+   <b>Налаштування</b>
+   <button class="close" type="button" id="drawerClose" aria-label="Закрити">✕</button>
+  </div>
+  <section class="section">
+   <p class="section-label">ДЖЕРЕЛО</p>
+   <div class="twocol">
+    <button type="button" id="cameraMenu">Камера</button>
+    <button type="button" id="fileMenu">Відеофайл</button>
+   </div>
+   <div class="row" id="fileControls" hidden>
+    <button type="button" id="videoPlay">Пауза / Play</button>
+    <span class="muted" id="fileTime">00:00</span>
+   </div>
+  </section>
+  <section class="section">
+   <p class="section-label">ВІДОБРАЖЕННЯ</p>
+   <div class="twocol">
+    <button type="button" id="viewSplit" class="active">Два кадри</button>
+    <button type="button" id="viewWipe">50/50</button>
+    <button type="button" id="viewFull">На весь екран</button>
+    <button type="button" id="fitButton">FILL</button>
+   </div>
+   <div class="row" style="margin-top:10px">
+    <label class="checkbox"><input type="checkbox" id="filterEnabled" checked> Антитуман</label>
+    <button type="button" id="resetZoom" style="padding:8px 10px">Зум 1×</button>
+   </div>
+   <div class="row">
+    <button class="wide" type="button" id="rotateButton">↻ Поворот відео 90°</button>
+   </div>
+   <p class="muted">Поворот впливає тільки на зображення. Телефон може залишатися вертикальним, а планшет — горизонтальним.</p>
+  </section>
+  <section class="section">
+   <p class="section-label">ОБРОБКА</p>
+   <div class="row">
+    <strong style="font-size:13px" id="modeName">AUTO</strong>
+    <label class="checkbox"><input type="checkbox" id="manualCheckbox"> Ручний</label>
+   </div>
+   <div class="range-label">
+    <span>Сила антитуману</span>
+    <output id="strengthLabel" for="strengthSlider">55%</output>
+   </div>
+   <input type="range" id="strengthSlider" min="0" max="100" step="1" value="55" disabled>
+   <p class="muted">AUTO орієнтовно оцінює серпанок і плавно змінює силу. Для ручного регулювання постав галочку.</p>
+  </section>
+  <section class="section">
+   <p class="section-label">ДІЇ</p>
+   <button class="wide" type="button" id="drawerScreenshot">Зберегти знімок</button>
+   <button class="wide" type="button" id="drawerPause">Стоп-кадр / Продовжити</button>
+   <button class="wide" type="button" id="stopButton">Зупинити джерело</button>
+  </section>
+  <section class="section">
+   <p class="section-label">ВСТАНОВЛЕННЯ ТА ОФЛАЙН</p>
+   <div class="install-box">
+    <b id="offlineStatus">Перевірка офлайн-режиму…</b>
+    <p id="installInstructions">iPhone: Safari → Поділитися → На екран «Додому». Android: Chrome → Встановити додаток.</p>
+    <button type="button" id="installButton" class="wide" hidden>Встановити</button>
+   </div>
+   <div class="footer-links">
+    <a href="./photo.html">Фото MAX — редактор</a>
+    <span class="muted">Працює локально</span>
+   </div>
+  </section>
+ </aside>
+</div>
+<input type="file" id="videoFile" accept="video/mp4,video/quicktime,video/webm,video/*" hidden>
+<script src="./app.js?v=1" defer></script>
+</body>
+</html>

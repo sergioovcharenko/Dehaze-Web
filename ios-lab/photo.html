@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#272a2d">
+<title>Меті Туман VIDEO MAX — Фото</title>
+<style>
+:root{font-family:Roboto,"Segoe UI",Arial,sans-serif;color:#f1f2f3;background:#212428;color-scheme:dark}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#212428}
+header{position:sticky;top:0;z-index:3;background:#303338;border-bottom:1px solid #505459;padding:8px 13px;display:flex;align-items:center;gap:9px;min-height:53px}
+header strong{font-size:17px;white-space:nowrap}header small{font-size:11px;color:#c4c9cb;display:block;margin-top:2px}
+.spacer{flex:1}
+button{font:inherit;color:#f6f6f7;border:1px solid #62676c;background:#3c4045;padding:11px 15px;border-radius:9px;cursor:pointer;touch-action:manipulation}
+button.accent{background:#456a63;border-color:#67998b;font-weight:700}
+button:disabled{opacity:.4}
+main{max-width:1600px;margin:0 auto;padding:12px;display:grid;grid-template-columns:minmax(0,1fr) minmax(270px,315px);gap:12px}
+section{border:1px solid #4c5055;background:#2e3236;border-radius:12px;padding:11px;min-width:0}
+h2{font-size:16px;margin:0 0 9px}
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start}
+figure{margin:0;min-width:0;background:#191c1e;border-radius:9px;overflow:hidden;border:1px solid #52565b}
+figcaption{font-size:13px;font-weight:700;padding:9px 10px;background:#393d41}
+canvas{display:block;max-width:100%;width:100%;height:auto;max-height:calc(100dvh - 156px);object-fit:contain}
+.preview{min-height:220px;display:flex;align-items:center;justify-content:center;background:#1b1e21}
+#afterPanel{order:2}#beforePanel{order:1}
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 12px}
+.toolbar button{flex:1;min-width:114px}
+small,.help{font-size:12px;color:#bac1c7;line-height:1.45}
+.help{margin:8px 0}
+.controls{display:grid;gap:12px;align-content:start}
+.control{border-top:1px solid #55595e;padding-top:10px}
+label,.line{display:flex;align-items:center;gap:8px;justify-content:space-between;font-size:13px}
+.checkbox{display:inline-flex;align-items:center;gap:7px;cursor:pointer}
+input[type=checkbox]{accent-color:#89b9a2;width:21px;height:21px}
+input[type=range]{width:100%;accent-color:#8db6a4;margin:13px 0 0}
+select{width:100%;padding:10px;background:#393e43;color:#fff;border:1px solid #697078;border-radius:8px;font-size:13px}
+.modes{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.modes button{padding:11px 6px;font-weight:700;font-size:12px}
+.modes button.active{background:#527468;border-color:#89baa4}
+output{color:#bfe4d3;font-weight:700;font-variant-numeric:tabular-nums}
+#status{font-size:12px;line-height:1.5;color:#d5e3db;min-height:37px;word-break:break-word}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.actions #process{grid-column:1/-1}
+.info{background:#373c3f;border:1px solid #575f60;border-radius:9px;padding:10px;font-size:12px;color:#c5cecc;line-height:1.55}
+.busy{opacity:.6;pointer-events:none}
+#file{position:absolute;width:1px;height:1px;opacity:0}
+@media(max-width:850px){main{grid-template-columns:1fr}.compare{grid-template-columns:1fr}#afterPanel{order:1}#beforePanel{order:2}canvas{max-height:70vh}.preview{min-height:130px}}
+@media(max-width:540px){header strong{font-size:14px}header small{font-size:10px}main{padding:8px;gap:8px}.compare{gap:8px}section{padding:9px}.toolbar button{padding:11px 8px}}
+</style>
+</head>
+<body>
+<header>
+ <button type="button" id="back" style="padding:9px 10px" aria-label="Назад до камери">← LIVE</button>
+ <div><strong>Меті Туман VIDEO MAX</strong><small>Фотографії • локальна обробка без інтернету</small></div>
+ <div class="spacer"></div>
+ <button class="accent" id="headerOpen">Відкрити фото</button>
+</header>
+<main>
+ <section>
+  <div class="toolbar">
+   <button id="open" class="accent">Вибрати фото</button>
+   <button id="quickProcess" disabled>Обробити MAX</button>
+   <button id="saveTop" disabled>Зберегти PNG</button>
+  </div>
+  <div class="compare">
+   <figure id="afterPanel"><figcaption>ПІСЛЯ ОБРОБКИ • MAX</figcaption><div class="preview"><canvas id="after" width="640" height="360"></canvas></div></figure>
+   <figure id="beforePanel"><figcaption>ОРИГІНАЛ</figcaption><div class="preview"><canvas id="before" width="640" height="360"></canvas></div></figure>
+  </div>
+  <p class="help" id="info">Вибери фотографію з туманом, щоб порівняти оригінал і результат.</p>
+  <p class="info">Максимальна обробка не означає відновлення невидимих об’єктів. Сильний антитуман може підсилити шум і змінити кольори — налаштуй захист неба та силу вручну за потреби.</p>
+ </section>
+ <section class="controls" id="panel">
+  <div>
+   <h2>Режим обробки</h2>
+   <div class="modes">
+    <button type="button" id="maxMode" class="active">AUTO MAX</button>
+    <button type="button" id="balancedMode">AUTO</button>
+   </div>
+   <p class="help">MAX: Dark Channel Prior + guided filter + локальний контраст + деталі. AUTO: делікатніше.</p>
+   <label class="checkbox"><input type="checkbox" id="manual">Ручне регулювання</label>
+  </div>
+  <div class="control">
+   <label for="strength"><span>Сила антитуману</span><output id="strengthOut">85%</output></label>
+   <input id="strength" type="range" min="0" max="100" value="85" disabled>
+   <small id="estimate">AUTO оцінить фото після завантаження.</small>
+  </div>
+  <div class="control">
+   <label for="sky"><span>Захист неба</span><output id="skyOut">85%</output></label>
+   <input id="sky" type="range" min="0" max="100" value="85">
+  </div>
+  <div class="control">
+   <label for="detail"><span>Відновлення деталей</span><output id="detailOut">40%</output></label>
+   <input id="detail" type="range" min="0" max="100" value="40">
+  </div>
+  <div class="control">
+   <label for="noise"><span>Приглушення шуму</span><output id="noiseOut">25%</output></label>
+   <input id="noise" type="range" min="0" max="100" value="25">
+  </div>
+  <div class="control">
+   <label for="resolution"><span>Максимальний розмір</span></label>
+   <select id="resolution">
+    <option value="1600" selected>1600 px · швидко</option>
+    <option value="2048">2048 px · детально</option>
+    <option value="2560">2560 px · максимальна якість</option>
+   </select>
+  </div>
+  <div class="actions">
+   <button id="process" class="accent" disabled>ОБРОБИТИ ФОТО</button>
+   <button id="save" disabled>Зберегти PNG</button>
+   <button id="reset">Скинути</button>
+  </div>
+  <div id="status" role="status">Очікую на фотографію.</div>
+ </section>
+</main>
+<input type="file" id="file" accept="image/jpeg,image/png,image/webp,image/*">
+<script src="./dehaze-dcp.js"></script>
+<script src="./photo.js"></script>
+</body>
+</html>
