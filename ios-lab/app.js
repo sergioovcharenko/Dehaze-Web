@@ -296,33 +296,40 @@ function initWorker(){
       workerBusy=false;
       if(e.data.type==='error'){
         workerFailed=true;worker.terminate();worker=null;
-        showNotice('LIVE MAX: швидкий резервний антитуман.',5000);
+        lab.workerError(e.data.message);
+        showNotice('LAB: помилка DCP, працює швидкий фільтр.',5000);
         return;
       }
+      if(e.data.errors)for(const [key,value] of Object.entries(e.data.errors))
+        lab.workerError(key+': '+value);
+      if(e.data.times)for(const key of ['dcp','guided','clahe','temporal'])
+        if(lab.enabled(key))lab.event(key,'ПРАЦЮЄ','Карта готова',e.data.times[key]||0);
       pendingMap={map:new Uint8Array(e.data.map),lut:new Uint8Array(e.data.lut),air:e.data.air};
       if(!state.manual){
         state.autoStrength=.62*state.autoStrength+.38*(.75+.22*e.data.haze);
         syncUI();
       }
     };
-    worker.onerror=()=>{
+    worker.onerror=e=>{
       workerBusy=false;workerFailed=true;worker?.terminate();worker=null;
-      showNotice('LIVE MAX недоступний: працює швидкий фільтр.',5500);
+      lab.workerError(e.message||'Worker не працює');
+      showNotice('LAB: резервний швидкий фільтр.',5500);
     };
   }catch(e){workerFailed=true;}
 }
 function scheduleHybrid(now){
   if(!worker||workerBusy||!hybridCtx||!state.source||video.paused||
-     !state.enabled||now-lastHybrid<850)return;
+     !state.enabled||lab.gpuSafe||gpuSimple||now-lastHybrid<850)return;
   lastHybrid=now;
   try{
     hybridCtx.drawImage(video,0,0,128,72);
     const bytes=hybridCtx.getImageData(0,0,128,72).data.slice().buffer;
     workerBusy=true;
-    worker.postMessage({pixels:bytes,epoch:state.hybridEpoch},[bytes]);
+    worker.postMessage({pixels:bytes,epoch:state.hybridEpoch,flags:lab.flags},[bytes]);
   }catch(e){
     workerBusy=false;workerFailed=true;worker?.terminate();worker=null;
-    showNotice('LIVE MAX недоступний для цього потоку. Швидкий режим активний.',5500);
+    lab.workerError(String(e));
+    showNotice('LAB: не вдалося проаналізувати відеокадр.',5500);
   }
 }
 function uploadMaps(){
