@@ -48,17 +48,17 @@ jobs:
           test -s "$apk"
           "${ANDROID_HOME}/build-tools/35.0.0/aapt" dump badging "$apk" | grep '^package:' | tee package.txt
           grep "name='ua.meti.tuman.videomax'" package.txt
-          cp "$apk" Meti-Tuman-VIDEO-MAX.apk
-          sha256sum Meti-Tuman-VIDEO-MAX.apk > Meti-Tuman-VIDEO-MAX.apk.sha256
-          ls -lh Meti-Tuman-VIDEO-MAX.apk
+          cp "$apk" Meti-Tuman-VIDEO-MAX-CAMERA-FIX.apk
+          sha256sum Meti-Tuman-VIDEO-MAX-CAMERA-FIX.apk > Meti-Tuman-VIDEO-MAX-CAMERA-FIX.apk.sha256
+          ls -lh Meti-Tuman-VIDEO-MAX-CAMERA-FIX.apk
       - name: Upload MAX APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Meti-Tuman-VIDEO-MAX-debug
+          name: Meti-Tuman-VIDEO-MAX-CAMERA-FIX
           path: |
-            Meti-Tuman-VIDEO-MAX.apk
-            Meti-Tuman-VIDEO-MAX.apk.sha256
+            Meti-Tuman-VIDEO-MAX-CAMERA-FIX.apk
+            Meti-Tuman-VIDEO-MAX-CAMERA-FIX.apk.sha256
           if-no-files-found: error
           retention-days: 90
       - name: Publish separate MAX release (never overwrite original)
@@ -68,11 +68,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag=meti-tuman-video-max-latest
+          tag=meti-tuman-video-max-camera-fix
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --title "Меті Туман MAX — окрема APK (debug)" --notes "Independent Android package ua.meti.tuman.videomax. Photo AUTO MAX + offline live dehaze. Installs alongside the original ua.meti.tuman. Debug builds are for testing." --prerelease
+            gh release create "$tag" --title "Меті Туман VIDEO MAX · Camera fix 1.0.3" --notes "Camera preview fix: separate original FAST GPU program; GPU SAFE rescue switch; always-visible camera status; distinct OES and 2D samplers. Installs separately from the two original applications. Uninstall only prior VIDEO MAX test APK if debug signatures differ." --prerelease
           fi
-          gh release upload "$tag" Meti-Tuman-VIDEO-MAX.apk Meti-Tuman-VIDEO-MAX.apk.sha256 --clobber
+          gh release upload "$tag" Meti-Tuman-VIDEO-MAX-CAMERA-FIX.apk Meti-Tuman-VIDEO-MAX-CAMERA-FIX.apk.sha256 --clobber
           gh release view "$tag" --json url,assets
       - name: Record MAX build status
         if: always()
@@ -95,7 +95,7 @@ jobs:
             --arg publish "$PUBLISH" \
             --arg commit "$GITHUB_SHA" \
             --arg url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-            --arg apk "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/meti-tuman-video-max-latest/Meti-Tuman-VIDEO-MAX.apk" \
+            --arg apk "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/meti-tuman-video-max-camera-fix/Meti-Tuman-VIDEO-MAX-CAMERA-FIX.apk" \
             --arg time "$(date -u +%FT%TZ)" \
             '{state:$state,compile:$compile,verify:$verify,publish:$publish,commit:$commit,workflow_url:$url,apk_url:(if $state=="success" then $apk else null end),updated_utc:$time}' > video-max-build-status.json
           old_sha=$(gh api "repos/$GITHUB_REPOSITORY/contents/video-max-build-status.json" --jq .sha 2>/dev/null || true)
