@@ -43,6 +43,8 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         "uniform sampler2D uTransmission;\n" +
         "uniform sampler2D uClahe;\n" +
         "uniform vec3 uAir;\n" +
+        "uniform float uRetinex;\n" +
+        "uniform float uFusion;\n" +
         "uniform vec2 uCrop;\n" +
         "uniform vec2 uPan;\n" +
         "vec2 rotateUV(vec2 uv){\n" +
@@ -81,8 +83,20 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         "  float mapped=mix(mix(a,b,factor.x),mix(c,d,factor.x),factor.y);\n" +
         "  float delta=clamp(mapped-lum,-.18,.18)*.39*blend*(1.0-protectedSky);\n" +
         "  dcp=clamp(dcp+vec3(delta),0.0,1.0);\n" +
-        "  dcp=clamp(dcp+clamp(color-local,vec3(-.09),vec3(.09))*(.35*blend*m.a),0.0,1.0);\n" +
-        "  gl_FragColor=vec4(dcp,1.0);return;\n" +
+        "  dcp=clamp(dcp+clamp(color-local,vec3(-.09),vec3(.09))*(.35*blend*m.a),0.0,1.0);\\n" +
+        "  if(uRetinex>.5){\\n" +
+        "   float darkness=clamp((.58-m.b)*1.7,0.0,1.0);\\n" +
+        "   float gamma=1.0-.28*darkness*(1.0-protectedSky);\\n" +
+        "   vec3 ret=pow(max(dcp,vec3(.001)),vec3(gamma));\\n" +
+        "   dcp=mix(dcp,ret,clamp(uStrength,0.0,1.0));\\n" +
+        "  }\\n" +
+        "  if(uFusion>.5){\\n" +
+        "   float ft=max(.55,1.0-uStrength*(.23+.14*luminance));\\n" +
+        "   vec3 fast=clamp((color-vec3(.84))/ft+vec3(.84),0.0,1.0);\\n" +
+        "   float wt=.30*m.a*(1.0-protectedSky)*uStrength;\\n" +
+        "   dcp=mix(dcp,fast,clamp(wt,0.0,.35));\\n" +
+        "  }\\n" +
+        "  gl_FragColor=vec4(dcp,1.0);return;\\n" +
         " }\n" +
         " float level=mix(uStrength,min(1.0,uStrength*1.16),uMax);\n" +
         " float t=max(mix(.60,.48,uMax),1.0-level*mix(.24+.13*luminance,.32+.17*luminance,uMax));\n" +
@@ -139,7 +153,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     private volatile int viewMode=0;
     private volatile float zoom=1f,panX=0f,panY=0f;
     private volatile int userRotation=0;
-    private int cropLoc,panLoc,maxLoc,hybridLoc,airLoc,mapSamplerLoc,lutSamplerLoc;
+    private int cropLoc,panLoc,maxLoc,hybridLoc,airLoc,mapSamplerLoc,lutSamplerLoc,retinexLoc,fusionLoc;
     private volatile float strength=.60f;
     private volatile boolean manualMode=false;
     private int analysisTexture=0,analysisFbo=0;
@@ -255,6 +269,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         }catch(RuntimeException error){
             android.util.Log.w("MetiVideoMax","Hybrid shader failed; independent FAST program active",error);
             hybridShaderAvailable=false;
+            LabRuntime.state(LabRuntime.GPU,"РЕЗЕРВНИЙ","Не підтримується гібридний шейдер: "+error.getMessage());
             activity.onRendererStatus("GPU: резервний режим • оригінал камери активний");
             return fastProgram;
         }
@@ -275,6 +290,8 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
             maxLoc=GLES20.glGetUniformLocation(next,"uMax");
             hybridLoc=GLES20.glGetUniformLocation(next,"uHybrid");
             airLoc=GLES20.glGetUniformLocation(next,"uAir");
+            retinexLoc=GLES20.glGetUniformLocation(next,"uRetinex");
+            fusionLoc=GLES20.glGetUniformLocation(next,"uFusion");
             mapSamplerLoc=GLES20.glGetUniformLocation(next,"uTransmission");
             lutSamplerLoc=GLES20.glGetUniformLocation(next,"uClahe");
             cropLoc=GLES20.glGetUniformLocation(next,"uCrop");
@@ -309,6 +326,8 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         maxLoc=GLES20.glGetUniformLocation(program,"uMax");
         hybridLoc=GLES20.glGetUniformLocation(program,"uHybrid");
         airLoc=GLES20.glGetUniformLocation(program,"uAir");
+        retinexLoc=GLES20.glGetUniformLocation(program,"uRetinex");
+        fusionLoc=GLES20.glGetUniformLocation(program,"uFusion");
         mapSamplerLoc=GLES20.glGetUniformLocation(program,"uTransmission");
         lutSamplerLoc=GLES20.glGetUniformLocation(program,"uClahe");
         cropLoc=GLES20.glGetUniformLocation(program,"uCrop");
@@ -336,6 +355,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         },new Handler(Looper.getMainLooper()));
         framePending.set(false);textureHasFrame=false;lastStatsNanos=0;
         lastAnalysisNs=0;initAnalysisTarget();initHybridTargets();
+        if(hybridShaderAvailable)LabRuntime.state(LabRuntime.GPU,"ГОТОВО","GLSL зібрано; очікування відеокадрів");
         activity.runOnUiThread(()->textureCallback.onReady(surfaceTexture));
     }
 
@@ -501,7 +521,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     }
 
     private void scheduleHybrid(long nowNs){
-        if(!hybridShaderAvailable||!hybridTargetReady||!maxMode||!textureHasFrame||frozen||hybridBusy.get())return;
+        if(!hybridShaderAvailable||!hybridTargetReady||!maxMode||forceFast||!textureHasFrame||frozen||hybridBusy.get())return;
         if(lastHybridNs>0&&nowNs-lastHybridNs<400_000_000L)return;
         lastHybridNs=nowNs;
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER,hybridTargetFbo);
@@ -530,10 +550,27 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         try{
             hybridWorker.execute(()->{
                 try{
-                    VideoDehazeProcessor.Result mapped=VideoDehazeProcessor.process(sample,previous);
-                    if(epoch==sourceEpoch.get())readyHybrid=mapped;
-                }catch(RuntimeException ignored){
-                    // Keep the last-good map and the ordinary fast GPU fallback.
+                    final int flags=LabRuntime.flags();
+                    VideoDehazeProcessor.Result mapped=
+                        VideoDehazeProcessor.process(sample,previous,flags);
+                    if(epoch==sourceEpoch.get()){
+                        readyHybrid=mapped;
+                        int[] stages={LabRuntime.DCP,LabRuntime.GUIDED,
+                            LabRuntime.CLAHE,LabRuntime.TEMPORAL};
+                        long[] times={mapped.dcpMs,mapped.guidedMs,
+                            mapped.claheMs,mapped.temporalMs};
+                        for(int i=0;i<stages.length;i++){
+                            int stage=stages[i];
+                            if(!LabRuntime.enabled(stage))continue;
+                            if((mapped.fallbackBits&(1<<(stage-2)))!=0)
+                                LabRuntime.autoDisable(stage,"Проміжний етап не вдався; резервний вихід");
+                            else LabRuntime.live(stage,times[i],"Обробка кадру • "+mapped.computationMs+" мс загалом");
+                        }
+                    }
+                }catch(RuntimeException error){
+                    LabRuntime.error(LabRuntime.DCP,error);
+                    LabRuntime.autoDisable(LabRuntime.DCP,error.toString());
+                    // A bad DCP frame must not interrupt the original video.
                 }finally{hybridBusy.set(false);}
             });
         }catch(java.util.concurrent.RejectedExecutionException ignored){hybridBusy.set(false);}
@@ -570,6 +607,8 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         GLES20.glUniform1f(strengthLoc,strength);
         GLES20.glUniform1f(maxLoc,maxMode?1f:0f);
         GLES20.glUniform1f(hybridLoc,(useHybridProgram&&hybridMapsUploaded)?1f:0f);
+        GLES20.glUniform1f(retinexLoc,LabRuntime.enabled(LabRuntime.RETINEX)?1f:0f);
+        GLES20.glUniform1f(fusionLoc,LabRuntime.enabled(LabRuntime.FUSION)?1f:0f);
         if(useHybridProgram&&hybridMapsUploaded&&currentHybrid!=null)
             GLES20.glUniform3f(airLoc,currentHybrid.ar,currentHybrid.ag,currentHybrid.ab);
         float z=Math.max(1f,zoom);
@@ -632,10 +671,23 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
             drawErrors++;
             if(drawErrors>=2){
                 forceFast=true;
-                android.util.Log.e("MetiVideoMax","Hybrid draw GL error="+drawError+"; switching to FAST");
+                LabRuntime.state(LabRuntime.GPU,"РЕЗЕРВНИЙ",
+                    "Помилка гібридного GPU "+drawError+"; перемкнуто на FAST");
+                android.util.Log.e("MetiLab","Hybrid GPU error "+drawError+"; FAST fallback");
                 activity.onRendererStatus("GPU: резервний режим після помилки "+drawError);
             }
-        }else if(drawError==GLES20.GL_NO_ERROR){drawErrors=0;}
+        }else if(drawError==GLES20.GL_NO_ERROR){
+            drawErrors=0;
+            if(!forceFast&&hybridShaderAvailable&&maxMode){
+                LabRuntime.live(LabRuntime.GPU,0,"Hybrid OpenGL: кадри обробляються");
+                if(hybridMapsUploaded&&enhanced){
+                    LabRuntime.live(LabRuntime.RETINEX,0,"GPU-прохід (реальна якість не оцінена)");
+                    LabRuntime.live(LabRuntime.FUSION,0,"GPU-прохід (реальна якість не оцінена)");
+                }
+            }else if(!forceFast){
+                LabRuntime.live(LabRuntime.GPU,0,"FAST OpenGL: оригінальний кадр доступний");
+            }
+        }
         CaptureCallback cb=capture;
         if(cb!=null){
             capture=null;
