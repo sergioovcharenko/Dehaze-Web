@@ -16,10 +16,14 @@ final class VideoDehazeProcessor {
     static final class Result {
         final byte[] map,lut;
         final float ar,ag,ab,haze,mean;
-        final long computationMs;
-        Result(byte[] map,byte[] lut,float ar,float ag,float ab,float haze,float mean,long ms){
+        final long computationMs,dcpMs,guidedMs,claheMs,temporalMs;
+        final int fallbackBits;
+        Result(byte[] map,byte[] lut,float ar,float ag,float ab,float haze,float mean,
+               long ms,long dcpMs,long guidedMs,long claheMs,long temporalMs,int fallbackBits){
             this.map=map;this.lut=lut;this.ar=ar;this.ag=ag;this.ab=ab;
             this.haze=haze;this.mean=mean;this.computationMs=ms;
+            this.dcpMs=dcpMs;this.guidedMs=guidedMs;this.claheMs=claheMs;
+            this.temporalMs=temporalMs;this.fallbackBits=fallbackBits;
         }
     }
     private static float clamp(float x,float low,float high){
@@ -100,8 +104,16 @@ final class VideoDehazeProcessor {
     }
 
     static Result process(byte[] input,Result previous){
-        long started=System.nanoTime();
-        if(input.length!=N*4)throw new IllegalArgumentException("Unexpected analysis frame size");
+        return process(input,previous,LabRuntime.flags());
+    }
+
+    /** Each switch controls a real stage; a failing stage uses a local fallback. */
+    static Result process(byte[] input,Result previous,int flags){
+        long started=System.nanoTime(),stamp=started;
+        long dcpMs=0,guidedMs=0,claheMs=0,temporalMs=0;
+        int fallbackBits=0;
+        if(input==null||input.length!=N*4)
+            throw new IllegalArgumentException("Unexpected analysis frame size");
         float[] red=new float[N],green=new float[N],blue=new float[N],gray=new float[N],mins=new float[N];
         int[] grayHist=new int[256];
         float sumLuma=0f,sumSaturation=0f,edges=0f;
@@ -118,6 +130,7 @@ final class VideoDehazeProcessor {
                 if(y>0){edges+=Math.abs(v-gray[i-W]);edgeCount++;}
             }
         }
+        // Estimate airlight from both small and large dark-channel scales.
         float[] dark=minBox(mins,4);
         int[] darkHist=new int[256];
         for(float v:dark)darkHist[byteValue(v)]++;
@@ -135,23 +148,44 @@ final class VideoDehazeProcessor {
         float[] norm=new float[N];
         for(int i=0;i<N;i++)
             norm[i]=Math.min(red[i]/ar,Math.min(green[i]/ag,blue[i]/ab));
-        float[] minNormalized=minBox(norm,4),raw=new float[N],sq=new float[N],grayRaw=new float[N];
+        float[] raw=new float[N],sq=new float[N],grayRaw=new float[N];
+        final boolean useDcp=(flags&(1<<(LabRuntime.DCP-2)))!=0;
+        final boolean useGuide=(flags&(1<<(LabRuntime.GUIDED-2)))!=0;
+        try{
+            if(useDcp){
+                float[] small=minBox(norm,4),large=minBox(norm,10);
+                for(int i=0;i<N;i++)
+                    raw[i]=clamp(1f-.84f*(.78f*small[i]+.22f*large[i]),.1f,1f);
+            }else Arrays.fill(raw,1f);
+        }catch(RuntimeException e){
+            Arrays.fill(raw,1f);
+            fallbackBits|=1<<(LabRuntime.DCP-2);
+        }
+        dcpMs=(System.nanoTime()-stamp)/1_000_000L;
+        stamp=System.nanoTime();
         for(int i=0;i<N;i++){
-            raw[i]=clamp(1f-.84f*minNormalized[i],.1f,1f);
             sq[i]=gray[i]*gray[i];grayRaw[i]=gray[i]*raw[i];
         }
-        float[] meanI=box(gray,7),meanP=box(raw,7),
-                meanII=box(sq,7),meanIP=box(grayRaw,7);
-        float[] a=new float[N],b=new float[N];
-        for(int i=0;i<N;i++){
-            float cov=meanIP[i]-meanI[i]*meanP[i];
-            float variance=Math.max(0f,meanII[i]-meanI[i]*meanI[i]);
-            a[i]=cov/(variance+.0018f);
-            b[i]=meanP[i]-a[i]*meanI[i];
-        }
-        float[] meanA=box(a,7),meanB=box(b,7);
         float[] localMean=box(gray,7),localSq=box(sq,7);
-        float hazeContrast=0f;
+        float[] meanA=null,meanB=null;
+        if(useGuide){
+            try{
+                float[] meanI=localMean,meanP=box(raw,7),
+                        meanII=localSq,meanIP=box(grayRaw,7);
+                float[] a=new float[N],b=new float[N];
+                for(int i=0;i<N;i++){
+                    float cov=meanIP[i]-meanI[i]*meanP[i];
+                    float variance=Math.max(0f,meanII[i]-meanI[i]*meanI[i]);
+                    a[i]=cov/(variance+.0018f);
+                    b[i]=meanP[i]-a[i]*meanI[i];
+                }
+                meanA=box(a,7);meanB=box(b,7);
+            }catch(RuntimeException e){
+                meanA=null;meanB=null;
+                fallbackBits|=1<<(LabRuntime.GUIDED-2);
+            }
+        }
+        guidedMs=(System.nanoTime()-stamp)/1_000_000L;
         int cdf=0,p10=0,p90=255;
         for(int k=0;k<256;k++){cdf+=grayHist[k];if(cdf>=N*.10){p10=k;break;}}
         cdf=0;for(int k=0;k<256;k++){cdf+=grayHist[k];if(cdf>=N*.90){p90=k;break;}}
@@ -163,7 +197,8 @@ final class VideoDehazeProcessor {
         byte[] map=new byte[N*4];
         for(int y=0;y<H;y++)for(int x=0;x<W;x++){
             int i=y*W+x,p=i*4;
-            float trans=clamp(meanA[i]*gray[i]+meanB[i],.24f,1f);
+            float trans=meanA==null?raw[i]:
+                clamp(meanA[i]*gray[i]+meanB[i],.24f,1f);
             float sigma=(float)Math.sqrt(Math.max(0f,localSq[i]-localMean[i]*localMean[i]));
             float detail=clamp((sigma-.009f)/.078f,0f,1f);
             // y=H-1 is the top row of the GL texture.
@@ -177,8 +212,19 @@ final class VideoDehazeProcessor {
             map[p+2]=(byte)byteValue(localMean[i]);
             map[p+3]=(byte)byteValue(detail);
         }
-        byte[] lut=buildClahe(gray);
-        if(previous!=null&&Math.abs(mean-previous.mean)<.15f){
+        stamp=System.nanoTime();
+        byte[] lut;
+        if((flags&(1<<(LabRuntime.CLAHE-2)))!=0){
+            try{lut=buildClahe(gray);}
+            catch(RuntimeException e){
+                lut=identityLut();
+                fallbackBits|=1<<(LabRuntime.CLAHE-2);
+            }
+        }else lut=identityLut();
+        claheMs=(System.nanoTime()-stamp)/1_000_000L;
+        stamp=System.nanoTime();
+        if((flags&(1<<(LabRuntime.TEMPORAL-2)))!=0
+            &&previous!=null&&Math.abs(mean-previous.mean)<.15f){
             float old=.55f,next=1f-old;
             for(int i=0;i<map.length;i++){
                 int blended=Math.round((previous.map[i]&255)*old+(map[i]&255)*next);
@@ -193,6 +239,20 @@ final class VideoDehazeProcessor {
             ab=previous.ab*old+ab*next;
             haze=previous.haze*old+haze*next;
         }
-        return new Result(map,lut,ar,ag,ab,haze,mean,(System.nanoTime()-started)/1_000_000L);
+        temporalMs=(System.nanoTime()-stamp)/1_000_000L;
+        return new Result(map,lut,ar,ag,ab,haze,mean,
+            (System.nanoTime()-started)/1_000_000L,
+            dcpMs,guidedMs,claheMs,temporalMs,fallbackBits);
+    }
+    static byte[] identityLut(){
+        byte[] lut=new byte[LUT_W*LUT_H*4];
+        for(int tile=0;tile<LUT_H;tile++){
+            for(int k=0;k<LUT_W;k++){
+                int p=(tile*LUT_W+k)*4;
+                lut[p]=lut[p+1]=lut[p+2]=(byte)k;
+                lut[p+3]=(byte)255;
+            }
+        }
+        return lut;
     }
 }
