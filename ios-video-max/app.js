@@ -251,6 +251,56 @@ function initGpu(){
    showNotice('WebGL недоступний. Увімкнено сумісний режим CPU; FPS може бути нижчим.',6500);
  }
 }
+function initWorker(){
+  if(worker||workerFailed||typeof Worker==='undefined')return;
+  try{
+    worker=new Worker('./video-worker.js');
+    worker.onmessage=e=>{
+      if(e.data.epoch!==state.hybridEpoch)return;
+      workerBusy=false;
+      if(e.data.type==='error'){
+        workerFailed=true;worker.terminate();worker=null;
+        showNotice('LIVE MAX: швидкий резервний антитуман.',5000);
+        return;
+      }
+      pendingMap={map:new Uint8Array(e.data.map),lut:new Uint8Array(e.data.lut),air:e.data.air};
+      if(!state.manual){
+        state.autoStrength=.62*state.autoStrength+.38*(.75+.22*e.data.haze);
+        syncUI();
+      }
+    };
+    worker.onerror=()=>{
+      workerBusy=false;workerFailed=true;worker?.terminate();worker=null;
+      showNotice('LIVE MAX недоступний: працює швидкий фільтр.',5500);
+    };
+  }catch(e){workerFailed=true;}
+}
+function scheduleHybrid(now){
+  if(!worker||workerBusy||!hybridCtx||!state.source||video.paused||
+     !state.enabled||now-lastHybrid<850)return;
+  lastHybrid=now;
+  try{
+    hybridCtx.drawImage(video,0,0,128,72);
+    const bytes=hybridCtx.getImageData(0,0,128,72).data.slice().buffer;
+    workerBusy=true;
+    worker.postMessage({pixels:bytes,epoch:state.hybridEpoch},[bytes]);
+  }catch(e){
+    workerBusy=false;workerFailed=true;worker?.terminate();worker=null;
+    showNotice('LIVE MAX недоступний для цього потоку. Швидкий режим активний.',5500);
+  }
+}
+function uploadMaps(){
+  if(!pendingMap||!gl)return;
+  const next=pendingMap;pendingMap=null;
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+  gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,gpuMap);
+  gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,128,72,gl.RGBA,gl.UNSIGNED_BYTE,next.map);
+  gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,gpuLut);
+  gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,256,48,gl.RGBA,gl.UNSIGNED_BYTE,next.lut);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+  gl.activeTexture(gl.TEXTURE0);
+  air=next.air;hybridReady=true;
+}
 function dimensions(){
  const {w,h}=sourceSize();
  const reduced=matchMedia('(max-width:720px)').matches||/iPhone|iPad|iPod/.test(navigator.userAgent);
@@ -308,10 +358,12 @@ function renderFrame(force=false){
    }
    const amount=state.enabled?(state.manual?state.strength:state.autoStrength):0;
    if(gl){
-     gl.useProgram(program);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,tex);
+     gl.useProgram(program);uploadMaps();gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,tex);
      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,video);
      gl.uniform2f(uniforms.pixel,1/w,1/h);
      gl.uniform1f(uniforms.intensity,amount);
+     gl.uniform1f(uniforms.hybrid,hybridReady&&amount>0?1:0);
+     gl.uniform3f(uniforms.air,...air);
      gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
    }else if(canvas2d){
      canvas2d.drawImage(video,0,0,w,h);
@@ -328,6 +380,7 @@ function renderFrame(force=false){
      }
    }
    if(!state.manual)analyze(now);
+   scheduleHybrid(now);
    state.frameCounter++;
    if(now-state.lastStats>=1000){
      const elapsed=Math.max(1,now-state.lastStats);
@@ -382,6 +435,9 @@ function startLoop(){
 }
 async function cleanup(){
  stopLoop();
+ state.hybridEpoch++;
+ pendingMap=null;hybridReady=false;workerBusy=false;lastHybrid=0;
+ if(worker)worker.postMessage({reset:true});
  try{video.pause();}catch(_){}
  if(state.stream){state.stream.getTracks().forEach(t=>t.stop());state.stream=null;}
  video.srcObject=null;
