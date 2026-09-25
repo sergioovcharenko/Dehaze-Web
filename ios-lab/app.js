@@ -526,6 +526,7 @@ async function openCamera(nextFace=state.facing){
  }
  await cleanup();
  state.facing=nextFace;
+ lab.event("camera","ОЧІКУЄ","Запит дозволу Safari");
  drawer(false);setStatus('ЗАПУСК…');
  try{
    const stream=await navigator.mediaDevices.getUserMedia({
@@ -533,6 +534,7 @@ async function openCamera(nextFace=state.facing){
      audio:false
    });
    state.stream=stream;
+   lab.event("camera","ГОТОВО","getUserMedia надав потік");
    video.srcObject=stream;
    video.muted=true;video.loop=false;
    video.playsInline=true;
@@ -541,6 +543,7 @@ async function openCamera(nextFace=state.facing){
    catch(e){showNotice('Натисни ▶ на екрані, щоб запустити камеру.',6000);}
    if(!video.paused)startLoop();
  }catch(e){
+   lab.event("camera","ПОМИЛКА",e.name+": "+e.message);
    empty.hidden=false;$('floattools').hidden=true;
    setStatus('НЕМАЄ ДОСТУПУ');
    const reason=e.name==='NotAllowedError'?'Надай браузеру дозвіл на камеру.'
@@ -554,6 +557,7 @@ async function openFile(file){
  if(!file.type.startsWith('video/')&&!/\.(mp4|mov|webm|m4v)$/i.test(file.name)){
    showNotice('Обери відеофайл MP4, MOV або WebM.',5000);return;
  }
+ lab.event("camera","ОЧІКУЄ","Відеофайл: "+file.name);
  state.objectUrl=URL.createObjectURL(file);
  video.src=state.objectUrl;video.muted=true;video.loop=true;
  showActive('file');
@@ -599,6 +603,7 @@ video.addEventListener('pause',()=>{
 video.addEventListener('loadedmetadata',()=>{
  if(!state.source)return;
  $('resolution').textContent=video.videoWidth+'×'+video.videoHeight;
+ lab.event("camera","ГОТОВО","Метадані отримано");
  updateMediaGeometry();
  renderFrame(true);
 });
