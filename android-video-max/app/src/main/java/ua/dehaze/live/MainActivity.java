@@ -649,6 +649,8 @@ public final class MainActivity extends Activity {
         });
     }
 
+    public void onRendererStatus(String info){setState(info);}
+
     public void onAutoUnavailable(){
         runOnUiThread(()->{
             if(strengthLabel!=null&&!manualMode)
