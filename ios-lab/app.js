@@ -1,6 +1,7 @@
 (()=>{
 'use strict';
 const $=id=>document.getElementById(id);
+const lab=window.MetiLab||{flags:63,gpuSafe:false,enabled:()=>true,event:()=>{},workerError:()=>{},log:()=>{},setGpuSafe:()=>{}};
 let processed=$('processedCanvas');
 const video=$('sourceVideo'),stage=$('stage'),originalPane=$('originalPane'),
       processedPane=$('processedPane'),notice=$('notice'),empty=$('empty');
@@ -17,7 +18,7 @@ const hybridCtx=hybridCanvas.getContext('2d',{willReadFrequently:true});
 const actx=analysis.getContext('2d',{willReadFrequently:true});
 let gl=null,program=null,tex=null,uniforms={},posLoc=-1,quad=null,canvas2d=null;
 let worker=null,workerBusy=false,pendingMap=null,hybridReady=false,workerFailed=false;
-let gpuMap=null,gpuLut=null,air=[.85,.85,.85],lastHybrid=0;
+let gpuMap=null,gpuLut=null,air=[.85,.85,.85],lastHybrid=0,gpuSimple=false,lastGlCheck=0;
 let loopRaf=0,noticeTimeout=0,fp=null;
 const clip=(v,a,b)=>Math.max(a,Math.min(b,v));
 const icon={};
@@ -160,7 +161,8 @@ function initGpu(){
    const vs=shader(gl.VERTEX_SHADER,`attribute vec2 aPosition;
        varying vec2 uv;
        void main(){uv=(aPosition+1.0)*0.5;gl_Position=vec4(aPosition,0.0,1.0);}`);
-   const fs=shader(gl.FRAGMENT_SHADER,`precision mediump float;
+   let fs;
+   try{fs=shader(gl.FRAGMENT_SHADER,`precision mediump float;
        varying vec2 uv;
        uniform sampler2D tex;
        uniform vec2 pixel;
@@ -169,6 +171,8 @@ function initGpu(){
        uniform sampler2D uMap;
        uniform sampler2D uLut;
        uniform vec3 airLight;
+       uniform float uRetinex;
+       uniform float uFusion;
        void main(){
          vec3 c=texture2D(tex,uv).rgb;
          if(intensity<0.001){gl_FragColor=vec4(c,1.0);return;}
@@ -200,6 +204,16 @@ function initGpu(){
            result=clamp(result+vec3(contrast),0.0,1.0);
            result=clamp(result+clamp(c-local,vec3(-.09),vec3(.09))*
                           (.35*amount*m.a),0.0,1.0);
+           if(uRetinex>.5){
+             float darkness=clamp((.58-m.b)*1.7,0.0,1.0);
+             float gamma=1.0-.28*darkness*(1.0-sky);
+             result=mix(result,pow(max(result,vec3(.001)),vec3(gamma)),clamp(intensity,0.0,1.0));
+           }
+           if(uFusion>.5){
+             float ft=max(.55,1.0-intensity*(.23+.14*y));
+             vec3 fast=clamp((c-vec3(.84))/ft+vec3(.84),0.0,1.0);
+             result=mix(result,fast,clamp(.30*m.a*(1.0-sky)*intensity,0.0,.35));
+           }
            gl_FragColor=vec4(result,1.0);return;
          }
          float t=max(.58,1.0-intensity*(.25+.18*y));
@@ -207,7 +221,25 @@ function initGpu(){
          vec3 corrected=mix(c,rec,.79*mask);
          corrected+=clamp(c-local,vec3(-.10),vec3(.10))*(.48*intensity*mask);
          gl_FragColor=vec4(clamp(corrected,0.0,1.0),1.0);
+       }`);}
+   catch(e){
+     gpuSimple=true;lab.event('gpu','РЕЗЕРВНИЙ','Гібридний шейдер: '+e.message);
+     fs=shader(gl.FRAGMENT_SHADER,`precision mediump float;
+       varying vec2 uv;
+       uniform sampler2D tex;
+       uniform vec2 pixel;
+       uniform float intensity;
+       void main(){
+         vec3 c=texture2D(tex,uv).rgb;
+         if(intensity<.001){gl_FragColor=vec4(c,1.0);return;}
+         vec3 local=(texture2D(tex,uv+vec2(0.,pixel.y)).rgb+
+           texture2D(tex,uv-vec2(0.,pixel.y)).rgb+
+           texture2D(tex,uv+vec2(pixel.x,0.)).rgb+
+           texture2D(tex,uv-vec2(pixel.x,0.)).rgb)*.25;
+         gl_FragColor=vec4(clamp(c+clamp(c-local,vec3(-.08),vec3(.08))*
+           intensity*.35,0.,1.),1.);
        }`);
+   }
    program=gl.createProgram();gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);
    if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(program)||'WebGL link');
    gl.useProgram(program);
@@ -226,6 +258,8 @@ function initGpu(){
    gl.uniform1i(gl.getUniformLocation(program,'tex'),0);
    uniforms.hybrid=gl.getUniformLocation(program,'hybridEnabled');
    uniforms.air=gl.getUniformLocation(program,'airLight');
+   uniforms.retinex=gl.getUniformLocation(program,'uRetinex');
+   uniforms.fusion=gl.getUniformLocation(program,'uFusion');
    gl.uniform1i(gl.getUniformLocation(program,'uMap'),1);
    gl.uniform1i(gl.getUniformLocation(program,'uLut'),2);
    function newMap(unit,w,h,filter){
@@ -240,10 +274,12 @@ function initGpu(){
    gpuMap=newMap(gl.TEXTURE1,128,72,gl.LINEAR);
    gpuLut=newMap(gl.TEXTURE2,256,48,gl.NEAREST);
    gl.activeTexture(gl.TEXTURE0);
-   initWorker();
+   if(!gpuSimple)initWorker();
+   lab.event('gpu',gpuSimple?'РЕЗЕРВНИЙ':'ГОТОВО',gpuSimple?'FAST GPU':'WebGL шейдер зібрано');
  }catch(e){
    console.warn('WebGL fallback:',e);
    gl=null;state.usingCpu=true;
+   lab.event('gpu','РЕЗЕРВНИЙ','CPU замість GPU: '+e.message);
    const other=processed.cloneNode(false);
    processed.replaceWith(other);processed=other;
    canvas2d=processed.getContext('2d',{willReadFrequently:true});
@@ -395,6 +431,7 @@ function renderFrame(force=false){
    console.warn('Video GPU failed:',e);
    if(gl){
      gl=null;state.usingCpu=true;
+   lab.event('gpu','РЕЗЕРВНИЙ','CPU замість GPU: '+e.message);
      const other=processed.cloneNode(false);processed.replaceWith(other);processed=other;
      canvas2d=processed.getContext('2d',{willReadFrequently:true});
      updateMediaGeometry();showNotice('Сумісний режим CPU: '+e.message,5000);
