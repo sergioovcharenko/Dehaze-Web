@@ -405,9 +405,27 @@ function renderFrame(force=false){
      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,video);
      gl.uniform2f(uniforms.pixel,1/w,1/h);
      gl.uniform1f(uniforms.intensity,amount);
-     gl.uniform1f(uniforms.hybrid,hybridReady&&amount>0?1:0);
+     const hybrid=hybridReady&&amount>0&&!lab.gpuSafe&&!gpuSimple;
+     gl.uniform1f(uniforms.hybrid,hybrid?1:0);
      gl.uniform3f(uniforms.air,...air);
+     gl.uniform1f(uniforms.retinex,hybrid&&lab.enabled('retinex')?1:0);
+     gl.uniform1f(uniforms.fusion,hybrid&&lab.enabled('fusion')?1:0);
      gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+     if(now-lastGlCheck>850){
+       lastGlCheck=now;
+       const err=gl.getError();
+       if(err!==gl.NO_ERROR){
+         lab.event('gpu','РЕЗЕРВНИЙ','WebGL помилка '+err);
+         lab.setGpuSafe(true);
+       }else{
+         lab.event('gpu',lab.gpuSafe||gpuSimple?'РЕЗЕРВНИЙ':'ПРАЦЮЄ',
+           lab.gpuSafe?'FAST (GPU SAFE)':gpuSimple?'FAST GPU':'WebGL у роботі');
+         if(hybrid){
+           if(lab.enabled('retinex'))lab.event('retinex','ПРАЦЮЄ','GPU pass');
+           if(lab.enabled('fusion'))lab.event('fusion','ПРАЦЮЄ','GPU pass');
+         }
+       }
+     }
    }else if(canvas2d){
      canvas2d.drawImage(video,0,0,w,h);
      if(amount>0){
@@ -431,11 +449,13 @@ function renderFrame(force=false){
      $('fps').textContent=String(fps);
      $('procMs').textContent=(performance.now()-start).toFixed(1);
      $('resolution').textContent=video.videoWidth+'×'+video.videoHeight;
+     lab.event('camera','ПРАЦЮЄ',video.videoWidth+'×'+video.videoHeight+' • '+fps+' FPS');
      state.frameCounter=0;state.lastStats=now;
      $('fileTime').textContent=formatTime(video.currentTime)+' / '+formatTime(video.duration);
    }
  }catch(e){
    console.warn('Video GPU failed:',e);
+   lab.event('gpu','ПОМИЛКА',String(e));
    if(gl){
      gl=null;state.usingCpu=true;
    lab.event('gpu','РЕЗЕРВНИЙ','CPU замість GPU: '+e.message);
