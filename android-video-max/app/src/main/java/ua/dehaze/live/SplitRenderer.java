@@ -91,6 +91,42 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         " result+=clamp(color-local,-.10,.10)*(mix(.34,.46,uMax)*level*protect);\n" +
         " gl_FragColor=vec4(clamp(result,0.0,1.0),1.0);\n" +
         "}";
+    private static final String FAST_FRAGMENT =
+        "#extension GL_OES_EGL_image_external : require\n" +
+        "precision mediump float;\n" +
+        "varying vec2 vUV;\n" +
+        "uniform samplerExternalOES uCamera;\n" +
+        "uniform mat4 uMatrix;\n" +
+        "uniform float uRotation;\n" +
+        "uniform vec2 uPixel;\n" +
+        "uniform float uEnhanced;\n" +
+        "uniform float uStrength;\n" +
+        "uniform float uMax;\n" +
+        "uniform vec2 uCrop;\n" +
+        "uniform vec2 uPan;\n" +
+        "vec2 rotateUV(vec2 uv){\n" +
+        "  if(uRotation<45.0) return uv;\n" +
+        "  if(uRotation<135.0) return vec2(uv.y,1.0-uv.x);\n" +
+        "  if(uRotation<225.0) return vec2(1.0-uv.x,1.0-uv.y);\n" +
+        "  return vec2(1.0-uv.y,uv.x);\n" +
+        "}\n" +
+        "vec3 grab(vec2 uv){vec2 p=clamp((uv-.5)*uCrop+.5+uPan,vec2(.001),vec2(.999));return texture2D(uCamera,(uMatrix*vec4(rotateUV(p),0.0,1.0)).xy).rgb;}\n" +
+        "void main(){\n" +
+        " vec3 color=grab(vUV);\n" +
+        " if(uEnhanced<0.5||uStrength<0.001){gl_FragColor=vec4(color,1.0);return;}\n" +
+        " vec3 local=(grab(vUV+vec2(uPixel.x*2.0,0.0))+grab(vUV-vec2(uPixel.x*2.0,0.0))+\n" +
+        "             grab(vUV+vec2(0.0,uPixel.y*2.0))+grab(vUV-vec2(0.0,uPixel.y*2.0)))*0.25;\n" +
+        " float luminance=dot(color,vec3(.299,.587,.114));\n" +
+        " float edge=length(color-local);\n" +
+        " float sky=smoothstep(.62,.84,luminance)*(1.0-smoothstep(.01,.065,edge))*smoothstep(.18,.85,vUV.y);\n" +
+        " float protect=1.0-.95*sky;\n" +
+        " float level=mix(uStrength,min(1.0,uStrength*1.16),uMax);\n" +
+        " float t=max(mix(.60,.48,uMax),1.0-level*mix(.24+.13*luminance,.32+.17*luminance,uMax));\n" +
+        " vec3 corrected=clamp((color-vec3(.84))/t+vec3(.84),0.0,1.0);\n" +
+        " vec3 result=mix(color,corrected,level*mix(.76,.90,uMax)*protect);\n" +
+        " result+=clamp(color-local,-.10,.10)*(mix(.34,.46,uMax)*level*protect);\n" +
+        " gl_FragColor=vec4(clamp(result,0.0,1.0),1.0);\n" +
+        "}";
     private final MainActivity activity;
     private final GLSurfaceView view;
     private final MainActivity.TextureCallback textureCallback;
@@ -122,6 +158,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     private volatile VideoDehazeProcessor.Result readyHybrid;
     private VideoDehazeProcessor.Result currentHybrid;
     private boolean hybridMapsUploaded=false;
+    private boolean hybridShaderAvailable=true;
     private boolean analysisReady=false;
     private volatile int cameraWidth=1280,cameraHeight=720,rotation=0;
     private volatile boolean realtimeTimestamps=false;
@@ -185,16 +222,36 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         if(ok[0]==0)throw new RuntimeException("Shader: "+GLES20.glGetShaderInfoLog(shader));
         return shader;
     }
+    private int buildProgram(String source){
+        int vert=compile(GLES20.GL_VERTEX_SHADER,VERTEX),frag=0,p=0;
+        try{
+            frag=compile(GLES20.GL_FRAGMENT_SHADER,source);
+            p=GLES20.glCreateProgram();
+            GLES20.glAttachShader(p,vert);GLES20.glAttachShader(p,frag);
+            GLES20.glLinkProgram(p);
+            int[] ok=new int[1];
+            GLES20.glGetProgramiv(p,GLES20.GL_LINK_STATUS,ok,0);
+            if(ok[0]==0)throw new RuntimeException("Link: "+GLES20.glGetProgramInfoLog(p));
+            return p;
+        }catch(RuntimeException ex){
+            if(p!=0)GLES20.glDeleteProgram(p);
+            throw ex;
+        }finally{
+            GLES20.glDeleteShader(vert);
+            if(frag!=0)GLES20.glDeleteShader(frag);
+        }
+    }
+
     private int createProgram(){
-        int vert=compile(GLES20.GL_VERTEX_SHADER,VERTEX);
-        int frag=compile(GLES20.GL_FRAGMENT_SHADER,FRAGMENT);
-        int p=GLES20.glCreateProgram();
-        GLES20.glAttachShader(p,vert);GLES20.glAttachShader(p,frag);GLES20.glLinkProgram(p);
-        int[] ok=new int[1];
-        GLES20.glGetProgramiv(p,GLES20.GL_LINK_STATUS,ok,0);
-        if(ok[0]==0)throw new RuntimeException("Link: "+GLES20.glGetProgramInfoLog(p));
-        GLES20.glDeleteShader(vert);GLES20.glDeleteShader(frag);
-        return p;
+        try{
+            hybridShaderAvailable=true;
+            return buildProgram(FRAGMENT);
+        }catch(RuntimeException error){
+            android.util.Log.w("MetiVideoMax","Hybrid shader failed: original FAST shader fallback",error);
+            hybridShaderAvailable=false;
+            activity.onRendererStatus("GPU: швидкий резервний режим • MAX недоступний");
+            return buildProgram(FAST_FRAGMENT);
+        }
     }
 
     @Override public void onSurfaceCreated(GL10 unused,EGLConfig config) {
@@ -374,7 +431,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
 
     private void bindHybridMaps(){
         VideoDehazeProcessor.Result next=readyHybrid;
-        if(next!=null&&next!=currentHybrid){
+        if(hybridShaderAvailable&&next!=null&&next!=currentHybrid){
             currentHybrid=next;
             readyHybrid=null;
             GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
@@ -389,7 +446,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
                 directBytes(next.lut));
             hybridMapsUploaded=true;
         }
-        GLES20.glUniform1f(hybridLoc,(maxMode&&hybridMapsUploaded)?1f:0f);
+        GLES20.glUniform1f(hybridLoc,(maxMode&&hybridShaderAvailable&&hybridMapsUploaded)?1f:0f);
         // Always bind valid textures at units 1/2, even before the first map.
         GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,transmissionTexture);
@@ -401,7 +458,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     }
 
     private void scheduleHybrid(long nowNs){
-        if(!hybridTargetReady||!maxMode||!textureHasFrame||frozen||hybridBusy.get())return;
+        if(!hybridShaderAvailable||!hybridTargetReady||!maxMode||!textureHasFrame||frozen||hybridBusy.get())return;
         if(lastHybridNs>0&&nowNs-lastHybridNs<400_000_000L)return;
         lastHybridNs=nowNs;
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER,hybridTargetFbo);
@@ -465,7 +522,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         GLES20.glUniform1f(enhancedLoc,useFilter?1f:0f);
         GLES20.glUniform1f(strengthLoc,strength);
         GLES20.glUniform1f(maxLoc,maxMode?1f:0f);
-        GLES20.glUniform1f(hybridLoc,(maxMode&&hybridMapsUploaded)?1f:0f);
+        GLES20.glUniform1f(hybridLoc,(maxMode&&hybridShaderAvailable&&hybridMapsUploaded)?1f:0f);
         float z=Math.max(1f,zoom);
         GLES20.glUniform2f(cropLoc,cropX/z,cropY/z);
         GLES20.glUniform2f(panLoc,panX,panY);
@@ -552,7 +609,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
             }
             final String stats=String.format(Locale.US,
                 "%.0f FPS  •  кадр %s  •  подача %.1f мс  •  %d×%d",
-                fps,age,submitMs,cameraWidth,cameraHeight);
+                fps,age,submitMs,cameraWidth,cameraHeight)+(hybridShaderAvailable?"":" • GPU FAST");
             statsCallback.onStats(stats);
             framesSinceStats=0;lastStatsNanos=submitted;
         }
