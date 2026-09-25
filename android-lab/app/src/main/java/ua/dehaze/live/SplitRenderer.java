@@ -83,20 +83,20 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         "  float mapped=mix(mix(a,b,factor.x),mix(c,d,factor.x),factor.y);\n" +
         "  float delta=clamp(mapped-lum,-.18,.18)*.39*blend*(1.0-protectedSky);\n" +
         "  dcp=clamp(dcp+vec3(delta),0.0,1.0);\n" +
-        "  dcp=clamp(dcp+clamp(color-local,vec3(-.09),vec3(.09))*(.35*blend*m.a),0.0,1.0);\\n" +
-        "  if(uRetinex>.5){\\n" +
-        "   float darkness=clamp((.58-m.b)*1.7,0.0,1.0);\\n" +
-        "   float gamma=1.0-.28*darkness*(1.0-protectedSky);\\n" +
-        "   vec3 ret=pow(max(dcp,vec3(.001)),vec3(gamma));\\n" +
-        "   dcp=mix(dcp,ret,clamp(uStrength,0.0,1.0));\\n" +
-        "  }\\n" +
-        "  if(uFusion>.5){\\n" +
-        "   float ft=max(.55,1.0-uStrength*(.23+.14*luminance));\\n" +
-        "   vec3 fast=clamp((color-vec3(.84))/ft+vec3(.84),0.0,1.0);\\n" +
-        "   float wt=.30*m.a*(1.0-protectedSky)*uStrength;\\n" +
-        "   dcp=mix(dcp,fast,clamp(wt,0.0,.35));\\n" +
-        "  }\\n" +
-        "  gl_FragColor=vec4(dcp,1.0);return;\\n" +
+        "  dcp=clamp(dcp+clamp(color-local,vec3(-.09),vec3(.09))*(.35*blend*m.a),0.0,1.0);\n" +
+        "  if(uRetinex>.5){\n" +
+        "   float darkness=clamp((.58-m.b)*1.7,0.0,1.0);\n" +
+        "   float gamma=1.0-.28*darkness*(1.0-protectedSky);\n" +
+        "   vec3 ret=pow(max(dcp,vec3(.001)),vec3(gamma));\n" +
+        "   dcp=mix(dcp,ret,clamp(uStrength,0.0,1.0));\n" +
+        "  }\n" +
+        "  if(uFusion>.5){\n" +
+        "   float ft=max(.55,1.0-uStrength*(.23+.14*luminance));\n" +
+        "   vec3 fast=clamp((color-vec3(.84))/ft+vec3(.84),0.0,1.0);\n" +
+        "   float wt=.30*m.a*(1.0-protectedSky)*uStrength;\n" +
+        "   dcp=mix(dcp,fast,clamp(wt,0.0,.35));\n" +
+        "  }\n" +
+        "  gl_FragColor=vec4(dcp,1.0);return;\n" +
         " }\n" +
         " float level=mix(uStrength,min(1.0,uStrength*1.16),uMax);\n" +
         " float t=max(mix(.60,.48,uMax),1.0-level*mix(.24+.13*luminance,.32+.17*luminance,uMax));\n" +
