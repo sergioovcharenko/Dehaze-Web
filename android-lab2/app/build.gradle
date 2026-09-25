@@ -1,0 +1,22 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'ua.dehaze.live'
+    compileSdk 35
+    defaultConfig {
+        // Distinct from the installed original ua.meti.tuman.
+        applicationId 'ua.meti.tuman.lab2'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '2.0.0-three-tests'
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    testOptions { unitTests.returnDefaultValues = true }
+    // Includes bundled photo algorithms; no network dependency.
+    androidResources { noCompress 'html', 'js' }
+}
+
+dependencies { testImplementation 'junit:junit:4.13.2' }
