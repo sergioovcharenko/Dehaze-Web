@@ -53,10 +53,10 @@ public final class DiagnosticsActivity extends Activity {
         page.setPadding(dp(16),dp(12),dp(16),dp(22));
         page.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(page);
-        TextView heading=label("МЕТІ ТУМАН LAB · ДІАГНОСТИКА",21,ACCENT);
+        TextView heading=label("МЕТІ ТУМАН LAB 2 · ТРИ ТЕСТИ",21,ACCENT);
         heading.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         page.addView(heading);
-        TextView note=label("Окрема четверта APK • без інтернету. Самотест перевіряє алгоритми на створених програмою кадрах, а камера й GPU перевіряються тільки під час реального запуску.",12,MUTED);
+        TextView note=label("Окрема APK: 1) синтетичні кадри, 2) реальна камера, 3) твоє відео. Після тесту камери/відео звіт відкриється тут. Інтернет не потрібен.",12,MUTED);
         note.setPadding(0,dp(5),0,dp(14));
         page.addView(note);
         LinearLayout actions=new LinearLayout(this);
@@ -64,7 +64,7 @@ public final class DiagnosticsActivity extends Activity {
         actions.setGravity(Gravity.CENTER_VERTICAL);
         TextView back=action("◀  НАЗАД",this::finish);
         actions.addView(back,new LinearLayout.LayoutParams(0,dp(47),1));
-        TextView test=action("▶  ПОВНИЙ ТЕСТ",()->{
+        TextView test=action("▶  СИНТЕТИЧНИЙ",()->{
             LabRuntime.runSelfTest();
             refresh();
             Toast.makeText(this,"Самотест виконується у фоновому потоці",Toast.LENGTH_SHORT).show();
@@ -75,6 +75,20 @@ public final class DiagnosticsActivity extends Activity {
         LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(0,dp(47),1);
         sp.leftMargin=dp(9);actions.addView(save,sp);
         page.addView(actions);
+
+        LinearLayout deviceActions=new LinearLayout(this);
+        deviceActions.setOrientation(LinearLayout.HORIZONTAL);
+        deviceActions.setPadding(0,dp(9),0,dp(5));
+        TextView cameraTest=action("◉  ТЕСТ КАМЕРИ · 12 С",()->launchDeviceTest(DeviceTest.CAMERA));
+        deviceActions.addView(cameraTest,new LinearLayout.LayoutParams(0,dp(52),1));
+        TextView videoTest=action("▣  ТЕСТ ВІДЕО · 12 С",()->launchDeviceTest(DeviceTest.VIDEO));
+        LinearLayout.LayoutParams videoLp=new LinearLayout.LayoutParams(0,dp(52),1);
+        videoLp.leftMargin=dp(10);deviceActions.addView(videoTest,videoLp);
+        page.addView(deviceActions);
+        TextView instructions=label(
+            "РЕАЛЬНІ ТЕСТИ: камера й обране відео показуються у двох вікнах. За 12 секунд перевіряються фактичні кадри, FPS і пікселі оригіналу та обробки. Для відеотесту вибери файл із туманом. Після завершення повернешся сюди автоматично.",12,MUTED);
+        instructions.setPadding(0,dp(5),0,dp(11));
+        page.addView(instructions);
         summary=label("Отримання стану…",12,ACCENT);
         summary.setPadding(0,dp(13),0,dp(4));
         page.addView(summary);
@@ -111,6 +125,16 @@ public final class DiagnosticsActivity extends Activity {
         setContentView(scroll);
         refresh();
     }
+    private void launchDeviceTest(int mode){
+        if(LabRuntime.testing()){
+            Toast.makeText(this,"Дочекайся завершення синтетичного тесту",Toast.LENGTH_LONG).show();
+            return;
+        }
+        Intent intent=new Intent(this,MainActivity.class);
+        intent.putExtra("lab_test_mode",mode);
+        startActivity(intent);
+    }
+
     private void refresh(){
         if(status!=null)status.setText(LabRuntime.snapshot());
         if(summary!=null)summary.setText(LabRuntime.testing()?
@@ -129,7 +153,7 @@ public final class DiagnosticsActivity extends Activity {
         Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("text/plain");
-        intent.putExtra(Intent.EXTRA_TITLE,"Meti-Tuman-LAB-diagnostics.txt");
+        intent.putExtra(Intent.EXTRA_TITLE,"Meti-Tuman-LAB2-three-tests-report.txt");
         startActivityForResult(intent,SAVE_REPORT);
     }
     @Override protected void onActivityResult(int request,int result,Intent data){
