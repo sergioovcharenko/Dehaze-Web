@@ -180,6 +180,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     private int textureId,program,fastProgram,activeProgram,positionLoc,matrixLoc,pixelLoc,rotationLoc,enhancedLoc,strengthLoc;
     private volatile boolean forceFast=false;
     private int drawErrors=0;
+    private long lastDeviceSampleNs=0;
     private int screenWidth,screenHeight;
     private long lastStatsNanos=0;
     private int framesSinceStats=0;
@@ -317,6 +318,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         program=createProgram();
         activeProgram=0;
         drawErrors=0;
+        lastDeviceSampleNs=0;
         positionLoc=GLES20.glGetAttribLocation(program,"aPosition");
         matrixLoc=GLES20.glGetUniformLocation(program,"uMatrix");
         pixelLoc=GLES20.glGetUniformLocation(program,"uPixel");
@@ -640,13 +642,55 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         }
     }
 
+    /**
+     * Read real pixels from the original (left) and filtered (right) previews.
+     * GPU framebuffer readback runs at most once per 0.8 s, never per frame.
+     * The two halves use the same FILL geometry during an explicit device test.
+     */
+    private double[] readTestPatch(int centerX,int centerY){
+        final int size=16;
+        ByteBuffer pixels=ByteBuffer.allocateDirect(size*size*4);
+        pixels.order(ByteOrder.nativeOrder());
+        GLES20.glReadPixels(centerX-size/2,centerY-size/2,size,size,
+            GLES20.GL_RGBA,GLES20.GL_UNSIGNED_BYTE,pixels);
+        int err=GLES20.glGetError();
+        if(err!=GLES20.GL_NO_ERROR){
+            DeviceTest.readbackError(err);
+            return null;
+        }
+        pixels.rewind();
+        double sum=0,squared=0;
+        for(int i=0;i<size*size;i++){
+            int red=pixels.get()&255,green=pixels.get()&255,blue=pixels.get()&255;
+            pixels.get();
+            double lum=.299*red+.587*green+.114*blue;
+            sum+=lum;squared+=lum*lum;
+        }
+        double mean=sum/(size*size);
+        return new double[]{mean,Math.max(0,squared/(size*size)-mean*mean)};
+    }
+    private void sampleDevicePixels(long now){
+        if(!DeviceTest.running()||screenWidth<80||screenHeight<80||
+           viewMode!=1||now-lastDeviceSampleNs<800_000_000L)return;
+        lastDeviceSampleNs=now;
+        double[] left=readTestPatch(screenWidth/4,screenHeight/2);
+        double[] right=readTestPatch(screenWidth*3/4,screenHeight/2);
+        if(left!=null&&right!=null)
+            DeviceTest.sample(left[0],left[1],right[0],right[1]);
+    }
+
     @Override public void onDrawFrame(GL10 unused) {
         if(surfaceTexture==null||screenWidth<2||screenHeight<2)return;
         // Always consume queued camera frames even while the freeze overlay is visible.
 // Otherwise SurfaceTexture's buffer queue fills and Camera2 can stall permanently
 // after the user taps "Stop-frame"; drawing is hidden by the native overlay.
         if(framePending.getAndSet(false)){
-            try{surfaceTexture.updateTexImage();surfaceTexture.getTransformMatrix(stMatrix);textureHasFrame=true;}
+            try{
+                surfaceTexture.updateTexImage();
+                surfaceTexture.getTransformMatrix(stMatrix);
+                textureHasFrame=true;
+                DeviceTest.newFrame();
+            }
             catch(RuntimeException e){return;}
         }
         GLES20.glViewport(0,0,screenWidth,screenHeight);
@@ -667,6 +711,8 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         bindHybridMaps();
         drawViews();
         int drawError=GLES20.glGetError();
+        if(drawError!=GLES20.GL_NO_ERROR)DeviceTest.gpuError(drawError);
+        sampleDevicePixels(started);
         if(drawError!=GLES20.GL_NO_ERROR&&hybridShaderAvailable&&!forceFast){
             drawErrors++;
             if(drawErrors>=2){
