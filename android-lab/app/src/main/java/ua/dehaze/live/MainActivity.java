@@ -99,6 +99,7 @@ public final class MainActivity extends Activity {
         showImmersive();
         cameraCorrectionDegrees=getPreferences(MODE_PRIVATE).getInt(
             "camera_alignment_degrees",defaultCameraCorrection());
+        LabRuntime.init(this);
         cameraManager = (CameraManager)getSystemService(Context.CAMERA_SERVICE);
         cameraThread = new HandlerThread("camera2-preview");
         cameraThread.start();
@@ -174,7 +175,7 @@ public final class MainActivity extends Activity {
         logo.setGravity(Gravity.CENTER_VERTICAL);
         logo.setPadding(dp(4),0,dp(10),0);
         bar.addView(logo);
-        TextView title=text("Меті Туман VIDEO MAX",15,INK);
+        TextView title=text("Меті Туман LAB",15,INK);
         title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         bar.addView(title);
         bar.addView(new View(this),new LinearLayout.LayoutParams(0,dp(1),1f));
@@ -186,6 +187,11 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams photoTopParams=new LinearLayout.LayoutParams(dp(109),dp(37));
         photoTopParams.leftMargin=dp(8);
         bar.addView(photoTop,photoTopParams);
+        TextView labTop=button("ДІАГНОСТИКА",this::openDiagnostics);
+        labTop.setBackgroundColor(Color.rgb(54,93,75));
+        LinearLayout.LayoutParams labTopParams=new LinearLayout.LayoutParams(dp(123),dp(37));
+        labTopParams.leftMargin=dp(5);
+        bar.addView(labTop,labTopParams);
         headerSafeButton=button("GPU SAFE",()->{
             safeGpu=!safeGpu;
             renderer.setForceFast(safeGpu);
@@ -268,6 +274,11 @@ public final class MainActivity extends Activity {
                     "Оброблене відео на весь екран");
     }
 
+    private void openDiagnostics(){
+        setDrawer(false);
+        startActivity(new Intent(this,DiagnosticsActivity.class));
+    }
+
     private void openPhotoMax(){
         clearFreeze();
         setDrawer(false);
@@ -292,7 +303,8 @@ public final class MainActivity extends Activity {
         scroll.addView(list);
         drawer.addView(scroll);
 
-        menuTitle(list,"VIDEO MAX  •  ОФЛАЙН");
+        menuTitle(list,"МЕТІ ТУМАН LAB  •  ОФЛАЙН");
+        menuItem(list,"🔧  ДІАГНОСТИКА / САМОТЕСТ",this::openDiagnostics);
         menuItem(list,"▣  ФОТО MAX — вибрати зображення",this::openPhotoMax);
         menuItem(list,"✕  Сховати",()->setDrawer(false));
         toggle=button("Антитуман: ON",()->{
@@ -423,7 +435,7 @@ public final class MainActivity extends Activity {
         glView.setRenderer(renderer);
         glView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
         videoArea.addView(glView,new FrameLayout.LayoutParams(-1,-1));
-        diagnosticView=text("Очікування камери • натисни ☰ для джерела",11,Color.WHITE);
+        diagnosticView=text("LAB: очікування камери • ДІАГНОСТИКА → повний тест",11,Color.WHITE);
         diagnosticView.setBackgroundColor(Color.argb(184,12,18,23));
         diagnosticView.setPadding(dp(8),dp(5),dp(8),dp(5));
         diagnosticView.setMaxLines(2);
@@ -667,7 +679,7 @@ public final class MainActivity extends Activity {
         });
     }
 
-    public void onRendererStatus(String info){setState(info);}
+    public void onRendererStatus(String info){setState(info);LabRuntime.log("GPU: "+info);}
 
     public void onAutoUnavailable(){
         runOnUiThread(()->{
@@ -677,6 +689,7 @@ public final class MainActivity extends Activity {
     }
 
     private void onFrameStats(final String stats) {
+        LabRuntime.frames(stats);
         runOnUiThread(()->{
             if(!active)return;
             statsView.setText(stats+" • "+(manualMode?"РУЧНИЙ "+strength:"AUTO "+autoStrength)+"%");
@@ -693,12 +706,14 @@ public final class MainActivity extends Activity {
     }
 
     private void onCameraTextureReady(SurfaceTexture texture) {
+        LabRuntime.state(LabRuntime.CAMERA,"ГОТОВО","Поверхня камери створена");
         cameraTexture=texture;
         if(active){if(usingFile)startVideoFile();else maybeOpenCamera();}
     }
 
     @Override protected void onResume() {
         super.onResume();showImmersive();active=true;glView.onResume();
+        LabRuntime.state(LabRuntime.CAMERA,"ОЧІКУЄ","Відкриття Camera2 або відеофайлу");
         if(usingFile)startVideoFile();else maybeOpenCamera();
     }
 
@@ -710,6 +725,7 @@ public final class MainActivity extends Activity {
     private void maybeOpenCamera(){
         if(!active||usingFile||cameraTexture==null||cameraDevice!=null||opening)return;
         if(checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED){
+            LabRuntime.state(LabRuntime.CAMERA,"ДОЗВІЛ","Очікуємо дозвіл Android на камеру");
             requestPermissions(new String[]{Manifest.permission.CAMERA},CAMERA_PERMISSION);
             return;
         }
@@ -720,7 +736,10 @@ public final class MainActivity extends Activity {
         super.onRequestPermissionsResult(code,perms,grants);
         if(code==CAMERA_PERMISSION){
             if(grants.length>0&&grants[0]==PackageManager.PERMISSION_GRANTED)maybeOpenCamera();
-            else setState("Немає доступу до камери. Дозволь доступ у налаштуваннях Android.");
+            else{
+                LabRuntime.state(LabRuntime.CAMERA,"ПОМИЛКА","Заборонено доступ CAMERA в Android");
+                setState("Немає доступу до камери. Дозволь доступ у налаштуваннях Android.");
+            }
         }
     }
 
@@ -733,7 +752,10 @@ public final class MainActivity extends Activity {
                 if(facing!=null&&facing==CameraCharacteristics.LENS_FACING_BACK){chosen=id;break;}
                 if(chosen==null)chosen=id;
             }
-            if(chosen==null){setState("На пристрої немає доступної камери.");return;}
+            if(chosen==null){
+                LabRuntime.state(LabRuntime.CAMERA,"ПОМИЛКА","Android не показав доступних камер");
+                setState("На пристрої немає доступної камери.");return;
+            }
             CameraCharacteristics c=cameraManager.getCameraCharacteristics(chosen);
             StreamConfigurationMap map=c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
             if(map==null)throw new IllegalStateException("Немає підтримуваних розмірів камери");
@@ -758,16 +780,24 @@ public final class MainActivity extends Activity {
                 @Override public void onOpened(CameraDevice camera){
                     if(!active){camera.close();opening=false;return;}
                     cameraDevice=camera;
+                    LabRuntime.state(LabRuntime.CAMERA,"ВІДКРИТО","Camera2 відкрито • очікуємо кадри");
                     startPreview();
                 }
                 @Override public void onDisconnected(CameraDevice camera){
-                    camera.close();cameraDevice=null;opening=false;setState("Камеру відключено.");
+                    camera.close();cameraDevice=null;opening=false;
+                    LabRuntime.state(LabRuntime.CAMERA,"ПОМИЛКА","Камеру відключено Android");
+                    setState("Камеру відключено.");
                 }
                 @Override public void onError(CameraDevice camera,int error){
-                    camera.close();cameraDevice=null;opening=false;setState("Помилка Camera2: "+error);
+                    camera.close();cameraDevice=null;opening=false;
+                    LabRuntime.state(LabRuntime.CAMERA,"ПОМИЛКА","Помилка Camera2: "+error);
+                    setState("Помилка Camera2: "+error);
                 }
             },cameraHandler);
-        }catch(Exception e){opening=false;setState("Не вдалося відкрити камеру: "+e.getMessage());}
+        }catch(Exception e){
+            opening=false;LabRuntime.error(LabRuntime.CAMERA,e);
+            setState("Не вдалося відкрити камеру: "+e.getMessage());
+        }
     }
 
     private static Size pickSize(Size[] choices,int correctedRotation){
@@ -807,15 +837,25 @@ public final class MainActivity extends Activity {
                     if(!active||cameraDevice==null){cs.close();return;}
                     session=cs;
                     try{session.setRepeatingRequest(builder.build(),null,cameraHandler);
-                        opening=false;setState("Камера • корекція "+cameraCorrectionDegrees+
+                        opening=false;
+                        LabRuntime.state(LabRuntime.CAMERA,"ПОТІК ЗАПУЩЕНО","Camera2 session готова • очікуємо кадри");
+                        setState("Камера • корекція "+cameraCorrectionDegrees+
                             "° • GPU • офлайн");
-                    }catch(CameraAccessException e){opening=false;setState("Помилка відеопотоку: "+e.getMessage());}
+                    }catch(CameraAccessException e){
+                        opening=false;LabRuntime.error(LabRuntime.CAMERA,e);
+                        setState("Помилка відеопотоку: "+e.getMessage());
+                    }
                 }
                 @Override public void onConfigureFailed(CameraCaptureSession cs){
-                    opening=false;setState("Камера не підтримує обраний відеорежим.");
+                    opening=false;
+                    LabRuntime.state(LabRuntime.CAMERA,"ПОМИЛКА","Camera2 не підтримує цей SurfaceTexture відеорежим");
+                    setState("Камера не підтримує обраний відеорежим.");
                 }
             },cameraHandler);
-        }catch(Exception e){opening=false;setState("Не вдалося запустити відео: "+e.getMessage());}
+        }catch(Exception e){
+            opening=false;LabRuntime.error(LabRuntime.CAMERA,e);
+            setState("Не вдалося запустити відео: "+e.getMessage());
+        }
     }
 
     private synchronized void closeCamera(){
