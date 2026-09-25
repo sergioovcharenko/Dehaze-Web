@@ -47,7 +47,7 @@ jobs:
         id: verify
         run: |
           set -euo pipefail
-          apk=android-lab/app/build/outputs/apk/debug/app-debug.apk
+          apk=android-lab2/app/build/outputs/apk/debug/app-debug.apk
           test -s "$apk"
           "${ANDROID_HOME}/build-tools/35.0.0/aapt" dump badging "$apk" | grep '^package:' | tee package.txt
           grep "name='ua.meti.tuman.lab2'" package.txt
