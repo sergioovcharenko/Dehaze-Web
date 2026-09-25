@@ -23,7 +23,7 @@ final class LabRuntime {
         "Temporal Filter", "Image Fusion"
     };
     static final int ALL=63;
-    static final String VERSION="1.0.0-LAB";
+    static final String VERSION="2.0.0-LAB • ТРИ ТЕСТИ";
     private static final String[] status=new String[NAMES.length],
                                   detail=new String[NAMES.length],
                                   synthetic=new String[NAMES.length];
@@ -117,6 +117,7 @@ final class LabRuntime {
             b.append("\n   ").append(detail[i])
              .append("\n   Самотест: ").append(synthetic[i]).append("\n\n");
         }
+        b.append("\n").append(DeviceTest.summary()).append("\n");
         return b.toString();
     }
     static synchronized String report(){
