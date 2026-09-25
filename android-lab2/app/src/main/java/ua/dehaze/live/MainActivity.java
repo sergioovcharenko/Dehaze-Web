@@ -29,6 +29,7 @@ import android.opengl.GLSurfaceView;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.HandlerThread;
 import android.view.Gravity;
 import android.view.Surface;
