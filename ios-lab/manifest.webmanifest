@@ -1,0 +1,21 @@
+{
+  "id": "./index.html",
+  "name": "Меті Туман LAB",
+  "short_name": "Туман LAB",
+  "description": "Окремий iPhone LAB антитуман із самотестом, покадровою діагностикою та GPU SAFE",
+  "lang": "uk",
+  "display": "standalone",
+  "start_url": "./index.html",
+  "scope": "./",
+  "orientation": "any",
+  "background_color": "#252a2e",
+  "theme_color": "#252a2e",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
