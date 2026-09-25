@@ -251,27 +251,31 @@ async function process(){
  }
 }
 $('process').onclick=process;$('quickProcess').onclick=process;
-const save=async()=>{
+const save=()=>{
  if(!processed)return;
- setStatus('Збереження PNG…');
  try{
    const data=result.toDataURL('image/png');
-   if(window.MetiAndroid&&typeof MetiAndroid.savePng==='function'){
-     MetiAndroid.savePng(data);
-   }else{
-     const blob=await new Promise(ok=>result.toBlob(ok,'image/png'));
-     if(!blob)throw Error('Не вдалося створити PNG');
-     const f=new File([blob],'Meti-Tuman-VIDEO-MAX.png',{type:'image/png'});
-     if(navigator.canShare?.({files:[f]})&&navigator.share){
-       await navigator.share({files:[f],title:'Меті Туман VIDEO MAX'});
-     }else{
-       const url=URL.createObjectURL(blob),link=document.createElement('a');
-       link.href=url;link.download=f.name;link.click();
-       setTimeout(()=>URL.revokeObjectURL(url),12000);
+   const fallback=()=>{
+     const link=document.createElement('a');
+     link.href=data;link.download='Meti-Tuman-VIDEO-MAX.png';
+     document.body.append(link);link.click();link.remove();
+     setStatus('PNG: збережи у Файли або Фото.');
+   };
+   if(navigator.share&&typeof File!=='undefined'){
+     // Share must be invoked synchronously during the user's tap on iOS.
+     const raw=atob(data.slice(data.indexOf(',')+1));
+     const bytes=new Uint8Array(raw.length);
+     for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+     const file=new File([bytes],'Meti-Tuman-VIDEO-MAX.png',{type:'image/png'});
+     if(navigator.canShare?.({files:[file]})){
+       navigator.share({files:[file],title:'Меті Туман VIDEO MAX'})
+         .then(()=>setStatus('Фото передано для збереження.'))
+         .catch(e=>{if(e.name!=='AbortError')fallback();});
+       return;
      }
-     setStatus('Фото готове до збереження.');
    }
- }catch(e){setStatus('Помилка збереження PNG: '+e.message);}
+   fallback();
+ }catch(e){setStatus('Не вдалося зберегти фото: '+e.message);}
 };
 $('save').onclick=save;$('saveTop').onclick=save;
 window.onNativeSave=msg=>setStatus(msg);
