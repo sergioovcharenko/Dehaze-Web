@@ -41,7 +41,8 @@ function meanBox(src,radius){
   }
   return out;
 }
-function run(pixels){
+function run(pixels,flags=63){
+  const times={},errors={};let mark=performance.now();
   if(pixels.length!==N*4)throw Error('Розмір кадру');
   const r=new Float32Array(N),g=new Float32Array(N),b=new Float32Array(N),
     gray=new Float32Array(N),minRgb=new Float32Array(N),hist=new Uint32Array(256);
@@ -70,24 +71,34 @@ function run(pixels){
   for(let i=0;i<N;i++){
     normal[i]=Math.min(r[i]/air[0],g[i]/air[1],b[i]/air[2]);
   }
-  const coarse=minBox(normal,3);
+  try{
+    if(flags&1){
+      const coarse=minBox(normal,3),wide=minBox(normal,8);
+      for(let i=0;i<N;i++)raw[i]=clamp(1-.84*(.78*coarse[i]+.22*wide[i]),.05,1);
+    }else raw.fill(1);
+  }catch(error){raw.fill(1);errors.dcp=String(error);}
+  times.dcp=performance.now()-mark;mark=performance.now();
   for(let i=0;i<N;i++){
-    raw[i]=clamp(1-.84*coarse[i],.05,1);
-    g2[i]=gray[i]*gray[i];
-    gt[i]=gray[i]*raw[i];
+    g2[i]=gray[i]*gray[i];gt[i]=gray[i]*raw[i];
   }
-  const mi=meanBox(gray,5),mp=meanBox(raw,5),mii=meanBox(g2,5),mip=meanBox(gt,5);
-  const a=new Float32Array(N),bb=new Float32Array(N);
-  for(let i=0;i<N;i++){
-    a[i]=(mip[i]-mi[i]*mp[i])/(Math.max(0,mii[i]-mi[i]*mi[i])+.0018);
-    bb[i]=mp[i]-a[i]*mi[i];
+  let ma=null,mb=null;
+  const local=meanBox(gray,5),localSq=meanBox(g2,5);
+  if(flags&2){
+    try{
+      const mi=local,mp=meanBox(raw,5),mii=localSq,mip=meanBox(gt,5);
+      const a=new Float32Array(N),bb=new Float32Array(N);
+      for(let i=0;i<N;i++){
+        a[i]=(mip[i]-mi[i]*mp[i])/(Math.max(0,mii[i]-mi[i]*mi[i])+.0018);
+        bb[i]=mp[i]-a[i]*mi[i];
+      }
+      ma=meanBox(a,5);mb=meanBox(bb,5);
+    }catch(error){errors.guided=String(error);}
   }
-  const ma=meanBox(a,5),mb=meanBox(bb,5),
-        local=meanBox(gray,5),localSq=meanBox(g2,5);
+  times.guided=performance.now()-mark;mark=performance.now();
   const map=new Uint8Array(N*4);
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
     const i=y*W+x,p=i*4,
-        t=clamp(ma[i]*gray[i]+mb[i],.25,1),
+        t=ma===null?raw[i]:clamp(ma[i]*gray[i]+mb[i],.25,1),
         sigma=Math.sqrt(Math.max(0,localSq[i]-local[i]*local[i])),
         detail=clamp((sigma-.008)/.079),
         sky=clamp((.62-y/H)/.38)*clamp((gray[i]-.56)/.29)*
@@ -96,6 +107,8 @@ function run(pixels){
   }
   const lut=new Uint8Array(256*TILES_X*TILES_Y*4),
         tw=Math.ceil(W/TILES_X),th=Math.ceil(H/TILES_Y);
+  try{
+  if(flags&4){
   for(let ty=0;ty<TILES_Y;ty++)for(let tx=0;tx<TILES_X;tx++){
     const h=new Float32Array(256),x1=Math.min(W,(tx+1)*tw),
       y1=Math.min(H,(ty+1)*th),x0=tx*tw,y0=ty*th;
@@ -117,6 +130,21 @@ function run(pixels){
       lut[p]=lut[p+1]=lut[p+2]=v;lut[p+3]=255;
     }
   }
+  }else for(let tile=0;tile<TILES_X*TILES_Y;tile++){
+    for(let k=0;k<256;k++){
+      const p=(tile*256+k)*4;
+      lut[p]=lut[p+1]=lut[p+2]=k;lut[p+3]=255;
+    }
+  }
+  }catch(error){
+    errors.clahe=String(error);
+    for(let tile=0;tile<TILES_X*TILES_Y;tile++)
+      for(let k=0;k<256;k++){
+        const p=(tile*256+k)*4;
+        lut[p]=lut[p+1]=lut[p+2]=k;lut[p+3]=255;
+      }
+  }
+  times.clahe=performance.now()-mark;mark=performance.now();
   sum=0;let p10=0,p90=255;
   for(let i=0;i<256;i++){sum+=hist[i];if(sum>=N*.1){p10=i;break;}}
   sum=0;for(let i=0;i<256;i++){sum+=hist[i];if(sum>=N*.9){p90=i;break;}}
@@ -124,7 +152,7 @@ function run(pixels){
      clamp((18-edge/Math.max(1,edgeN)*255)/18)*.35+
      clamp((48-sat/N*255)/48)*.2;
   let mean=lumaSum/N;
-  if(previous&&Math.abs(mean-previous.mean)<.13){
+  if((flags&16)&&previous&&Math.abs(mean-previous.mean)<.13){
     const older=.58,newer=1-older;
     for(let i=0;i<map.length;i++)
       map[i]=Math.round(previous.map[i]*older+map[i]*newer);
@@ -133,18 +161,79 @@ function run(pixels){
     air=air.map((v,i)=>previous.air[i]*older+v*newer);
     haze=previous.haze*older+haze*newer;
   }
+  times.temporal=performance.now()-mark;
   previous={map,lut,air,haze,mean};
-  return {map,lut,air,haze};
+  return {map,lut,air,haze,times,errors};
+}
+function synthetic(shift=0){
+  const pixels=new Uint8ClampedArray(N*4);
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const i=(y*W+x)*4,pattern=y>H*.62?190:
+      ((Math.floor(x/11)+Math.floor(y/9))%2?75:145);
+    const value=clamp((pattern*.46+204*.54+((x*17+y*11+shift*7)%19)-9)/255)*255;
+    pixels[i]=value;pixels[i+1]=Math.min(255,value+5);
+    pixels[i+2]=Math.min(255,value+9);pixels[i+3]=255;
+  }
+  return pixels;
+}
+function selfTest(){
+  previous=null;
+  const checks={dcp:'ОЧІКУЄ',guided:'ОЧІКУЄ',clahe:'ОЧІКУЄ',
+                temporal:'ОЧІКУЄ',retinex:'CPU-контроль',fusion:'CPU-контроль'};
+  let base;
+  try{
+    base=run(synthetic(0),63);
+    let min=255,max=0;
+    for(let i=0;i<base.map.length;i+=4){
+      const t=base.map[i];min=Math.min(min,t);max=Math.max(max,t);
+    }
+    checks.dcp=max-min>3?'OK':'ПОМИЛКА: карта однорідна';
+  }catch(e){checks.dcp='ПОМИЛКА: '+String(e);}
+  try{
+    if(!base)throw Error('DCP не працює');
+    previous=null;const raw=run(synthetic(0),61);
+    let d=0;
+    for(let i=0;i<raw.map.length;i+=8)d+=Math.abs(raw.map[i]-base.map[i]);
+    checks.guided=d>20?'OK':'ПОМИЛКА: guided не змінив карту';
+  }catch(e){checks.guided='ПОМИЛКА: '+String(e);}
+  try{
+    previous=null;const raw=run(synthetic(0),59);
+    let identity=true;
+    for(let tile=0;tile<48;tile++){
+      const v=(tile*256+127)*4;
+      if(raw.lut[v]!==127)identity=false;
+    }
+    checks.clahe=identity?'OK':'ПОМИЛКА: CLAHE OFF не створив identity LUT';
+  }catch(e){checks.clahe='ПОМИЛКА: '+String(e);}
+  try{
+    previous=null;const first=run(synthetic(0),63),smooth=run(synthetic(1),63);
+    previous=null;const unsmoothed=run(synthetic(1),47);
+    let delta=0;
+    for(let i=0;i<smooth.map.length;i+=8)
+      delta+=Math.abs(smooth.map[i]-unsmoothed.map[i]);
+    checks.temporal=delta>0?'OK':'ПОМИЛКА: згладжування не впливає';
+  }catch(e){checks.temporal='ПОМИЛКА: '+String(e);}
+  const x=.18,local=.20,ret=Math.pow(x,1-.28*Math.max(0,Math.min(1,(.58-local)*1.7)));
+  checks.retinex=ret>x&&ret<1?'CPU OK · GPU перевіряється камерою':'ПОМИЛКА CPU';
+  const blend=.30*(1-.05)*.87,fu=.42*(1-blend)+.65*blend;
+  checks.fusion=fu>.42&&fu<.65?'CPU OK · GPU перевіряється камерою':'ПОМИЛКА CPU';
+  previous=null;
+  return checks;
 }
 self.onmessage=event=>{
   if(event.data.reset){previous=null;return;}
-  const {pixels,epoch}=event.data;
+  if(event.data.selfTest){
+    try{self.postMessage({type:'selfTest',checks:selfTest()});}
+    catch(e){self.postMessage({type:'selfTest',error:String(e)});}
+    return;
+  }
+  const {pixels,epoch,flags=63}=event.data;
   try{
-    const result=run(new Uint8ClampedArray(pixels));
-    // Keep copies for smoothing before the transferred buffers detach.
+    const result=run(new Uint8ClampedArray(pixels),flags);
     previous={map:new Uint8Array(result.map),lut:new Uint8Array(result.lut),
       air:result.air,haze:result.haze,mean:previous.mean};
     self.postMessage({type:'map',epoch,air:result.air,haze:result.haze,
+      times:result.times,errors:result.errors,
       map:result.map.buffer,lut:result.lut.buffer},
       [result.map.buffer,result.lut.buffer]);
   }catch(e){self.postMessage({type:'error',epoch,message:String(e)});}
