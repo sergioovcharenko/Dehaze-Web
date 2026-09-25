@@ -163,7 +163,9 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     private volatile int cameraWidth=1280,cameraHeight=720,rotation=0;
     private volatile boolean realtimeTimestamps=false;
     private SurfaceTexture surfaceTexture;
-    private int textureId,program,positionLoc,matrixLoc,pixelLoc,rotationLoc,enhancedLoc,strengthLoc;
+    private int textureId,program,fastProgram,activeProgram,positionLoc,matrixLoc,pixelLoc,rotationLoc,enhancedLoc,strengthLoc;
+    private volatile boolean forceFast=false;
+    private int drawErrors=0;
     private int screenWidth,screenHeight;
     private long lastStatsNanos=0;
     private int framesSinceStats=0;
@@ -180,6 +182,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
 
     void setEnhanced(boolean value){enhanced=value;}
     void setMaxMode(boolean value){maxMode=value;}
+    void setForceFast(boolean value){forceFast=value;view.requestRender();}
     void shutdown(){hybridWorker.shutdownNow();}
     void setFill(boolean value){fill=value;}
     void setViewMode(int value){viewMode=Math.max(0,Math.min(2,value));}
@@ -243,20 +246,60 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     }
 
     private int createProgram(){
+        // Always create the proven FAST program. It displays the original view
+        // independently, even when the hybrid program compiles but draws black.
+        fastProgram=buildProgram(FAST_FRAGMENT);
         try{
             hybridShaderAvailable=true;
             return buildProgram(FRAGMENT);
         }catch(RuntimeException error){
-            android.util.Log.w("MetiVideoMax","Hybrid shader failed: original FAST shader fallback",error);
+            android.util.Log.w("MetiVideoMax","Hybrid shader failed; independent FAST program active",error);
             hybridShaderAvailable=false;
-            activity.onRendererStatus("GPU: швидкий резервний режим • MAX недоступний");
-            return buildProgram(FAST_FRAGMENT);
+            activity.onRendererStatus("GPU: резервний режим • оригінал камери активний");
+            return fastProgram;
+        }
+    }
+
+    // Two independent GL programs: the original view never samples DCP textures.
+    private void activateProgram(int next){
+        if(next==0)return;
+        if(activeProgram!=next){
+            GLES20.glUseProgram(next);
+            activeProgram=next;
+            positionLoc=GLES20.glGetAttribLocation(next,"aPosition");
+            matrixLoc=GLES20.glGetUniformLocation(next,"uMatrix");
+            pixelLoc=GLES20.glGetUniformLocation(next,"uPixel");
+            rotationLoc=GLES20.glGetUniformLocation(next,"uRotation");
+            enhancedLoc=GLES20.glGetUniformLocation(next,"uEnhanced");
+            strengthLoc=GLES20.glGetUniformLocation(next,"uStrength");
+            maxLoc=GLES20.glGetUniformLocation(next,"uMax");
+            hybridLoc=GLES20.glGetUniformLocation(next,"uHybrid");
+            airLoc=GLES20.glGetUniformLocation(next,"uAir");
+            mapSamplerLoc=GLES20.glGetUniformLocation(next,"uTransmission");
+            lutSamplerLoc=GLES20.glGetUniformLocation(next,"uClahe");
+            cropLoc=GLES20.glGetUniformLocation(next,"uCrop");
+            panLoc=GLES20.glGetUniformLocation(next,"uPan");
+            GLES20.glUniform1i(GLES20.glGetUniformLocation(next,"uCamera"),0);
+            if(next==program&&hybridShaderAvailable){
+                GLES20.glUniform1i(mapSamplerLoc,1);
+                GLES20.glUniform1i(lutSamplerLoc,2);
+            }
+        }
+        GLES20.glUniformMatrix4fv(matrixLoc,1,false,stMatrix,0);
+        GLES20.glUniform1f(rotationLoc,(float)effectiveRotation());
+        GLES20.glUniform2f(pixelLoc,1f/Math.max(1,cameraWidth),1f/Math.max(1,cameraHeight));
+        if(positionLoc>=0){
+            GLES20.glEnableVertexAttribArray(positionLoc);
+            quad.position(0);
+            GLES20.glVertexAttribPointer(positionLoc,2,GLES20.GL_FLOAT,false,0,quad);
         }
     }
 
     @Override public void onSurfaceCreated(GL10 unused,EGLConfig config) {
         GLES20.glClearColor(.025f,.046f,.085f,1f);
         program=createProgram();
+        activeProgram=0;
+        drawErrors=0;
         positionLoc=GLES20.glGetAttribLocation(program,"aPosition");
         matrixLoc=GLES20.glGetUniformLocation(program,"uMatrix");
         pixelLoc=GLES20.glGetUniformLocation(program,"uPixel");
@@ -464,6 +507,8 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER,hybridTargetFbo);
         GLES20.glViewport(0,0,VideoDehazeProcessor.W,VideoDehazeProcessor.H);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+        // Sample raw OES texture using the FAST program, not the costly hybrid shader.
+        activateProgram(fastProgram);
         GLES20.glUniform1f(enhancedLoc,0f);
         GLES20.glUniform1f(hybridLoc,0f);
         GLES20.glUniform1f(maxLoc,0f);
@@ -519,10 +564,14 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
             vx=x+(width-vw)/2;vy=y+(height-vh)/2;
         }
         GLES20.glViewport(vx,vy,vw,vh);
+        final boolean useHybridProgram=useFilter&&maxMode&&hybridShaderAvailable&&!forceFast;
+        activateProgram(useHybridProgram?program:fastProgram);
         GLES20.glUniform1f(enhancedLoc,useFilter?1f:0f);
         GLES20.glUniform1f(strengthLoc,strength);
         GLES20.glUniform1f(maxLoc,maxMode?1f:0f);
-        GLES20.glUniform1f(hybridLoc,(maxMode&&hybridShaderAvailable&&hybridMapsUploaded)?1f:0f);
+        GLES20.glUniform1f(hybridLoc,(useHybridProgram&&hybridMapsUploaded)?1f:0f);
+        if(useHybridProgram&&hybridMapsUploaded&&currentHybrid!=null)
+            GLES20.glUniform3f(airLoc,currentHybrid.ar,currentHybrid.ag,currentHybrid.ab);
         float z=Math.max(1f,zoom);
         GLES20.glUniform2f(cropLoc,cropX/z,cropY/z);
         GLES20.glUniform2f(panLoc,panX,panY);
@@ -566,7 +615,8 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         if(!textureHasFrame)return;
         long started=SystemClock.elapsedRealtimeNanos();
         long cameraTimestamp=surfaceTexture.getTimestamp();
-        GLES20.glUseProgram(program);
+        activeProgram=0;
+        activateProgram(program);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES,textureId);
         GLES20.glUniform1i(GLES20.glGetUniformLocation(program,"uCamera"),0);
@@ -577,6 +627,15 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         GLES20.glVertexAttribPointer(positionLoc,2,GLES20.GL_FLOAT,false,0,quad);
         bindHybridMaps();
         drawViews();
+        int drawError=GLES20.glGetError();
+        if(drawError!=GLES20.GL_NO_ERROR&&hybridShaderAvailable&&!forceFast){
+            drawErrors++;
+            if(drawErrors>=2){
+                forceFast=true;
+                android.util.Log.e("MetiVideoMax","Hybrid draw GL error="+drawError+"; switching to FAST");
+                activity.onRendererStatus("GPU: резервний режим після помилки "+drawError);
+            }
+        }else if(drawError==GLES20.GL_NO_ERROR){drawErrors=0;}
         CaptureCallback cb=capture;
         if(cb!=null){
             capture=null;
