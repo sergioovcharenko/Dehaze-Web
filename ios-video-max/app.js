@@ -9,11 +9,15 @@ const state={
  rotation:0,zoom:1,panX:0,panY:0,enabled:true,manual:false,strength:.55,
  autoStrength:.55,autoAvailable:true,playing:false,paused:false,freeze:false,
  lastAnalysis:0,analysisFailed:false,frameCounter:0,lastStats:0,lastFrame:0,renderGeneration:0,
- installedEvent:null,usingCpu:false
+ installedEvent:null,usingCpu:false,hybridEpoch:0
 };
 const analysis=document.createElement('canvas');analysis.width=64;analysis.height=36;
+const hybridCanvas=document.createElement('canvas');hybridCanvas.width=128;hybridCanvas.height=72;
+const hybridCtx=hybridCanvas.getContext('2d',{willReadFrequently:true});
 const actx=analysis.getContext('2d',{willReadFrequently:true});
 let gl=null,program=null,tex=null,uniforms={},posLoc=-1,quad=null,canvas2d=null;
+let worker=null,workerBusy=false,pendingMap=null,hybridReady=false,workerFailed=false;
+let gpuMap=null,gpuLut=null,air=[.85,.85,.85],lastHybrid=0;
 let loopRaf=0,noticeTimeout=0,fp=null;
 const clip=(v,a,b)=>Math.max(a,Math.min(b,v));
 const icon={};
@@ -33,12 +37,12 @@ function syncUI(){
  $('fitButton').textContent=state.fit==='cover'?'FILL':'FIT';
  $('filterEnabled').checked=state.enabled;
  $('manualCheckbox').checked=state.manual;
- $('modeName').textContent=state.manual?'РУЧНИЙ':'AUTO';
+ $('modeName').textContent=state.manual?'РУЧНИЙ':'AUTO MAX';
  $('strengthSlider').disabled=!state.manual;
  $('strengthSlider').style.opacity=state.manual?'1':'.46';
  $('strengthSlider').value=String(Math.round(100*(state.manual?state.strength:state.autoStrength)));
  $('strengthLabel').textContent=Math.round(100*(state.manual?state.strength:state.autoStrength))+'%';
- $('autoBadge').textContent=(state.manual?'РУЧНИЙ ':'AUTO ')+
+ $('autoBadge').textContent=(state.manual?'РУЧНИЙ ':'AUTO MAX ')+
     Math.round(100*(state.manual?state.strength:state.autoStrength))+'%';
  $('cameraSwitch').hidden=state.source!=='camera';
  $('fileControls').hidden=state.source!=='file';
@@ -161,6 +165,10 @@ function initGpu(){
        uniform sampler2D tex;
        uniform vec2 pixel;
        uniform float intensity;
+       uniform float hybridEnabled;
+       uniform sampler2D uMap;
+       uniform sampler2D uLut;
+       uniform vec3 airLight;
        void main(){
          vec3 c=texture2D(tex,uv).rgb;
          if(intensity<0.001){gl_FragColor=vec4(c,1.0);return;}
@@ -172,6 +180,28 @@ function initGpu(){
          float edge=length(c-local);
          float protect=smoothstep(.69,.91,y)*(1.0-smoothstep(.01,.07,edge));
          float mask=1.0-.85*protect;
+         if(hybridEnabled>.5){
+           vec4 m=texture2D(uMap,vec2(uv.x,1.0-uv.y));
+           float sky=m.g;
+           float amount=clamp(intensity*1.08*(1.0-.94*sky),0.0,.97);
+           vec3 clear=clamp((c-airLight)/max(.27,m.r)+airLight,0.0,1.0);
+           vec3 result=mix(c,clear,amount);
+           float lum=dot(result,vec3(.299,.587,.114));
+           vec2 xy=clamp(vec2(uv.x,1.0-uv.y)*vec2(8.0,6.0)-.5,vec2(0.0),vec2(7.0,5.0));
+           vec2 lo=floor(xy),hi=min(lo+vec2(1.0),vec2(7.0,5.0));
+           vec2 p=fract(xy);
+           float k=floor(clamp(lum,0.0,1.0)*255.0+.5);
+           float ll=texture2D(uLut,vec2((k+.5)/256.0,(lo.y*8.0+lo.x+.5)/48.0)).r;
+           float lh=texture2D(uLut,vec2((k+.5)/256.0,(lo.y*8.0+hi.x+.5)/48.0)).r;
+           float hl=texture2D(uLut,vec2((k+.5)/256.0,(hi.y*8.0+lo.x+.5)/48.0)).r;
+           float hh=texture2D(uLut,vec2((k+.5)/256.0,(hi.y*8.0+hi.x+.5)/48.0)).r;
+           float mapped=mix(mix(ll,lh,p.x),mix(hl,hh,p.x),p.y);
+           float contrast=clamp(mapped-lum,-.17,.17)*.41*amount*(1.0-sky);
+           result=clamp(result+vec3(contrast),0.0,1.0);
+           result=clamp(result+clamp(c-local,vec3(-.09),vec3(.09))*
+                          (.35*amount*m.a),0.0,1.0);
+           gl_FragColor=vec4(result,1.0);return;
+         }
          float t=max(.58,1.0-intensity*(.25+.18*y));
          vec3 rec=clamp((c-vec3(.81))/t+vec3(.81),0.0,1.0);
          vec3 corrected=mix(c,rec,.79*mask);
@@ -194,6 +224,23 @@ function initGpu(){
    uniforms.intensity=gl.getUniformLocation(program,'intensity');
    uniforms.pixel=gl.getUniformLocation(program,'pixel');
    gl.uniform1i(gl.getUniformLocation(program,'tex'),0);
+   uniforms.hybrid=gl.getUniformLocation(program,'hybridEnabled');
+   uniforms.air=gl.getUniformLocation(program,'airLight');
+   gl.uniform1i(gl.getUniformLocation(program,'uMap'),1);
+   gl.uniform1i(gl.getUniformLocation(program,'uLut'),2);
+   function newMap(unit,w,h,filter){
+     let t=gl.createTexture();gl.activeTexture(unit);gl.bindTexture(gl.TEXTURE_2D,t);
+     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,filter);
+     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,filter);
+     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+     return t;
+   }
+   gpuMap=newMap(gl.TEXTURE1,128,72,gl.LINEAR);
+   gpuLut=newMap(gl.TEXTURE2,256,48,gl.NEAREST);
+   gl.activeTexture(gl.TEXTURE0);
+   initWorker();
  }catch(e){
    console.warn('WebGL fallback:',e);
    gl=null;state.usingCpu=true;
