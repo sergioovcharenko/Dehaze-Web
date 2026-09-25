@@ -91,6 +91,9 @@ public final class MainActivity extends Activity {
     private SeekBar strengthSeek;
     private TextView strengthLabel;
     private int cameraCorrectionDegrees; // saved hardware camera alignment; never rotates the UI
+    private final Handler labTestHandler=new Handler(Looper.getMainLooper());
+    private int requestedLabTest=DeviceTest.NONE;
+    private boolean deviceTestStarted=false;
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -100,11 +103,43 @@ public final class MainActivity extends Activity {
         cameraCorrectionDegrees=getPreferences(MODE_PRIVATE).getInt(
             "camera_alignment_degrees",defaultCameraCorrection());
         LabRuntime.init(this);
+        requestedLabTest=getIntent().getIntExtra("lab_test_mode",DeviceTest.NONE);
+        // For imported video do not open the physical camera while user chooses a file.
+        if(requestedLabTest==DeviceTest.VIDEO)usingFile=true;
         cameraManager = (CameraManager)getSystemService(Context.CAMERA_SERVICE);
         cameraThread = new HandlerThread("camera2-preview");
         cameraThread.start();
         cameraHandler = new Handler(cameraThread.getLooper());
         makeUi();
+        if(requestedLabTest!=DeviceTest.NONE){
+            renderer.setViewMode(1);
+            renderer.setFill(true);
+            renderer.setMaxMode(true);
+            if(requestedLabTest==DeviceTest.VIDEO){
+                glView.postDelayed(()->{
+                    if(!isFinishing()&&requestedLabTest==DeviceTest.VIDEO)pickVideo();
+                },550);
+            }else{
+                setState("ТЕСТ КАМЕРИ • очікуємо доступу до камери");
+            }
+        }
+    }
+
+    private void startLabTest(int mode){
+        if(requestedLabTest!=mode||deviceTestStarted||isFinishing())return;
+        runOnUiThread(()->{
+            if(deviceTestStarted||isFinishing())return;
+            deviceTestStarted=true;
+            renderer.setViewMode(1);
+            renderer.setFill(true);
+            DeviceTest.begin(mode);
+            setState((mode==DeviceTest.CAMERA?"ТЕСТ КАМЕРИ":"ТЕСТ ВІДЕО")+
+                " • 12 секунд • перевірка двох зображень");
+            labTestHandler.postDelayed(()->{
+                if(DeviceTest.running())DeviceTest.finish();
+                if(!isFinishing())finish();
+            },DeviceTest.TEST_SECONDS*1000L);
+        });
     }
 
     private static int defaultCameraCorrection(){
@@ -175,7 +210,7 @@ public final class MainActivity extends Activity {
         logo.setGravity(Gravity.CENTER_VERTICAL);
         logo.setPadding(dp(4),0,dp(10),0);
         bar.addView(logo);
-        TextView title=text("Меті Туман LAB",15,INK);
+        TextView title=text("Меті Туман LAB 2",15,INK);
         title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         bar.addView(title);
         bar.addView(new View(this),new LinearLayout.LayoutParams(0,dp(1),1f));
@@ -584,6 +619,11 @@ public final class MainActivity extends Activity {
 
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
+        if(request==FILE_REQUEST&&requestedLabTest==DeviceTest.VIDEO&&
+            (result!=RESULT_OK||data==null||data.getData()==null)){
+            DeviceTest.failed("Файл не вибрано");
+            finish();return;
+        }
         if(request==FILE_REQUEST&&result==RESULT_OK&&data!=null&&data.getData()!=null){
             clearFreeze();
             fileUri=data.getData();
@@ -614,13 +654,27 @@ public final class MainActivity extends Activity {
             cameraSurface=new Surface(cameraTexture);
             mediaPlayer.setSurface(cameraSurface);
             mediaPlayer.setLooping(true);
-            mediaPlayer.setOnPreparedListener(mp->{mp.start();setState("Локальне відео • працює без інтернету");});
+            mediaPlayer.setOnPreparedListener(mp->{
+                mp.start();setState("Локальне відео • працює без інтернету");
+                if(requestedLabTest==DeviceTest.VIDEO)
+                    startLabTest(DeviceTest.VIDEO);
+            });
             mediaPlayer.setOnErrorListener((mp,what,extra)->{
                 setState("Не вдалося відкрити відео: "+what);
-                return false;
+                if(requestedLabTest==DeviceTest.VIDEO){
+                    DeviceTest.failed("Помилка декодера відео "+what);
+                    runOnUiThread(this::finish);
+                }
+                return true;
             });
             mediaPlayer.prepareAsync();
-        }catch(Exception e){setState("Помилка відкриття відео: "+e.getMessage());}
+        }catch(Exception e){
+            setState("Помилка відкриття відео: "+e.getMessage());
+            if(requestedLabTest==DeviceTest.VIDEO){
+                DeviceTest.failed("Файл: "+e.getMessage());
+                finish();
+            }
+        }
     }
 
     private void stopMedia(){
@@ -718,6 +772,9 @@ public final class MainActivity extends Activity {
     }
 
     @Override protected void onPause() {
+        if(deviceTestStarted&&DeviceTest.running()&&!isFinishing())
+            DeviceTest.failed("Тест перервано до завершення");
+        labTestHandler.removeCallbacksAndMessages(null);
         clearFreeze();active=false;stopMedia();closeCamera();glView.onPause();
         super.onPause();
     }
@@ -737,6 +794,10 @@ public final class MainActivity extends Activity {
         if(code==CAMERA_PERMISSION){
             if(grants.length>0&&grants[0]==PackageManager.PERMISSION_GRANTED)maybeOpenCamera();
             else{
+                if(requestedLabTest==DeviceTest.CAMERA){
+                    DeviceTest.failed("Android відхилив дозвіл на камеру");
+                    finish();
+                }
                 LabRuntime.state(LabRuntime.CAMERA,"ПОМИЛКА","Заборонено доступ CAMERA в Android");
                 setState("Немає доступу до камери. Дозволь доступ у налаштуваннях Android.");
             }
@@ -841,6 +902,8 @@ public final class MainActivity extends Activity {
                         LabRuntime.state(LabRuntime.CAMERA,"ПОТІК ЗАПУЩЕНО","Camera2 session готова • очікуємо кадри");
                         setState("Камера • корекція "+cameraCorrectionDegrees+
                             "° • GPU • офлайн");
+                        if(requestedLabTest==DeviceTest.CAMERA)
+                            startLabTest(DeviceTest.CAMERA);
                     }catch(CameraAccessException e){
                         opening=false;LabRuntime.error(LabRuntime.CAMERA,e);
                         setState("Помилка відеопотоку: "+e.getMessage());
@@ -850,6 +913,10 @@ public final class MainActivity extends Activity {
                     opening=false;
                     LabRuntime.state(LabRuntime.CAMERA,"ПОМИЛКА","Camera2 не підтримує цей SurfaceTexture відеорежим");
                     setState("Камера не підтримує обраний відеорежим.");
+                    if(requestedLabTest==DeviceTest.CAMERA){
+                        DeviceTest.failed("Camera2 не створив відеопотік");
+                        runOnUiThread(MainActivity.this::finish);
+                    }
                 }
             },cameraHandler);
         }catch(Exception e){
@@ -869,6 +936,8 @@ public final class MainActivity extends Activity {
         clearFreeze();stopMedia();closeCamera();
         if(cameraThread!=null)cameraThread.quitSafely();
         if(renderer!=null)renderer.shutdown();
+        if(deviceTestStarted&&DeviceTest.running())
+            DeviceTest.failed("Вікно тесту закрито до завершення");
         super.onDestroy();
     }
 
