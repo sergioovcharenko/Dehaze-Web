@@ -213,6 +213,14 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         lutSamplerLoc=GLES20.glGetUniformLocation(program,"uClahe");
         cropLoc=GLES20.glGetUniformLocation(program,"uCrop");
         panLoc=GLES20.glGetUniformLocation(program,"uPan");
+        // Distinct sampler units are mandatory even if the hybrid branch is disabled.
+        // Previously all sampler uniforms initially pointed at GL_TEXTURE0,
+        // mixing external OES and TEXTURE_2D samplers and blacking out preview.
+        GLES20.glUseProgram(program);
+        GLES20.glUniform1i(GLES20.glGetUniformLocation(program,"uCamera"),0);
+        GLES20.glUniform1i(mapSamplerLoc,1);
+        GLES20.glUniform1i(lutSamplerLoc,2);
+        GLES20.glUniform1f(hybridLoc,0f);
         int[] textures=new int[1];GLES20.glGenTextures(1,textures,0);
         textureId=textures[0];
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES,textureId);
@@ -382,15 +390,13 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
             hybridMapsUploaded=true;
         }
         GLES20.glUniform1f(hybridLoc,(maxMode&&hybridMapsUploaded)?1f:0f);
-        if(hybridMapsUploaded&&currentHybrid!=null){
+        // Always bind valid textures at units 1/2, even before the first map.
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,transmissionTexture);
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE2);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,claheTexture);
+        if(hybridMapsUploaded&&currentHybrid!=null)
             GLES20.glUniform3f(airLoc,currentHybrid.ar,currentHybrid.ag,currentHybrid.ab);
-            GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,transmissionTexture);
-            GLES20.glUniform1i(mapSamplerLoc,1);
-            GLES20.glActiveTexture(GLES20.GL_TEXTURE2);
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,claheTexture);
-            GLES20.glUniform1i(lutSamplerLoc,2);
-        }
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
     }
 
