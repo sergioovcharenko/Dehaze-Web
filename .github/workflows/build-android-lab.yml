@@ -1,0 +1,110 @@
+name: Build Меті Туман LAB (fourth independent APK)
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android-lab/**'
+      - '.github/workflows/build-android-lab.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: meti-tuman-lab-apk
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Configure Android SDK
+        run: |
+          set -euo pipefail
+          sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$sdk" >> "$GITHUB_ENV"
+          tool="$sdk/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$tool"
+          yes | "$tool" --licenses >/dev/null 2>&1 || true
+          "$tool" 'platforms;android-35' 'build-tools;35.0.0' 'platform-tools'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Deterministic module tests
+        id: test
+        run: gradle -p android-lab --no-daemon --stacktrace testDebugUnitTest
+      - name: Compile LAB APK
+        id: compile
+        run: gradle -p android-lab --no-daemon --stacktrace assembleDebug
+      - name: Verify distinct package and APK
+        id: verify
+        run: |
+          set -euo pipefail
+          apk=android-lab/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          "${ANDROID_HOME}/build-tools/35.0.0/aapt" dump badging "$apk" | grep '^package:' | tee package.txt
+          grep "name='ua.meti.tuman.lab'" package.txt
+          unzip -t "$apk" | tail -1
+          cp "$apk" Meti-Tuman-LAB.apk
+          sha256sum Meti-Tuman-LAB.apk > Meti-Tuman-LAB.apk.sha256
+          ls -lh Meti-Tuman-LAB.apk
+      - name: Upload LAB APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Meti-Tuman-LAB-debug
+          path: |
+            Meti-Tuman-LAB.apk
+            Meti-Tuman-LAB.apk.sha256
+          if-no-files-found: error
+          retention-days: 90
+      - name: Publish separate LAB release
+        id: publish
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=meti-tuman-lab-latest
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "Меті Туман LAB · окрема APK" --notes "Separate debug APK ua.meti.tuman.lab. Live camera/video PHOTO MAX with per-module toggles, offline synthetic selftest, diagnostic TXT export, and GPU SAFE fallback. Android hardware performance/quality not verified without testing on device." --prerelease
+          fi
+          gh release upload "$tag" Meti-Tuman-LAB.apk Meti-Tuman-LAB.apk.sha256 --clobber
+      - name: Record LAB build status
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TEST: ${{ steps.test.outcome }}
+          COMPILE: ${{ steps.compile.outcome }}
+          VERIFY: ${{ steps.verify.outcome }}
+          PUBLISH: ${{ steps.publish.outcome }}
+        run: |
+          set -euo pipefail
+          if [ "$TEST" = success ] && [ "$COMPILE" = success ] && [ "$VERIFY" = success ] && [ "$PUBLISH" = success ]; then state=success; else state=failure; fi
+          jq -nc \
+            --arg state "$state" --arg test "$TEST" --arg compile "$COMPILE" \
+            --arg verify "$VERIFY" --arg publish "$PUBLISH" \
+            --arg commit "$GITHUB_SHA" \
+            --arg workflow_url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --arg apk_url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/meti-tuman-lab-latest/Meti-Tuman-LAB.apk" \
+            --arg time "$(date -u +%FT%TZ)" \
+            '{state:$state,test:$test,compile:$compile,verify:$verify,publish:$publish,commit:$commit,workflow_url:$workflow_url,apk_url:(if $state=="success" then $apk_url else null end),updated_utc:$time}' > lab-build-status.json
+          old_sha=$(gh api "repos/$GITHUB_REPOSITORY/contents/lab-build-status.json" --jq .sha 2>/dev/null || true)
+          if [ -n "$old_sha" ]; then
+            gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/lab-build-status.json" \
+              -f message="Record independent LAB APK build" \
+              -f content="$(base64 -w0 < lab-build-status.json)" \
+              -f sha="$old_sha" -f branch=main >/dev/null
+          else
+            gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/lab-build-status.json" \
+              -f message="Record independent LAB APK build" \
+              -f content="$(base64 -w0 < lab-build-status.json)" \
+              -f branch=main >/dev/null
+          fi
