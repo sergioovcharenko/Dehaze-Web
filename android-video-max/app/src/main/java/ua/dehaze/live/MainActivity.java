@@ -58,7 +58,8 @@ public final class MainActivity extends Activity {
     private CameraDevice cameraDevice;
     private CameraCaptureSession session;
     private Surface cameraSurface;
-    private TextView statsView;
+    private TextView statsView,diagnosticView,headerSafeButton;
+    private boolean safeGpu=false;
     private TextView stateView;
     private TextView toggle;
     private TextView videoLabelsLeft,videoLabelsRight,zoomBadge,modeBadge;
@@ -185,6 +186,16 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams photoTopParams=new LinearLayout.LayoutParams(dp(109),dp(37));
         photoTopParams.leftMargin=dp(8);
         bar.addView(photoTop,photoTopParams);
+        headerSafeButton=button("GPU SAFE",()->{
+            safeGpu=!safeGpu;
+            renderer.setForceFast(safeGpu);
+            headerSafeButton.setText(safeGpu?"GPU FAST":"GPU SAFE");
+            setState(safeGpu?"Увімкнено стабільний GPU FAST":"Увімкнено VIDEO MAX (перевір зображення)");
+        });
+        headerSafeButton.setBackgroundColor(Color.rgb(58,77,82));
+        LinearLayout.LayoutParams safeLp=new LinearLayout.LayoutParams(dp(90),dp(37));
+        safeLp.leftMargin=dp(6);
+        bar.addView(headerSafeButton,safeLp);
         headerResumeButton=button("▶ ПРОДОВЖИТИ",this::resumeFreeze);
         headerResumeButton.setTextColor(Color.WHITE);
         headerResumeButton.setBackgroundColor(Color.rgb(43,108,87));
@@ -412,6 +423,13 @@ public final class MainActivity extends Activity {
         glView.setRenderer(renderer);
         glView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
         videoArea.addView(glView,new FrameLayout.LayoutParams(-1,-1));
+        diagnosticView=text("Очікування камери • натисни ☰ для джерела",11,Color.WHITE);
+        diagnosticView.setBackgroundColor(Color.argb(184,12,18,23));
+        diagnosticView.setPadding(dp(8),dp(5),dp(8),dp(5));
+        diagnosticView.setMaxLines(2);
+        FrameLayout.LayoutParams diagLp=new FrameLayout.LayoutParams(-2,-2,Gravity.LEFT|Gravity.BOTTOM);
+        diagLp.leftMargin=dp(10);diagLp.bottomMargin=dp(9);
+        videoArea.addView(diagnosticView,diagLp);
         // Freeze is an Android bitmap overlay, not a paused Camera2 consumer.
         // Camera frames continue to be drained behind it, so resume never
         // needs to restart a potentially blocked SurfaceTexture pipeline.
@@ -659,11 +677,19 @@ public final class MainActivity extends Activity {
     }
 
     private void onFrameStats(final String stats) {
-        runOnUiThread(()->{if(active)statsView.setText(stats+" • "+(manualMode?"РУЧНИЙ "+strength:"AUTO "+autoStrength)+"%");});
+        runOnUiThread(()->{
+            if(!active)return;
+            statsView.setText(stats+" • "+(manualMode?"РУЧНИЙ "+strength:"AUTO "+autoStrength)+"%");
+            if(diagnosticView!=null)diagnosticView.setText("КАДРИ Є • "+stats+
+                (safeGpu?" • GPU FAST": " • VIDEO MAX"));
+        });
     }
 
     private void setState(final String info){
-        runOnUiThread(()->stateView.setText(info));
+        runOnUiThread(()->{
+            if(stateView!=null)stateView.setText(info);
+            if(diagnosticView!=null)diagnosticView.setText(info);
+        });
     }
 
     private void onCameraTextureReady(SurfaceTexture texture) {
