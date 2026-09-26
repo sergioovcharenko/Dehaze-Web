@@ -35,3 +35,10 @@ The existing 2-second fixture has 20 identical decoded frames (framemd5); retain
 it for previous tests, add a separate moving 4-second 24fps testsrc2 fixture
 with a fixed gray veil for the LIVE motion regression. Collect screenshots
 on failed test runs as well as successful ones.
+
+Run 36259509538: 50 unit tests; 26/27 Android tests passed. Launch, large
+layout, pixel effect, OFF and failed-source invalidation passed. Resume failed
+at LiveRegressionTest:95: decoder restarted, but renderer only received the
+1-second status pulse and no source frames. Recreate GL/OES consumer on resume
+and keep Activity's cameraTexture null while paused; start producer only from
+the new texture callback. Same resume regression retained without relaxing it.

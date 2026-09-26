@@ -469,7 +469,9 @@ public final class MainActivity extends Activity {
         videoArea=new FrameLayout(this);
         glView=new GLSurfaceView(this);
         glView.setEGLContextClientVersion(2);
-        glView.setPreserveEGLContextOnPause(true);
+        // Recreate the OES consumer with its GL context on resume. Reconnecting
+        // MediaPlayer to the retained texture stopped frame callbacks on API 35.
+        glView.setPreserveEGLContextOnPause(false);
         renderer=new SplitRenderer(this,glView,this::onCameraTextureReady,this::onFrameStats);
         renderer.setStrength(strength/100f);
         renderer.setMaxMode(true);
@@ -797,7 +799,7 @@ public final class MainActivity extends Activity {
         labTestHandler.removeCallbacksAndMessages(null);
         clearFreeze();active=false;
         if(mediaPlayer!=null){try{videoPosition=mediaPlayer.getCurrentPosition();}catch(IllegalStateException ignored){}}
-        renderer.invalidateSource();stopMedia();closeCamera();glView.onPause();
+        renderer.invalidateSource();stopMedia();closeCamera();cameraTexture=null;glView.onPause();
         super.onPause();
     }
 
