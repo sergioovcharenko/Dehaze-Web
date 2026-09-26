@@ -1,4 +1,4 @@
-name: Meti LAB 3 all algorithms APK
+name: Meti LAB 3 AUTO APK
 on:
   push:
     branches: [feat/lab3-auto]
@@ -49,7 +49,7 @@ jobs:
           tool=$(find "$sdk/build-tools" -name aapt -type f | sort -V | tail -1)
           signer="$(dirname "$tool")/apksigner"
           "$tool" dump badging "$apk" > /tmp/lab3-package.txt
-          grep "name='ua.meti.tuman.lab3'" /tmp/lab3-package.txt
+          grep "name='ua.meti.tuman.lab3.auto'" /tmp/lab3-package.txt
           if "$tool" dump permissions "$apk" | grep -q android.permission.INTERNET; then exit 1; fi
           "$signer" verify --verbose "$apk"
           python - <<'PY'
@@ -63,13 +63,13 @@ jobs:
               assert 'lib/arm64-v8a/libonnxruntime.so' in z.namelist()
           PY
           mkdir -p lab3-delivery
-          cp "$apk" lab3-delivery/Meti-Tuman-LAB3-ALL-MODES.apk
+          cp "$apk" lab3-delivery/Meti-Tuman-LAB3-AUTO.apk
           cp android-lab3/app/src/main/assets/dehazeformer-t-outdoor-256.json lab3-delivery/model-provenance.json
           cp docs/LAB3-QUICKSTART.md lab3-delivery/
-          sha256sum lab3-delivery/Meti-Tuman-LAB3-ALL-MODES.apk > lab3-delivery/SHA256.txt
+          sha256sum lab3-delivery/Meti-Tuman-LAB3-AUTO.apk > lab3-delivery/SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: Meti-Tuman-LAB3-ALL-MODES
+          name: Meti-Tuman-LAB3-AUTO
           path: lab3-delivery/
           retention-days: 90
       - name: Enable KVM for emulator

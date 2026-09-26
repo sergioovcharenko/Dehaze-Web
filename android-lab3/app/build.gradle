@@ -4,11 +4,11 @@ android {
     compileSdk 35
     defaultConfig {
         // Distinct from the installed original ua.meti.tuman.
-        applicationId 'ua.meti.tuman.lab3'
+        applicationId 'ua.meti.tuman.lab3.auto'
         minSdk 26
         targetSdk 35
         versionCode 1
-        versionName '3.0.0-compare'
+        versionName '3.1.0-auto'
         ndk { abiFilters project.findProperty('labTestAbi') ?: 'arm64-v8a' }
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }

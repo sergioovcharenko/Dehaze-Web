@@ -17,7 +17,7 @@ import org.junit.runner.RunWith;
 import static org.junit.Assert.*;
 @RunWith(AndroidJUnit4.class)
 public class AutoAndroidTest {
-    private static Object field(Lab3Activity a,String name){try{Field f=Lab3Activity.class.getDeclaredField(name);f.setAccessible(true);return f.get(a);}catch(Exception e){throw new AssertionError(e);}}
+    private static Object field(Object a,String name){try{Field f=a.getClass().getDeclaredField(name);f.setAccessible(true);return f.get(a);}catch(Exception e){throw new AssertionError(e);}}
     private static void await(ActivityScenario<Lab3Activity> s,java.util.function.Predicate<Lab3Activity> p){long end=SystemClock.elapsedRealtime()+30000;AtomicBoolean ready=new AtomicBoolean();do{s.onActivity(a->ready.set(p.test(a)));if(ready.get())return;SystemClock.sleep(50);}while(SystemClock.elapsedRealtime()<end);fail("AUTO did not publish a result");}
     private static File photo() throws Exception {File f=new File(InstrumentationRegistry.getInstrumentation().getTargetContext().getCacheDir(),"auto-photo.png");Bitmap b=Bitmap.createBitmap(64,32,Bitmap.Config.ARGB_8888);for(int y=0;y<32;y++)for(int x=0;x<64;x++){int c=x%16<8?130:175;b.setPixel(x,y,0xff000000|c<<16|c<<8|c);}try(OutputStream out=new FileOutputStream(f)){b.compress(Bitmap.CompressFormat.PNG,100,out);}return f;}
     @Test public void defaultAutoProcessesPhotoWithoutPressingProcess() throws Exception {
@@ -45,4 +45,17 @@ public class AutoAndroidTest {
             s.onActivity(a->{assertEquals(1,((Spinner)field(a,"algorithms")).getSelectedItemPosition());assertNull(((ImageView)field(a,"after")).getDrawable());});
         }finally{release.countDown();}
     }
+    @Test public void offDuringQueuedAutoWorkDiscardsItsResult() throws Exception {
+        File file=photo();CountDownLatch release=new CountDownLatch(1),done=new CountDownLatch(1);
+        try(ActivityScenario<Lab3Activity> s=ActivityScenario.launch(Lab3Activity.class)){
+            s.onActivity(a->{((CheckBox)field(a,"enabled")).setChecked(false);a.onActivityResult(10,Activity.RESULT_OK,new Intent().setData(Uri.fromFile(file)));});
+            await(s,a->field(a,"photo")!=null);
+            s.onActivity(a->{((ExecutorService)field(a,"worker")).execute(()->{try{release.await(15,TimeUnit.SECONDS);}catch(InterruptedException e){Thread.currentThread().interrupt();}});((CheckBox)field(a,"enabled")).setChecked(true);});
+            await(s,a->((Long)field(field(a,"gate"),"active"))>=0);
+            s.onActivity(a->{((CheckBox)field(a,"enabled")).setChecked(false);((ExecutorService)field(a,"worker")).execute(done::countDown);});
+            release.countDown();assertTrue(done.await(30,TimeUnit.SECONDS));InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+            s.onActivity(a->{assertNull(((ImageView)field(a,"after")).getDrawable());assertFalse(((CheckBox)field(a,"enabled")).isChecked());});
+        }finally{release.countDown();}
+    }
+
 }
