@@ -1,7 +1,7 @@
 name: Meti LAB 3 all algorithms APK
 on:
   push:
-    branches: [feat/lab3-all-modes]
+    branches: [feat/lab3-auto]
     paths: ['android-lab3/**', 'tools/lab3/**', '.github/workflows/build-android-lab3.yml']
   workflow_dispatch:
 permissions:
