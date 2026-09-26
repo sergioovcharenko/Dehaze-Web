@@ -49,8 +49,17 @@ public class LiveRegressionTest {
     }
     static void screenshot(String name) throws Exception {
         Bitmap image=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();assertNotNull(image);
-        File dir=new File(InstrumentationRegistry.getInstrumentation().getTargetContext().getExternalFilesDir(null),"live-screenshots");assertTrue(dir.isDirectory()||dir.mkdirs());
-        try(OutputStream out=new FileOutputStream(new File(dir,name+".png"))){assertTrue(image.compress(Bitmap.CompressFormat.PNG,100,out));}finally{image.recycle();}
+        // UTP uninstalls the target after the suite, removing its externalFilesDir.
+        // Published test images in MediaStore survive that cleanup for adb pull.
+        android.content.ContentResolver resolver=InstrumentationRegistry.getInstrumentation().getTargetContext().getContentResolver();
+        android.content.ContentValues values=new android.content.ContentValues();
+        values.put(android.provider.MediaStore.Images.Media.DISPLAY_NAME,name+".png");
+        values.put(android.provider.MediaStore.Images.Media.MIME_TYPE,"image/png");
+        values.put(android.provider.MediaStore.Images.Media.RELATIVE_PATH,"Pictures/Meti-Live-QA");
+        values.put(android.provider.MediaStore.Images.Media.IS_PENDING,1);
+        Uri uri=resolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,values);assertNotNull(uri);
+        try(OutputStream out=resolver.openOutputStream(uri)){assertNotNull(out);assertTrue(image.compress(Bitmap.CompressFormat.PNG,100,out));}finally{image.recycle();}
+        values.clear();values.put(android.provider.MediaStore.Images.Media.IS_PENDING,0);assertEquals(1,resolver.update(uri,values,null,null));
     }
     @Test public void launcherIsFullscreenLiveAndControlsFitSmallAndTabletScreens() throws Exception {
         android.content.Context c=InstrumentationRegistry.getInstrumentation().getTargetContext();
