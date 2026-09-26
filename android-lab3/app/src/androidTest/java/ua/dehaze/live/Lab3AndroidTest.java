@@ -14,7 +14,7 @@ public class Lab3AndroidTest {
         for(int y=0;y<h;y++)for(int x=0;x<w;x++){int c=90+x*4;pixels[y*w+x]=0xff000000|(c<<16)|((c+4)<<8)|(c+8);}
         Bitmap original=Bitmap.createBitmap(pixels,w,h,Bitmap.Config.ARGB_8888);
         try(Lab3Processor processor=new Lab3Processor(InstrumentationRegistry.getInstrumentation().getTargetContext())){
-            for(int algorithm=0;algorithm<3;algorithm++){
+            for(int algorithm=0;algorithm<Lab3Processor.NAMES.length;algorithm++){
                 Lab3Processor.Pair pair=processor.process(original,algorithm,1,false,63);
                 assertEquals(w,pair.result.getWidth());assertEquals(h,pair.result.getHeight());
                 int[] actual=new int[w*h];pair.result.getPixels(actual,0,w,0,0,w,h);
@@ -28,7 +28,7 @@ public class Lab3AndroidTest {
     }
     @Test public void separateLauncherOpensAndSurvivesRecreation(){
         try(ActivityScenario<Lab3Activity> activity=ActivityScenario.launch(Lab3Activity.class)){
-            activity.onActivity(a->{assertEquals("ua.meti.tuman.lab3.auto",a.getPackageName());assertNotNull(a.findViewById(android.R.id.content));});
+            activity.onActivity(a->{assertEquals("ua.meti.tuman.lab4.auto",a.getPackageName());assertNotNull(a.findViewById(android.R.id.content));});
             activity.recreate();activity.onActivity(a->assertFalse(a.isFinishing()));
         }
     }

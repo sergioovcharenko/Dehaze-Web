@@ -1,0 +1,9 @@
+plugins { id 'com.android.library' }
+android {
+    namespace 'ua.dehaze.antifog'
+    compileSdk 35
+    defaultConfig { minSdk 26 }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    androidResources { noCompress 'onnx' }
+}
+dependencies { api 'com.microsoft.onnxruntime:onnxruntime-android:1.23.2' }

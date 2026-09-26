@@ -3,7 +3,9 @@ package ua.dehaze.live;
 /** UI-thread selection state; only a current generation may commit observations. */
 final class AutoPolicy {
     static final long PROBE_MS=6000,DWELL_MS=8000,RETRY_MS=30000,MAX_VIDEO_MS=2000;
-    private final long[] retryAfter=new long[3];
+    private final long[] retryAfter;
+    AutoPolicy(){this(3);}
+    AutoPolicy(int count){if(count<1||count>16)throw new IllegalArgumentException("Candidate count");retryAfter=new long[count];}
     private int current=-1,challenger=-2,wins;
     private boolean initialized;
     private long lastSwitch;
@@ -12,9 +14,9 @@ final class AutoPolicy {
     boolean allowed(int algorithm,long now){return now>=retryAfter[algorithm];}
     void reset(){java.util.Arrays.fill(retryAfter,0);current=-1;challenger=-2;wins=0;initialized=false;lastSwitch=0;}
     int choose(double[] quality,long[] elapsed,boolean video,long now){
-        if(quality.length!=3||elapsed.length!=3)throw new IllegalArgumentException("Three candidates required");
-        double[] adjusted=new double[3];int best=-1;double bestScore=1.5;
-        for(int k=0;k<3;k++){
+        if(quality.length!=retryAfter.length||elapsed.length!=retryAfter.length)throw new IllegalArgumentException("Candidate count mismatch");
+        double[] adjusted=new double[retryAfter.length];int best=-1;double bestScore=1.5;
+        for(int k=0;k<retryAfter.length;k++){
             if(elapsed[k]==-1||(video&&elapsed[k]>MAX_VIDEO_MS))retryAfter[k]=now+RETRY_MS;
             adjusted[k]=elapsed[k]<0||!allowed(k,now)||!Double.isFinite(quality[k])?Double.NEGATIVE_INFINITY:quality[k]-(video?.004*elapsed[k]:0);
             if(adjusted[k]>bestScore){best=k;bestScore=adjusted[k];}

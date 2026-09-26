@@ -1,7 +1,7 @@
-name: Meti LAB 3 AUTO APK
+name: Meti LAB 4 AUTO APK
 on:
   push:
-    branches: [feat/lab3-auto]
+    branches: [feat/lab4-auto]
     paths: ['android-lab3/**', 'tools/lab3/**', '.github/workflows/build-android-lab3.yml']
   workflow_dispatch:
 permissions:
@@ -38,9 +38,9 @@ jobs:
           url='https://drive.google.com/uc?export=download&id=1bjSzDGGCjdFB-ixEDPDMm8bmke1PBtkp'
           urllib.request.urlretrieve(url,'/tmp/dehazeformer-t-outdoor.pth')
           PY
-          python tools/lab3/export_model.py /tmp/lab3-model-source /tmp/dehazeformer-t-outdoor.pth android-lab3/app/src/main/assets/dehazeformer-t-outdoor-256.onnx
+          python tools/lab3/export_model.py /tmp/lab3-model-source /tmp/dehazeformer-t-outdoor.pth android-lab3/engine/src/main/assets/dehazeformer-t-outdoor-256.onnx
       - name: Build tablet APK
-        run: gradle -p android-lab3 --no-daemon assembleDebug
+        run: gradle -p android-lab3 --no-daemon assembleDebug :engine:assembleRelease
       - name: Verify package, assets and signature
         run: |
           set -euo pipefail
@@ -49,7 +49,7 @@ jobs:
           tool=$(find "$sdk/build-tools" -name aapt -type f | sort -V | tail -1)
           signer="$(dirname "$tool")/apksigner"
           "$tool" dump badging "$apk" > /tmp/lab3-package.txt
-          grep "name='ua.meti.tuman.lab3.auto'" /tmp/lab3-package.txt
+          grep "name='ua.meti.tuman.lab4.auto'" /tmp/lab3-package.txt
           if "$tool" dump permissions "$apk" | grep -q android.permission.INTERNET; then exit 1; fi
           "$signer" verify --verbose "$apk"
           python - <<'PY'
@@ -63,13 +63,16 @@ jobs:
               assert 'lib/arm64-v8a/libonnxruntime.so' in z.namelist()
           PY
           mkdir -p lab3-delivery
-          cp "$apk" lab3-delivery/Meti-Tuman-LAB3-AUTO.apk
-          cp android-lab3/app/src/main/assets/dehazeformer-t-outdoor-256.json lab3-delivery/model-provenance.json
-          cp docs/LAB3-QUICKSTART.md lab3-delivery/
-          sha256sum lab3-delivery/Meti-Tuman-LAB3-AUTO.apk > lab3-delivery/SHA256.txt
+          cp "$apk" lab3-delivery/Meti-Tuman-LAB4-AUTO.apk
+          cp android-lab3/engine/src/main/assets/dehazeformer-t-outdoor-256.json lab3-delivery/model-provenance.json
+          cp docs/LAB4-QUICKSTART.md lab3-delivery/
+          cp android-lab3/engine/build/outputs/aar/engine-release.aar lab3-delivery/Meti-AntiFog-Engine.aar
+          cp docs/ANTIFOG-INTEGRATION.md lab3-delivery/
+          python tools/lab3/package_source.py lab3-delivery/Meti-AntiFog-Code.zip
+          sha256sum lab3-delivery/Meti-Tuman-LAB4-AUTO.apk > lab3-delivery/SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: Meti-Tuman-LAB3-AUTO
+          name: Meti-Tuman-LAB4-AUTO
           path: lab3-delivery/
           retention-days: 90
       - name: Enable KVM for emulator
@@ -87,7 +90,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: LAB3-test-reports
+          name: LAB4-test-reports
           path: |
             android-lab3/app/build/reports/
             android-lab3/app/build/outputs/androidTest-results/

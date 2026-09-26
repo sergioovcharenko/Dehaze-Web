@@ -3,3 +3,5 @@
 local.properties
 app/src/main/assets/*.onnx
 app/src/main/assets/dehazeformer-t-outdoor-256.json
+engine/src/main/assets/*.onnx
+engine/src/main/assets/dehazeformer-t-outdoor-256.json

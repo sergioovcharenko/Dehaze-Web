@@ -104,7 +104,7 @@ final class VideoDehazeProcessor {
     }
 
     static Result process(byte[] input,Result previous){
-        return process(input,previous,LabRuntime.flags());
+        return process(input,previous,63);
     }
 
     /** Each switch controls a real stage; a failing stage uses a local fallback. */
@@ -149,8 +149,8 @@ final class VideoDehazeProcessor {
         for(int i=0;i<N;i++)
             norm[i]=Math.min(red[i]/ar,Math.min(green[i]/ag,blue[i]/ab));
         float[] raw=new float[N],sq=new float[N],grayRaw=new float[N];
-        final boolean useDcp=(flags&(1<<(LabRuntime.DCP-2)))!=0;
-        final boolean useGuide=(flags&(1<<(LabRuntime.GUIDED-2)))!=0;
+        final boolean useDcp=(flags&(1<<(2-2)))!=0;
+        final boolean useGuide=(flags&(1<<(3-2)))!=0;
         try{
             if(useDcp){
                 float[] small=minBox(norm,4),large=minBox(norm,10);
@@ -159,7 +159,7 @@ final class VideoDehazeProcessor {
             }else Arrays.fill(raw,1f);
         }catch(RuntimeException e){
             Arrays.fill(raw,1f);
-            fallbackBits|=1<<(LabRuntime.DCP-2);
+            fallbackBits|=1<<(2-2);
         }
         dcpMs=(System.nanoTime()-stamp)/1_000_000L;
         stamp=System.nanoTime();
@@ -182,7 +182,7 @@ final class VideoDehazeProcessor {
                 meanA=box(a,7);meanB=box(b,7);
             }catch(RuntimeException e){
                 meanA=null;meanB=null;
-                fallbackBits|=1<<(LabRuntime.GUIDED-2);
+                fallbackBits|=1<<(3-2);
             }
         }
         guidedMs=(System.nanoTime()-stamp)/1_000_000L;
@@ -214,16 +214,16 @@ final class VideoDehazeProcessor {
         }
         stamp=System.nanoTime();
         byte[] lut;
-        if((flags&(1<<(LabRuntime.CLAHE-2)))!=0){
+        if((flags&(1<<(4-2)))!=0){
             try{lut=buildClahe(gray);}
             catch(RuntimeException e){
                 lut=identityLut();
-                fallbackBits|=1<<(LabRuntime.CLAHE-2);
+                fallbackBits|=1<<(4-2);
             }
         }else lut=identityLut();
         claheMs=(System.nanoTime()-stamp)/1_000_000L;
         stamp=System.nanoTime();
-        if((flags&(1<<(LabRuntime.TEMPORAL-2)))!=0
+        if((flags&(1<<(6-2)))!=0
             &&previous!=null&&Math.abs(mean-previous.mean)<.15f){
             float old=.55f,next=1f-old;
             for(int i=0;i<map.length;i++){

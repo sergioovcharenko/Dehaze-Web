@@ -70,13 +70,13 @@ public class AutoAndroidTest {
         }
     }
 
-    @Test public void manualBrowsingKeepsAllThreeComparedVideoResults() throws Exception {
+    @Test public void manualBrowsingKeepsAllFiveComparedVideoResults() throws Exception {
         File video=new File(InstrumentationRegistry.getInstrumentation().getTargetContext().getCacheDir(),"auto-compare.mp4");
         try(InputStream in=InstrumentationRegistry.getInstrumentation().getContext().getAssets().open("test-video.mp4");OutputStream out=new FileOutputStream(video)){byte[] buf=new byte[4096];int n;while((n=in.read(buf))!=-1)out.write(buf,0,n);}
         try(ActivityScenario<Lab3Activity> s=ActivityScenario.launch(Lab3Activity.class)){
             s.onActivity(a->a.onActivityResult(11,Activity.RESULT_OK,new Intent().setData(Uri.fromFile(video))));
             await(s,a->{if(!Boolean.TRUE.equals(field(a,"ready"))||((Long)field(field(a,"gate"),"active"))>=0)return false;try{java.lang.reflect.Method m=Lab3Activity.class.getDeclaredMethod("capture",boolean.class);m.setAccessible(true);m.invoke(a,true);}catch(Exception e){throw new AssertionError(e);}return true;});
-            await(s,a->{Lab3Processor.Pair[] p=(Lab3Processor.Pair[])field(a,"cached");return p[0]!=null&&p[1]!=null&&p[2]!=null&&((Long)field(field(a,"gate"),"active"))<0;});
+            await(s,a->{Lab3Processor.Pair[] p=(Lab3Processor.Pair[])field(a,"cached");return p.length==5&&p[0]!=null&&p[1]!=null&&p[2]!=null&&p[3]!=null&&p[4]!=null&&((Long)field(field(a,"gate"),"active"))<0;});
             java.util.concurrent.atomic.AtomicReference<Object> saved=new java.util.concurrent.atomic.AtomicReference<>();long[] captured=new long[1];
             s.onActivity(a->{saved.set(field(a,"cached"));captured[0]=(Long)field(a,"pairCaptured");((Spinner)field(a,"algorithms")).setSelection(1);});
             InstrumentationRegistry.getInstrumentation().waitForIdleSync();SystemClock.sleep(1200);

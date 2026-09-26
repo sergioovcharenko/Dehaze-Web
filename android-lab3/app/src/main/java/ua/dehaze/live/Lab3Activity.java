@@ -22,12 +22,13 @@ public final class Lab3Activity extends Activity {
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private final FrameGate gate=new FrameGate();
     private Lab3Processor processor;
-    private static final int AUTO=3;
-    private static final String[] CHOICES={Lab3Processor.NAMES[0],Lab3Processor.NAMES[1],Lab3Processor.NAMES[2],"AUTO · самостійний вибір"};
-    private final AutoPolicy autoPolicy=new AutoPolicy();
+    private static final int COUNT=Lab3Processor.NAMES.length, AUTO=COUNT;
+    private static final String[] CHOICES={Lab3Processor.NAMES[0],Lab3Processor.NAMES[1],Lab3Processor.NAMES[2],Lab3Processor.NAMES[3],Lab3Processor.NAMES[4],"AUTO · самостійний вибір"};
+    private final AutoPolicy autoPolicy=new AutoPolicy(COUNT);
     private Lab3Processor.Pair displayed;
     private boolean autoPhotoPending;
     private long lastAutoProbe;
+    private float autoStrength=.7f;
     private TextureView preview;
     private ImageView before,after;
     private TextView info,pairLabel,sourceLabel;
@@ -35,7 +36,7 @@ public final class Lab3Activity extends Activity {
     private CheckBox enabled;
     private SeekBar strength;
     private Bitmap photo,exportBitmap;
-    private Lab3Processor.Pair[] cached=new Lab3Processor.Pair[3];
+    private Lab3Processor.Pair[] cached=new Lab3Processor.Pair[COUNT];
     private long pairCaptured,lastSample,testElapsed,lastTick;
     private int mode=0,selected=AUTO,errors,sourceFrames,processed,skipped,sourceEpoch;
     private volatile boolean active,destroyed;
@@ -72,7 +73,7 @@ public final class Lab3Activity extends Activity {
         processor=new Lab3Processor(this);LabRuntime.init(this);
         cameraThread=new HandlerThread("lab3-camera");cameraThread.start();cameraHandler=new Handler(cameraThread.getLooper());
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(8),dp(6),dp(8),dp(6));root.setBackgroundColor(Color.rgb(28,32,37));
-        TextView title=label("МЕТІ ТУМАН LAB 3 AUTO",18);root.addView(title);
+        TextView title=label("МЕТІ ТУМАН LAB 4 AUTO",18);root.addView(title);
         LinearLayout sources=row(root);
         button(sources,"Фото",()->pick(10,"image/*"));button(sources,"Відеофайл",()->pick(11,"video/*"));
         button(sources,"Камера",this::selectCamera);button(sources,"▶ / Ⅱ",()->{if(player!=null&&prepared){userPaused=!userPaused;if(userPaused)player.pause();else player.start();}});
@@ -86,13 +87,13 @@ public final class Lab3Activity extends Activity {
         });
         enabled=new CheckBox(this);enabled.setText("Антитуман");enabled.setTextColor(Color.WHITE);enabled.setChecked(true);controls.addView(enabled);
         enabled.setOnCheckedChangeListener((b,on)->{gate.reset();errors=0;resetAuto();holdComparison=false;if(!on){displayed=null;after.setImageDrawable(null);info.setText("Вимкнено. Джерело працює без обробки.");}else if(selected!=AUTO&&cached[selected]!=null)showPair(cached[selected]);});
-        strength=new SeekBar(this);strength.setMax(100);strength.setProgress(70);TextView amount=label("Сила: 70%",13);root.addView(amount);root.addView(strength,new LinearLayout.LayoutParams(-1,dp(28)));
+        strength=new SeekBar(this);strength.setMax(100);strength.setProgress(70);TextView amount=label("Сила / межа AUTO: 70%",13);root.addView(amount);root.addView(strength,new LinearLayout.LayoutParams(-1,dp(28)));
         strength.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
-            public void onStartTrackingTouch(SeekBar s){}public void onStopTrackingTouch(SeekBar s){gate.reset();cached=new Lab3Processor.Pair[3];displayed=null;resetAuto();holdComparison=false;}
-            public void onProgressChanged(SeekBar s,int p,boolean user){amount.setText("Сила: "+p+"%");}
+            public void onStartTrackingTouch(SeekBar s){}public void onStopTrackingTouch(SeekBar s){gate.reset();cached=new Lab3Processor.Pair[COUNT];displayed=null;resetAuto();holdComparison=false;}
+            public void onProgressChanged(SeekBar s,int p,boolean user){amount.setText("Сила / межа AUTO: "+p+"%");}
         });
-        LinearLayout actions=row(root);button(actions,"Обробити кадр",()->capture(false));button(actions,"Порівняти 3",()->capture(true));
-        button(actions,"Тест 12 с",this::startTest);button(actions,"Зберегти PNG",()->export(12,"image/png","Meti-LAB3.png"));button(actions,"Звіт TXT",()->export(13,"text/plain","Meti-LAB3-report.txt"));
+        LinearLayout actions=row(root);button(actions,"Обробити кадр",()->capture(false));button(actions,"Порівняти 5",()->capture(true));
+        button(actions,"Тест 12 с",this::startTest);button(actions,"Зберегти PNG",()->export(12,"image/png","Meti-LAB4.png"));button(actions,"Звіт TXT",()->export(13,"text/plain","Meti-LAB4-report.txt"));
         sourceLabel=label(sourceName,12);root.addView(sourceLabel);
         preview=new TextureView(this);LinearLayout.LayoutParams previewLayout=new LinearLayout.LayoutParams(dp(178),dp(100));previewLayout.gravity=Gravity.CENTER_HORIZONTAL;root.addView(preview,previewLayout);preview.setVisibility(View.GONE);
         preview.setSurfaceTextureListener(new TextureView.SurfaceTextureListener(){
@@ -117,14 +118,14 @@ public final class Lab3Activity extends Activity {
     private LinearLayout row(LinearLayout root){HorizontalScrollView scroll=new HorizontalScrollView(this);scroll.setHorizontalScrollBarEnabled(false);LinearLayout r=new LinearLayout(this);r.setGravity(Gravity.CENTER_VERTICAL);scroll.addView(r);root.addView(scroll);return r;}
     private void button(LinearLayout row,String name,Runnable action){Button b=new Button(this);b.setText(name);b.setTextSize(12);b.setAllCaps(false);b.setOnClickListener(v->action.run());row.addView(b);}
     private static String algorithmName(int algorithm){return algorithm<0?"Оригінал":Lab3Processor.NAMES[algorithm];}
-    private void resetAuto(){autoPolicy.reset();lastAutoProbe=0;autoPhotoPending=selected==AUTO;}
+    private void resetAuto(){autoPolicy.reset();lastAutoProbe=0;autoStrength=strength==null?.7f:strength.getProgress()/100f;autoPhotoPending=selected==AUTO;}
     private void selectAlgorithm(int position){
         selected=position;gate.reset();errors=0;resetAuto();if(position==AUTO)holdComparison=false;displayed=null;
         if(position!=AUTO&&cached[position]!=null)showPair(cached[position]);
         else{after.setImageDrawable(null);info.setText(position==AUTO?"AUTO: вибери джерело — алгоритм обирається автоматично.":"Режим вибрано. Натисни «Обробити кадр».");}
     }
     private void note(String s){info.setText(s);log.addLast(s);while(log.size()>200)log.removeFirst();}
-    private void invalidate(){if(testing)finishTest("Зміна джерела");sourceEpoch++;resetAuto();holdComparison=false;displayed=null;gate.reset();ready=false;photo=null;pendingPhoto=null;selectedVideoUri=null;cached=new Lab3Processor.Pair[3];pairCaptured=0;before.setImageDrawable(null);after.setImageDrawable(null);}
+    private void invalidate(){if(testing)finishTest("Зміна джерела");sourceEpoch++;resetAuto();holdComparison=false;displayed=null;gate.reset();ready=false;photo=null;pendingPhoto=null;selectedVideoUri=null;cached=new Lab3Processor.Pair[COUNT];pairCaptured=0;before.setImageDrawable(null);after.setImageDrawable(null);}
     private void pick(int code,String type){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType(type);startActivityForResult(i,code);}
     private void selectCamera(){invalidate();closeSource();mode=2;sourceName="Камера · оригінальний потік; нижче — оброблені знімки";sourceLabel.setText(sourceName);preview.setVisibility(View.VISIBLE);
         if(checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.CAMERA},15);
@@ -153,7 +154,7 @@ public final class Lab3Activity extends Activity {
                 if(failure!=null){note("Фото: "+failure);return;}
                 photo=image;before.setImageBitmap(photo);
                 sourceLabel.setText("Фото "+photo.getWidth()+"×"+photo.getHeight()+" · максимум 1600 px");
-                autoPhotoPending=selected==AUTO;note(selected==AUTO?"Фото готове. AUTO порівнює алгоритми…":"Фото готове. Обери режим або «Порівняти 3».");
+                autoPhotoPending=selected==AUTO;note(selected==AUTO?"Фото готове. AUTO порівнює алгоритми…":"Фото готове. Обери режим або «Порівняти 5».");
             });
         });
     }
@@ -177,13 +178,14 @@ public final class Lab3Activity extends Activity {
         if(raw==null){gate.finish(ticket);return;}
         final Bitmap snapshot=raw;final long captured=SystemClock.elapsedRealtime();final int algorithm=selected,flags=LabRuntime.flags();final float amount=strength.getProgress()/100f;final boolean isPhoto=mode==0,automatic=algorithm==AUTO;
         final boolean probe=automatic&&(all||isPhoto||!autoPolicy.initialized()||captured-lastAutoProbe>=AutoPolicy.PROBE_MS);
-        final int current=autoPolicy.current();final boolean[] allowed=new boolean[3];for(int k=0;k<3;k++)allowed[k]=autoPolicy.allowed(k,captured);
+        final float useStrength=automatic&&!probe?autoStrength:amount;
+        final int current=autoPolicy.current();final boolean[] allowed=new boolean[COUNT];for(int k=0;k<COUNT;k++)allowed[k]=autoPolicy.allowed(k,captured);
         if(isPhoto||all)note(automatic?"AUTO порівнює результати…":"Обробка…");
         worker.execute(()->{
-            Lab3Processor.Pair[] pairs=new Lab3Processor.Pair[3];AutoProcessing.Batch batch=null;String failure=null;
+            Lab3Processor.Pair[] pairs=new Lab3Processor.Pair[COUNT];AutoProcessing.Batch batch=null;String failure=null;
             try{
-                if(automatic)batch=AutoProcessing.run(all?Lab3Processor.fit(snapshot,256):snapshot,amount,isPhoto,flags,allowed,probe?-2:current,processor::process);
-                else{Bitmap input=all?Lab3Processor.fit(snapshot,256):snapshot;if(all){for(int k=0;k<3;k++){BcDehaze.checkCancel();pairs[k]=processor.process(input,k,amount,isPhoto,flags);}}else pairs[algorithm]=processor.process(input,algorithm,amount,isPhoto,flags);}
+                if(automatic)batch=AutoProcessing.run(all?Lab3Processor.fit(snapshot,256):snapshot,useStrength,isPhoto,flags,allowed,probe?-2:current,processor::process);
+                else{Bitmap input=all?Lab3Processor.fit(snapshot,256):snapshot;if(all){for(int k=0;k<COUNT;k++){BcDehaze.checkCancel();pairs[k]=processor.process(input,k,amount,isPhoto,flags);}}else pairs[algorithm]=processor.process(input,algorithm,amount,isPhoto,flags);}
             }catch(Exception|LinkageError|OutOfMemoryError e){failure=e.toString();}
             final String error=failure;final AutoProcessing.Batch result=batch;
             ui.post(()->{
@@ -192,15 +194,15 @@ public final class Lab3Activity extends Activity {
                 errors=0;pairCaptured=captured;if(testing)processed++;
                 if(automatic){
                     long now=SystemClock.elapsedRealtime();
-                    if(probe){lastAutoProbe=now;autoPolicy.choose(result.quality,result.elapsed,!isPhoto&&!all,now);}
+                    if(probe){lastAutoProbe=now;autoPolicy.choose(result.quality,result.elapsed,!isPhoto&&!all,now);int chosen=autoPolicy.current();autoStrength=chosen<0?0:result.strength[chosen];}
                     else if(current>=0)autoPolicy.rejectCurrent(result.quality[current],result.elapsed[current],result.elapsed[current]<0,now);
                     cached=result.pairs;showPair(result.selected(autoPolicy.current()));
-                    note("AUTO → "+algorithmName(displayed.algorithm)+" • цикл "+result.totalMs+" мс\n"+(all?"Порівняння зафіксовано. «Обробити кадр» відновить AUTO.":"Оцінка якості автоматична; нижче — знімок, не поточний live-кадр."));
+                    note("AUTO → "+algorithmName(displayed.algorithm)+" • сила "+Math.round(autoStrength*100)+"% • цикл "+result.totalMs+" мс\n"+(all?"Порівняння зафіксовано. «Обробити кадр» відновить AUTO.":"Оцінка якості автоматична; нижче — знімок, не поточний live-кадр."));
                     log.addLast(result.report());
                 }else{
                     cached=pairs;Lab3Processor.Pair pair=pairs[algorithm];if(pair==null)pair=pairs[0];showPair(pair);
                     for(Lab3Processor.Pair p:pairs)if(p!=null)log.addLast(p.report);
-                    if(all)note("Порівняння готове: усі 3 алгоритми обробили один кадр до 256 px. Перемикай список.");
+                    if(all)note("Порівняння готове: усі 5 режимів обробили один кадр до 256 px. Перемикай список.");
                 }
                 while(log.size()>200)log.removeFirst();
             });
@@ -211,7 +213,7 @@ public final class Lab3Activity extends Activity {
     private void finishTest(String reason){testing=false;holdComparison=true;gate.reset();double seconds=Math.max(.001,testElapsed/1000.);note(String.format(Locale.US,"%s • %.1f с\nПотік: %.1f FPS; оброблено: %d (%.2f FPS); пропущені спроби: %d. Повна затримка до екрана не виміряна.",reason,seconds,sourceFrames/seconds,processed,processed/seconds,skipped));}
     private void export(int code,String mime,String name){
         if(code==12){Lab3Processor.Pair p=enabled.isChecked()?displayed:null;if(p==null){note("Спочатку оброби кадр.");return;}exportBitmap=p.result;}
-        else exportText="Меті Туман LAB 3 AUTO 3.1.0\nDevice: "+Build.MANUFACTURER+" "+Build.MODEL+" Android "+Build.VERSION.RELEASE+"\nSource: "+sourceName+"\nSelected: "+CHOICES[selected]+"\nSnapshot age ms: "+(pairCaptured==0?-1:SystemClock.elapsedRealtime()-pairCaptured)+"\nAll comparisons use matched original/result frames. Live displayed source bypasses heavy processing. End-to-end latency NOT measured.\n"+String.join("\n",log);
+        else exportText="Меті Туман LAB 4 AUTO 4.0.0\nDevice: "+Build.MANUFACTURER+" "+Build.MODEL+" Android "+Build.VERSION.RELEASE+"\nSource: "+sourceName+"\nSelected: "+CHOICES[selected]+"\nSnapshot age ms: "+(pairCaptured==0?-1:SystemClock.elapsedRealtime()-pairCaptured)+"\nAll comparisons use matched original/result frames. Live displayed source bypasses heavy processing. End-to-end latency NOT measured.\n"+String.join("\n",log);
         Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType(mime);i.putExtra(Intent.EXTRA_TITLE,name);startActivityForResult(i,code);
     }
     private void openVideoWhenReady(Uri uri,int epoch){
@@ -250,7 +252,7 @@ public final class Lab3Activity extends Activity {
     private void closeCamera(){cameraEpoch++;if(session!=null){session.close();session=null;}if(camera!=null){camera.close();camera=null;}if(cameraSurface!=null){cameraSurface.release();cameraSurface=null;}ready=false;}
     private void closeSource(){closeCamera();if(player!=null){player.release();player=null;}if(videoSurface!=null){videoSurface.release();videoSurface=null;}prepared=false;userPaused=false;}
     private void help(){new AlertDialog.Builder(this).setTitle("Коротке налаштування")
-        .setMessage("1. AUTO вже вибраний. Почни з фото й сили 70%; обробка запуститься сама.\n2. AUTO сам обирає алгоритм за евристичною оцінкою. «Порівняти 3» фіксує результати; «Обробити кадр» відновлює AUTO.\n3. BC/CR: карта до 512 px для фото. AI: зображення до 256 px, локальна модель.\n4. Відео / камера: верхнє вікно — оригінальний потік, нижче — парні знімки з їхнім віком.\n5. Тест 12 с та Звіт TXT показують реальну швидкість обробки.\n6. Для плавного поточного відео відкрий CLASSIC LIVE. Для попереднього фотоалгоритму — PHOTO MAX.\n7. AUTO має окремий пакет. Перевірка режимів приблизно кожні 6 с; 2 підтвердження й 8 с утримання захищають від частих перемикань. За поганого результату показується оригінал.")
+        .setMessage("1. AUTO вже вибраний. Почни з фото й сили 70%; обробка запуститься сама.\n2. AUTO сам обирає алгоритм за евристичною оцінкою. «Порівняти 5» фіксує результати; «Обробити кадр» відновлює AUTO.\n3. Нові режими: CAP та FAST. AUTO також підбирає силу в межах повзунка. BC/CR: карта до 512 px для фото. AI: зображення до 256 px, локальна модель.\n4. Відео / камера: верхнє вікно — оригінальний потік, нижче — парні знімки з їхнім віком.\n5. Тест 12 с та Звіт TXT показують реальну швидкість обробки.\n6. Для плавного поточного відео відкрий CLASSIC LIVE. Для попереднього фотоалгоритму — PHOTO MAX.\n7. AUTO має окремий пакет. Перевірка режимів приблизно кожні 6 с; 2 підтвердження й 8 с утримання захищають від частих перемикань. За поганого результату показується оригінал.")
         .setPositiveButton("Зрозуміло",null).show();}
     @Override protected void onResume(){super.onResume();active=true;lastTick=SystemClock.elapsedRealtime();if(selected==AUTO&&mode==0&&photo!=null&&displayed==null)autoPhotoPending=true;if(mode==2&&preview!=null&&preview.isAvailable())openCamera();if(mode==1&&selectedVideoUri!=null&&player==null)openVideoWhenReady(selectedVideoUri,sourceEpoch);else if(player!=null&&prepared&&!userPaused)player.start();}
     @Override protected void onPause(){active=false;gate.reset();if(testing)finishTest("Тест зупинено: додаток згорнуто");closeCamera();if(player!=null){player.release();player=null;}if(videoSurface!=null){videoSurface.release();videoSurface=null;}prepared=false;ready=false;super.onPause();}

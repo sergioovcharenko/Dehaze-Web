@@ -4,7 +4,7 @@ import android.graphics.Bitmap;
 import android.os.SystemClock;
 
 final class Lab3Processor implements AutoCloseable {
-    static final String[] NAMES={"CLASSIC MAX · кадр","BC/CR","DehazeFormer-T"};
+    static final String[] NAMES={"CLASSIC MAX · кадр","BC/CR","DehazeFormer-T","CAP · колір і туман","FAST · легкий DCP"};
     static final class Pair {
         final Bitmap original,result;final String report;final long ms;final int algorithm;
         Pair(Bitmap a,Bitmap b,String report,long ms,int algorithm){original=a;result=b;this.report=report;this.ms=ms;this.algorithm=algorithm;}
@@ -16,14 +16,16 @@ final class Lab3Processor implements AutoCloseable {
         return s==1?source:Bitmap.createScaledBitmap(source,Math.max(1,(int)Math.round(source.getWidth()*s)),Math.max(1,(int)Math.round(source.getHeight()*s)),true);
     }
     Pair process(Bitmap source,int algorithm,float strength,boolean photo,int flags) throws Exception {
-        if(algorithm<0||algorithm>2)throw new IllegalArgumentException("Unknown algorithm");
+        if(algorithm<0||algorithm>=NAMES.length)throw new IllegalArgumentException("Unknown algorithm");
+        if(source==null||!Float.isFinite(strength)||strength<0||strength>1)throw new IllegalArgumentException("Image or strength");
         long start=SystemClock.elapsedRealtime();Bitmap prepared=fit(source,algorithm==2?256:1600);
         int w=prepared.getWidth(),h=prepared.getHeight();int[] original=new int[w*h];prepared.getPixels(original,0,w,0,0,w,h);
         int[] processed;String report;
         if(strength==0){processed=original.clone();report="BYPASS — original, no processing";}
         else if(algorithm==0){processed=ClassicSnapshot.process(original,w,h,flags);report="CLASSIC CPU snapshot; LAB 2 maps 192x108; flags="+flags+"; temporal OFF for independent snapshots";}
         else if(algorithm==1){BcDehaze.Result bc=BcDehaze.process(original,w,h,photo?512:256);processed=bc.argb;report=bc.report();}
-        else{Bitmap ai=neural.process(prepared);processed=new int[w*h];ai.getPixels(processed,0,w,0,0,w,h);ai.recycle();report="DehazeFormer-T outdoor; real ONNX inference; CPU 2 threads; RGB [-1,1]; padded 256x256";}
+        else if(algorithm==2){Bitmap ai=neural.process(prepared);processed=new int[w*h];ai.getPixels(processed,0,w,0,0,w,h);ai.recycle();report="DehazeFormer-T outdoor; real ONNX inference; CPU 2 threads; RGB [-1,1]; padded 256x256";}
+        else{processed=LightDehaze.process(original,w,h,algorithm==3);report=algorithm==3?"CAP adaptation: deterministic depth; min filter; guided refinement; recovery":"FAST DCP: reduced map; guided refinement; no CLAHE/Retinex/AI";}
         BcDehaze.checkCancel();int[] blended=ImagePlanes.blend(original,processed,strength);
         long elapsed=SystemClock.elapsedRealtime()-start;
         return new Pair(prepared,Bitmap.createBitmap(blended,w,h,Bitmap.Config.ARGB_8888),report+"; strength="+strength+"; image="+w+"x"+h+"; total="+elapsed+" ms",elapsed,algorithm);

@@ -4,11 +4,11 @@ android {
     compileSdk 35
     defaultConfig {
         // Distinct from the installed original ua.meti.tuman.
-        applicationId 'ua.meti.tuman.lab3.auto'
+        applicationId 'ua.meti.tuman.lab4.auto'
         minSdk 26
         targetSdk 35
         versionCode 1
-        versionName '3.1.0-auto'
+        versionName '4.0.0-auto5'
         ndk { abiFilters project.findProperty('labTestAbi') ?: 'arm64-v8a' }
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
@@ -22,7 +22,7 @@ android {
 }
 
 dependencies {
-    implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.23.2'
+    implementation project(':engine')
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
     androidTestImplementation 'androidx.test:core:1.6.1'
