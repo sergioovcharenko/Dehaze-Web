@@ -199,12 +199,15 @@ public final class MainActivity extends Activity {
     @Override public void onWindowFocusChanged(boolean focus){super.onWindowFocusChanged(focus);if(focus)showImmersive();}
     @Override public void onBackPressed(){if(drawerVisible)setDrawer(false);else if(frozen)resumeFreeze();else super.onBackPressed();}
     private void showImmersive(){
+        // onCreate runs before setContentView: initialize DecorView before the
+        // platform Window getter (Android 15 PhoneWindow dereferences mDecor).
+        View decor=getWindow().getDecorView();
         if(Build.VERSION.SDK_INT>=30){
-            android.view.WindowInsetsController controller=getWindow().getInsetsController();
+            android.view.WindowInsetsController controller=decor.getWindowInsetsController();
             if(controller!=null){controller.setSystemBarsBehavior(android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);controller.hide(android.view.WindowInsets.Type.systemBars());return;}
         }
         // Landscape stays locked; hide both Android bars until an edge swipe.
-        getWindow().getDecorView().setSystemUiVisibility(
+        decor.setSystemUiVisibility(
             View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
             View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
     }
