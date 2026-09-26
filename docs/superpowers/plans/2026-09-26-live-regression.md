@@ -42,3 +42,19 @@ at LiveRegressionTest:95: decoder restarted, but renderer only received the
 1-second status pulse and no source frames. Recreate GL/OES consumer on resume
 and keep Activity's cameraTexture null while paused; start producer only from
 the new texture callback. Same resume regression retained without relaxing it.
+
+Final verification: Actions run 36261176053 on source commit
+82709d6edb52451014257b593f9240fb9fb63d17 succeeded. All 50 unit tests and
+27 Android 15 instrumentation tests passed with zero failures or skips.
+Inspected 1920x1200 emulator screenshots of split view, menu and processed-only
+view. Source and comparison controls fit; shortened previously clipped labels.
+Tests cover moving video under blocked map work, OFF pixel equivalence, filter
+pixel changes, background/resume, freeze/OFF and failed source replacement.
+
+Delivered package ua.meti.tuman.lab4.live, version 4.1.0-live1, ARM64.
+APK SHA-256: 9af382a1486bf7fe0236f90dbfe0f8a4ce1fa8ed52d2d44c6e3a1312dea318a7.
+Package signature, no INTERNET permission and bundled model parity verified.
+Emulator uses software rendering; its FPS is not a tablet performance result.
+Physical Active 10 Pro performance, heat and real-fog quality remain unverified.
+LIVE AUTO adjusts CLASSIC strength; five-algorithm AUTO remains in the separate
+snapshot comparison lab. No QGroundControl or web release changed in this fix.
