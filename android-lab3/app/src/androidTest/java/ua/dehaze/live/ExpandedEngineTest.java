@@ -40,8 +40,9 @@ public class ExpandedEngineTest {
     @Test public void manualComparisonKeepsCapAndFastAfterAiFailure() throws Exception {
         int[] calls=new int[5];Bitmap input=source();
         try(androidx.test.core.app.ActivityScenario<Lab3Activity> scene=androidx.test.core.app.ActivityScenario.launch(Lab3Activity.class)){
+            scene.onActivity(a->((android.widget.Spinner)field(a,"algorithms")).setSelection(0));
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync();
             scene.onActivity(a->{
-                ((android.widget.Spinner)field(a,"algorithms")).setSelection(0);
                 set(a,"frameProcessor",(AutoProcessing.Processor)(s,k,v,p,f)->{calls[k]++;if(k==2)throw new IllegalStateException("Injected AI failure");return new Lab3Processor.Pair(s,s,"identity",1,k);});
                 set(a,"photo",input);set(a,"selected",0);set(a,"autoPhotoPending",false);
                 try{java.lang.reflect.Method m=a.getClass().getDeclaredMethod("capture",boolean.class);m.setAccessible(true);m.invoke(a,true);}catch(Exception e){throw new AssertionError(e);}
