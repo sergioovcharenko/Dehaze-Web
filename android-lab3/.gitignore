@@ -1,0 +1,5 @@
+.gradle/
+**/build/
+local.properties
+app/src/main/assets/*.onnx
+app/src/main/assets/dehazeformer-t-outdoor-256.json
