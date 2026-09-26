@@ -35,7 +35,7 @@ public final class Lab3Activity extends Activity {
     private volatile boolean active,destroyed;
     private volatile int cameraEpoch;
     private boolean prepared,ready,testing,userPaused,holdComparison;
-    private Uri pendingPhoto;
+    private Uri pendingPhoto,selectedVideoUri;
     private MediaPlayer player;
     private volatile CameraDevice camera;
     private volatile CameraCaptureSession session;
@@ -89,7 +89,7 @@ public final class Lab3Activity extends Activity {
         sourceLabel=label(sourceName,12);root.addView(sourceLabel);
         preview=new TextureView(this);LinearLayout.LayoutParams previewLayout=new LinearLayout.LayoutParams(dp(178),dp(100));previewLayout.gravity=Gravity.CENTER_HORIZONTAL;root.addView(preview,previewLayout);preview.setVisibility(View.GONE);
         preview.setSurfaceTextureListener(new TextureView.SurfaceTextureListener(){
-            public void onSurfaceTextureAvailable(SurfaceTexture t,int w,int h){if(mode==2&&active)openCamera();else if(mode==1&&player!=null){if(videoSurface!=null)videoSurface.release();videoSurface=new Surface(t);player.setSurface(videoSurface);transformPreview();if(active&&prepared&&!userPaused)player.start();}}
+            public void onSurfaceTextureAvailable(SurfaceTexture t,int w,int h){if(mode==2&&active)openCamera();else if(mode==1&&selectedVideoUri!=null&&active){if(player==null)openVideoWhenReady(selectedVideoUri,sourceEpoch);else{if(videoSurface!=null)videoSurface.release();videoSurface=new Surface(t);player.setSurface(videoSurface);transformPreview();if(prepared&&!userPaused)player.start();}}}
             public void onSurfaceTextureSizeChanged(SurfaceTexture t,int w,int h){transformPreview();}
             public boolean onSurfaceTextureDestroyed(SurfaceTexture t){closeCamera();if(player!=null){player.setSurface(null);ready=false;}return true;}
             public void onSurfaceTextureUpdated(SurfaceTexture t){ready=true;if(testing)sourceFrames++;}
@@ -97,20 +97,20 @@ public final class Lab3Activity extends Activity {
         pairLabel=label("Оригінал / результат одного кадру",13);root.addView(pairLabel);
         LinearLayout pairRow=new LinearLayout(this);before=new ImageView(this);after=new ImageView(this);
         before.setScaleType(ImageView.ScaleType.FIT_CENTER);after.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        pairRow.addView(before,new LinearLayout.LayoutParams(0,-1,1));pairRow.addView(after,new LinearLayout.LayoutParams(0,-1,1));root.addView(pairRow,new LinearLayout.LayoutParams(-1,0,1));
+        pairRow.addView(before,new LinearLayout.LayoutParams(0,-1,1));pairRow.addView(after,new LinearLayout.LayoutParams(0,-1,1));root.addView(pairRow,new LinearLayout.LayoutParams(-1,dp(186)));
         info=label("Вибери фото, відеофайл або камеру. Оригінальна LAB 2 встановлюється окремо.",13);
         ScrollView status=new ScrollView(this);status.addView(info);root.addView(status,new LinearLayout.LayoutParams(-1,dp(65)));
         LinearLayout legacy=row(root);button(legacy,"CLASSIC LIVE · LAB 2",()->startActivity(new Intent(this,MainActivity.class)));
         button(legacy,"PHOTO MAX · DCP",()->startActivity(new Intent(this,PhotoActivity.class)));
         button(legacy,"Діагностика CLASSIC",()->startActivity(new Intent(this,DiagnosticsActivity.class)));
-        setContentView(root);ui.post(ticker);
+        ScrollView layoutScroll=new ScrollView(this);layoutScroll.setFillViewport(true);layoutScroll.addView(root);setContentView(layoutScroll);ui.post(ticker);
     }
     private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
     private TextView label(String s,int size){TextView t=new TextView(this);t.setText(s);t.setTextColor(Color.rgb(226,235,240));t.setTextSize(size);return t;}
     private LinearLayout row(LinearLayout root){HorizontalScrollView scroll=new HorizontalScrollView(this);scroll.setHorizontalScrollBarEnabled(false);LinearLayout r=new LinearLayout(this);r.setGravity(Gravity.CENTER_VERTICAL);scroll.addView(r);root.addView(scroll);return r;}
     private void button(LinearLayout row,String name,Runnable action){Button b=new Button(this);b.setText(name);b.setTextSize(12);b.setAllCaps(false);b.setOnClickListener(v->action.run());row.addView(b);}
     private void note(String s){info.setText(s);log.addLast(s);while(log.size()>200)log.removeFirst();}
-    private void invalidate(){sourceEpoch++;holdComparison=false;gate.reset();ready=false;photo=null;pendingPhoto=null;cached=new Lab3Processor.Pair[3];pairCaptured=0;before.setImageDrawable(null);after.setImageDrawable(null);if(testing)finishTest("Зміна джерела");}
+    private void invalidate(){sourceEpoch++;holdComparison=false;gate.reset();ready=false;photo=null;pendingPhoto=null;selectedVideoUri=null;cached=new Lab3Processor.Pair[3];pairCaptured=0;before.setImageDrawable(null);after.setImageDrawable(null);if(testing)finishTest("Зміна джерела");}
     private void pick(int code,String type){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType(type);startActivityForResult(i,code);}
     private void selectCamera(){invalidate();closeSource();mode=2;sourceName="Камера · оригінальний потік; нижче — оброблені знімки";sourceLabel.setText(sourceName);preview.setVisibility(View.VISIBLE);
         if(checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.CAMERA},15);
@@ -118,15 +118,30 @@ public final class Lab3Activity extends Activity {
     @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants){super.onRequestPermissionsResult(request,permissions,grants);if(request==15&&grants.length>0&&grants[0]==PackageManager.PERMISSION_GRANTED&&mode==2&&active)openCamera();else if(request==15)note("Доступ до камери не надано. Фото і відеофайли доступні.");}
     @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(result!=RESULT_OK||data==null||data.getData()==null)return;Uri uri=data.getData();
         if(request==10){invalidate();closeSource();mode=0;preview.setVisibility(View.GONE);pendingPhoto=uri;sourceName="Фото";sourceLabel.setText(sourceName);note("Завантаження фото…");}
-        else if(request==11){invalidate();closeSource();mode=1;preview.setVisibility(View.VISIBLE);sourceName="Відеофайл · оригінальний потік; нижче — знімки";sourceLabel.setText(sourceName);preview.post(()->openVideoWhenReady(uri,sourceEpoch));}
+        else if(request==11){invalidate();closeSource();mode=1;selectedVideoUri=uri;preview.setVisibility(View.VISIBLE);sourceName="Відеофайл · оригінальний потік; нижче — знімки";sourceLabel.setText(sourceName);preview.post(()->openVideoWhenReady(uri,sourceEpoch));}
         else if(request==12||request==13){final Bitmap image=exportBitmap;final String text=exportText;worker.execute(()->{try(OutputStream out=getContentResolver().openOutputStream(uri)){
             if(out==null)throw new IOException("Файл недоступний");if(request==12){if(image==null||!image.compress(Bitmap.CompressFormat.PNG,100,out))throw new IOException("Немає PNG");}else out.write(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             ui.post(()->{if(!destroyed)note("Збережено.");});}catch(Exception e){ui.post(()->{if(!destroyed)note("Помилка збереження: "+e.getMessage());});}});}
     }
     private void loadPendingPhoto(){
-        long ticket=gate.begin();if(ticket<0)return;Uri uri=pendingPhoto;pendingPhoto=null;
-        worker.execute(()->{Bitmap loaded=null;String error=null;try{loaded=decodePhoto(uri);}catch(Exception|OutOfMemoryError e){error=e.toString();}
-            final Bitmap image=loaded;final String failure=error;ui.post(()->{boolean valid=gate.finish(ticket);if(destroyed||!valid)return;if(failure!=null){note("Фото: "+failure);return;}photo=image;before.setImageBitmap(photo);sourceLabel.setText("Фото "+photo.getWidth()+"×"+photo.getHeight()+" · максимум 1600 px");note("Фото готове. Обери режим або AUTO COMPARE.");});});
+        // Decoding is tied to the source, not to a filter selection. Switching
+        // algorithms or pausing the app must not drop the user's chosen photo.
+        final Uri uri=pendingPhoto;
+        if(uri==null)return;
+        pendingPhoto=null;
+        final int epoch=sourceEpoch;
+        worker.execute(()->{
+            Bitmap loaded=null;String error=null;
+            try{loaded=decodePhoto(uri);}catch(Exception|OutOfMemoryError e){error=e.toString();}
+            final Bitmap image=loaded;final String failure=error;
+            ui.post(()->{
+                if(destroyed||epoch!=sourceEpoch)return;
+                if(failure!=null){note("Фото: "+failure);return;}
+                photo=image;before.setImageBitmap(photo);
+                sourceLabel.setText("Фото "+photo.getWidth()+"×"+photo.getHeight()+" · максимум 1600 px");
+                note("Фото готове. Обери режим або AUTO COMPARE.");
+            });
+        });
     }
     private Bitmap decodePhoto(Uri uri) throws Exception {
         BitmapFactory.Options opts=new BitmapFactory.Options();opts.inJustDecodeBounds=true;
@@ -169,7 +184,7 @@ public final class Lab3Activity extends Activity {
         Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType(mime);i.putExtra(Intent.EXTRA_TITLE,name);startActivityForResult(i,code);
     }
     private void openVideoWhenReady(Uri uri,int epoch){
-        if(destroyed||epoch!=sourceEpoch)return;if(!preview.isAvailable()){ui.postDelayed(()->openVideoWhenReady(uri,epoch),100);return;}
+        if(destroyed||!active||epoch!=sourceEpoch||player!=null)return;if(!preview.isAvailable()){ui.postDelayed(()->openVideoWhenReady(uri,epoch),100);return;}
         try{player=new MediaPlayer();MediaPlayer current=player;videoSurface=new Surface(preview.getSurfaceTexture());current.setSurface(videoSurface);current.setDataSource(this,uri);current.setVolume(0,0);current.setLooping(true);
             current.setOnPreparedListener(p->{if(p!=player||destroyed)return;prepared=true;bufferWidth=Math.max(1,p.getVideoWidth());bufferHeight=Math.max(1,p.getVideoHeight());rotation=0;transformPreview();if(active&&!userPaused)p.start();});
             current.setOnErrorListener((p,what,extra)->{if(p==player){prepared=false;ready=false;note("Відео не підтримується: "+what+"/"+extra);}return true;});current.prepareAsync();
@@ -206,7 +221,7 @@ public final class Lab3Activity extends Activity {
     private void help(){new AlertDialog.Builder(this).setTitle("Коротке налаштування")
         .setMessage("1. Почни з фото й сили 70%.\n2. AUTO COMPARE обробляє один кадр усіма режимами; перемикай список. «Обробити кадр» повертає поточні знімки.\n3. BC/CR: карта до 512 px для фото. AI: зображення до 256 px, локальна модель.\n4. Відео / камера: верхнє вікно — оригінальний потік, нижче — парні знімки з їхнім віком.\n5. Тест 12 с та Звіт TXT показують реальну швидкість обробки.\n6. Для плавного поточного відео відкрий CLASSIC LIVE. Для попереднього фотоалгоритму — PHOTO MAX.\n7. LAB 3 має окремий пакет, LAB 2 залишається встановленою.")
         .setPositiveButton("Зрозуміло",null).show();}
-    @Override protected void onResume(){super.onResume();active=true;lastTick=SystemClock.elapsedRealtime();if(mode==2&&preview!=null&&preview.isAvailable())openCamera();if(player!=null&&prepared&&!userPaused)player.start();}
-    @Override protected void onPause(){active=false;gate.reset();if(testing)finishTest("Тест зупинено: додаток згорнуто");closeCamera();if(player!=null&&prepared)player.pause();super.onPause();}
+    @Override protected void onResume(){super.onResume();active=true;lastTick=SystemClock.elapsedRealtime();if(mode==2&&preview!=null&&preview.isAvailable())openCamera();if(mode==1&&selectedVideoUri!=null&&player==null)openVideoWhenReady(selectedVideoUri,sourceEpoch);else if(player!=null&&prepared&&!userPaused)player.start();}
+    @Override protected void onPause(){active=false;gate.reset();if(testing)finishTest("Тест зупинено: додаток згорнуто");closeCamera();if(player!=null){player.release();player=null;}if(videoSurface!=null){videoSurface.release();videoSurface=null;}prepared=false;ready=false;super.onPause();}
     @Override protected void onDestroy(){destroyed=true;gate.reset();ui.removeCallbacks(ticker);closeSource();worker.execute(processor::close);worker.shutdown();cameraThread.quitSafely();super.onDestroy();}
 }
