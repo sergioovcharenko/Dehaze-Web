@@ -28,7 +28,7 @@ public class Lab3AndroidTest {
     }
     @Test public void separateLauncherOpensAndSurvivesRecreation(){
         try(ActivityScenario<Lab3Activity> activity=ActivityScenario.launch(Lab3Activity.class)){
-            activity.onActivity(a->{assertEquals("ua.meti.tuman.lab4.auto",a.getPackageName());assertNotNull(a.findViewById(android.R.id.content));});
+            activity.onActivity(a->{assertEquals("ua.meti.tuman.lab4.live",a.getPackageName());assertNotNull(a.findViewById(android.R.id.content));});
             activity.recreate();activity.onActivity(a->assertFalse(a.isFinishing()));
         }
     }

@@ -201,7 +201,7 @@ public final class MainActivity extends Activity {
     private void showImmersive(){
         if(Build.VERSION.SDK_INT>=30){
             android.view.WindowInsetsController controller=getWindow().getInsetsController();
-            if(controller!=null){controller.setSystemBarsBehavior(android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);controller.hide(android.view.WindowInsets.Type.systemBars());}
+            if(controller!=null){controller.setSystemBarsBehavior(android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);controller.hide(android.view.WindowInsets.Type.systemBars());return;}
         }
         // Landscape stays locked; hide both Android bars until an edge swipe.
         getWindow().getDecorView().setSystemUiVisibility(
@@ -647,7 +647,7 @@ public final class MainActivity extends Activity {
 
     private void startVideoFile(){
         if(fileUri==null||cameraTexture==null||!active)return;
-        stopMedia();
+        stopMedia();renderer.invalidateSource();
         try{
             MediaMetadataRetriever meta=new MediaMetadataRetriever();
             int width,height,rotation;
@@ -703,7 +703,7 @@ public final class MainActivity extends Activity {
 
     private void useCamera(){
         clearFreeze();
-        stopMedia();usingFile=false;fileUri=null;
+        stopMedia();renderer.invalidateSource();usingFile=false;fileUri=null;
         setDrawer(false);maybeOpenCamera();
     }
 
@@ -763,8 +763,7 @@ public final class MainActivity extends Activity {
         runOnUiThread(()->{
             if(!active)return;
             statsView.setText((manualMode?"РУЧНИЙ "+strength:"AUTO "+autoStrength)+"%"+(enhanced?"":" • OFF"));
-            if(diagnosticView!=null)diagnosticView.setText(stats+
-                (!enhanced?" • OFF":safeGpu?" • GPU FAST":" • CLASSIC"));
+            if(diagnosticView!=null)diagnosticView.setText(stats);
         });
     }
 

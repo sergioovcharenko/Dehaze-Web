@@ -22,3 +22,8 @@ Scope approved by user's request to fix the regression against previous APK UI:
    verify artifact and save downloadable APK plus short plain-text instructions.
 
 Device limit: emulator cannot establish Active 10 Pro speed, heat or dehaze quality.
+
+Review pass: no critical findings; corrected stale package assertion, old-frame
+validity on source replacement, fallback mode label, and FPS interval reset.
+Readback captures the epoch before sampling and checks after it. Added missing
+replacement-file regression. Android 35 full suite and visual inspection pending.

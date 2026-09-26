@@ -204,7 +204,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     void setEnhanced(boolean value){enhanced=value;sourceEpoch.incrementAndGet();view.requestRender();}
     void invalidateSource(){
         sourceEpoch.incrementAndGet();frameStats.reset();
-        view.queueEvent(()->{textureHasFrame=false;framePending.set(false);});
+        view.queueEvent(()->{textureHasFrame=false;framePending.set(false);frameStats.reset();lastStatsNanos=0;});
     }
     void setMaxMode(boolean value){maxMode=value;sourceEpoch.incrementAndGet();}
     void setForceFast(boolean value){forceFast=value;sourceEpoch.incrementAndGet();view.requestRender();}
@@ -235,6 +235,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         cameraWidth=Math.max(1,w);cameraHeight=Math.max(1,h);
         sourceEpoch.incrementAndGet();
         frameStats.reset();
+        view.queueEvent(()->{textureHasFrame=false;framePending.set(false);frameStats.reset();lastStatsNanos=0;});
         // Fixed landscape UI. Sensor metadata controls frame orientation, not accelerometer.
         rotation=((orient%360)+360)%360;userRotation=0;
         realtimeTimestamps=realtime;
@@ -540,7 +541,8 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
     }
 
-    private void scheduleHybrid(long nowNs){
+    private void scheduleHybrid(long nowNs,int frameEpoch){
+        if(frameEpoch!=sourceEpoch.get())return;
         if(!hybridShaderAvailable||!hybridTargetReady||!maxMode||!enhanced||forceFast||!textureHasFrame||frozen||hybridBusy.get())return;
         if(lastHybridNs>0&&nowNs-lastHybridNs<400_000_000L)return;
         lastHybridNs=nowNs;
@@ -564,7 +566,8 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         byte[] sample=new byte[VideoDehazeProcessor.N*4];
         hybridPixels.position(0);
         hybridPixels.get(sample);
-        final int epoch=sourceEpoch.get();
+        final int epoch=frameEpoch;
+        if(epoch!=sourceEpoch.get())return;
         final VideoDehazeProcessor.Result previous=currentHybrid;
         if(!hybridBusy.compareAndSet(false,true))return;
         try{
@@ -703,6 +706,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         // Always consume queued camera frames even while the freeze overlay is visible.
 // Otherwise SurfaceTexture's buffer queue fills and Camera2 can stall permanently
 // after the user taps "Stop-frame"; drawing is hidden by the native overlay.
+        final int frameEpoch=sourceEpoch.get();
         boolean freshFrame=false;
         if(framePending.getAndSet(false)){
             try{
@@ -772,7 +776,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
             cb.onCaptured(bitmap);
         }
         updateAutomaticStrength(started);
-        scheduleHybrid(started);
+        scheduleHybrid(started,frameEpoch);
         GLES20.glDisableVertexAttribArray(positionLoc);
         long submitted=SystemClock.elapsedRealtimeNanos();
 
@@ -785,12 +789,13 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
                 long ms=(submitted-cameraTimestamp)/1_000_000L;
                 if(ms>=0&&ms<5000)age=Long.toString(ms)+" мс";
             }
+            boolean currentMap=hybridShaderAvailable&&!forceFast&&maxMode&&hybridMapsUploaded&&mapSampledNs>0&&submitted-mapSampledNs<2_000_000_000L;
+            String filter=!enhanced?"OFF":currentMap?"CLASSIC":"GPU FAST";
             String map=enhanced&&maxMode&&!forceFast&&currentHybrid!=null
                 ? " • карта "+currentHybrid.computationMs+" мс / вік "+Math.max(0,(submitted-mapSampledNs)/1_000_000L)+" мс" : "";
             final String stats=String.format(Locale.US,
                 "%.0f FPS • камера→GL %s • CPU подача %.1f мс • %d×%d",
-                fps,age,submitMs,cameraWidth,cameraHeight)+map+
-                (hybridShaderAvailable?"":" • GPU FAST");
+                fps,age,submitMs,cameraWidth,cameraHeight)+map+" • "+filter;
             statsCallback.onStats(stats);
             frameStats.interval(submitted/1_000_000L);lastStatsNanos=submitted;
         }

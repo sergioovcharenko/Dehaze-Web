@@ -116,4 +116,13 @@ public class LiveRegressionTest {
             screenshot("03-fullscreen");
         }
     }
+    @Test public void failedReplacementCannotKeepShowingPreviousVideo() throws Exception {
+        try(ActivityScenario<MainActivity> scene=video()){
+            scene.onActivity(a->a.onActivityResult(20,Activity.RESULT_OK,new Intent().setData(Uri.fromFile(new File(a.getCacheDir(),"missing-video.mp4")))));
+            await(scene,a->!Boolean.TRUE.equals(field(renderer(a),"textureHasFrame")));
+            scene.onActivity(a->{assertEquals(0,frames(a));renderer(a).refresh();});
+            SystemClock.sleep(250);
+            scene.onActivity(a->{assertFalse((Boolean)field(renderer(a),"textureHasFrame"));assertEquals(0,frames(a));});
+        }
+    }
 }

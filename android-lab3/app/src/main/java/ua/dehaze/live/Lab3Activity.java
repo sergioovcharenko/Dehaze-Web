@@ -112,7 +112,16 @@ public final class Lab3Activity extends Activity {
         LinearLayout legacy=row(root);button(legacy,"CLASSIC LIVE · LAB 2",()->startActivity(new Intent(this,MainActivity.class)));
         button(legacy,"PHOTO MAX · DCP",()->startActivity(new Intent(this,PhotoActivity.class)));
         button(legacy,"Діагностика CLASSIC",()->startActivity(new Intent(this,DiagnosticsActivity.class)));
-        ScrollView layoutScroll=new ScrollView(this);layoutScroll.setFillViewport(true);layoutScroll.addView(root);setContentView(layoutScroll);ui.post(ticker);
+        ScrollView layoutScroll=new ScrollView(this);layoutScroll.setFillViewport(true);layoutScroll.addView(root);setContentView(layoutScroll);
+        if(Build.VERSION.SDK_INT>=30){
+            android.view.WindowInsetsController controller=getWindow().getInsetsController();
+            if(controller!=null){controller.setSystemBarsBehavior(android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);controller.hide(android.view.WindowInsets.Type.systemBars());}
+            layoutScroll.setOnApplyWindowInsetsListener((v,insets)->{
+                android.graphics.Insets safe=insets.getInsets(android.view.WindowInsets.Type.systemBars()|android.view.WindowInsets.Type.displayCutout());
+                layoutScroll.setPadding(safe.left,safe.top,safe.right,safe.bottom);return insets;
+            });layoutScroll.requestApplyInsets();
+        }
+        ui.post(ticker);
     }
     private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
     private TextView label(String s,int size){TextView t=new TextView(this);t.setText(s);t.setTextColor(Color.rgb(226,235,240));t.setTextSize(size);return t;}
