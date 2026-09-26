@@ -15,3 +15,6 @@
 - Final: Ruling: unverified physical-tablet performance and real-fog perceptual quality — deliver as tested heuristic AUTO, do not promise perceptual optimality or hardware FPS — cost if wrong: user may prefer a manual mode for a scene.
 - Final: Ruling: QGC/full-rate heavy processing — separate next stage, snapshot labels retained — cost if wrong: AUTO is unsuitable where current-frame full-rate video is required.
 - Final: Ruling: manual Compare 3 partial failure remains inherited behavior; new independent-candidate fallback applies to AUTO — cost if wrong: manual comparison must be retried after a candidate failure.
+
+- RED review regression run 36236532035 executed 15 emulator tests; comparison browsing and photo selection during a video test failed. The other 13 passed; 34 unit tests passed.
+- Fix pass: resetAuto no longer releases held comparison; manual spinner browsing keeps the held frame. Explicit AUTO choice/on-off/strength/source/Process actions release it. invalidate finishes the prior test before resetting the new source's state. Final GREEN run pending.

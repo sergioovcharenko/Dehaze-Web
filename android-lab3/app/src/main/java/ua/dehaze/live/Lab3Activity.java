@@ -85,10 +85,10 @@ public final class Lab3Activity extends Activity {
             public void onItemSelected(AdapterView<?> p,View v,int position,long id){selectAlgorithm(position);}
         });
         enabled=new CheckBox(this);enabled.setText("Антитуман");enabled.setTextColor(Color.WHITE);enabled.setChecked(true);controls.addView(enabled);
-        enabled.setOnCheckedChangeListener((b,on)->{gate.reset();errors=0;resetAuto();if(!on){displayed=null;after.setImageDrawable(null);info.setText("Вимкнено. Джерело працює без обробки.");}else if(selected!=AUTO&&cached[selected]!=null)showPair(cached[selected]);});
+        enabled.setOnCheckedChangeListener((b,on)->{gate.reset();errors=0;resetAuto();holdComparison=false;if(!on){displayed=null;after.setImageDrawable(null);info.setText("Вимкнено. Джерело працює без обробки.");}else if(selected!=AUTO&&cached[selected]!=null)showPair(cached[selected]);});
         strength=new SeekBar(this);strength.setMax(100);strength.setProgress(70);TextView amount=label("Сила: 70%",13);root.addView(amount);root.addView(strength,new LinearLayout.LayoutParams(-1,dp(28)));
         strength.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
-            public void onStartTrackingTouch(SeekBar s){}public void onStopTrackingTouch(SeekBar s){gate.reset();cached=new Lab3Processor.Pair[3];displayed=null;resetAuto();}
+            public void onStartTrackingTouch(SeekBar s){}public void onStopTrackingTouch(SeekBar s){gate.reset();cached=new Lab3Processor.Pair[3];displayed=null;resetAuto();holdComparison=false;}
             public void onProgressChanged(SeekBar s,int p,boolean user){amount.setText("Сила: "+p+"%");}
         });
         LinearLayout actions=row(root);button(actions,"Обробити кадр",()->capture(false));button(actions,"Порівняти 3",()->capture(true));
@@ -117,14 +117,14 @@ public final class Lab3Activity extends Activity {
     private LinearLayout row(LinearLayout root){HorizontalScrollView scroll=new HorizontalScrollView(this);scroll.setHorizontalScrollBarEnabled(false);LinearLayout r=new LinearLayout(this);r.setGravity(Gravity.CENTER_VERTICAL);scroll.addView(r);root.addView(scroll);return r;}
     private void button(LinearLayout row,String name,Runnable action){Button b=new Button(this);b.setText(name);b.setTextSize(12);b.setAllCaps(false);b.setOnClickListener(v->action.run());row.addView(b);}
     private static String algorithmName(int algorithm){return algorithm<0?"Оригінал":Lab3Processor.NAMES[algorithm];}
-    private void resetAuto(){autoPolicy.reset();lastAutoProbe=0;autoPhotoPending=selected==AUTO;holdComparison=false;}
+    private void resetAuto(){autoPolicy.reset();lastAutoProbe=0;autoPhotoPending=selected==AUTO;}
     private void selectAlgorithm(int position){
-        selected=position;gate.reset();errors=0;resetAuto();displayed=null;
+        selected=position;gate.reset();errors=0;resetAuto();if(position==AUTO)holdComparison=false;displayed=null;
         if(position!=AUTO&&cached[position]!=null)showPair(cached[position]);
         else{after.setImageDrawable(null);info.setText(position==AUTO?"AUTO: вибери джерело — алгоритм обирається автоматично.":"Режим вибрано. Натисни «Обробити кадр».");}
     }
     private void note(String s){info.setText(s);log.addLast(s);while(log.size()>200)log.removeFirst();}
-    private void invalidate(){sourceEpoch++;resetAuto();displayed=null;gate.reset();ready=false;photo=null;pendingPhoto=null;selectedVideoUri=null;cached=new Lab3Processor.Pair[3];pairCaptured=0;before.setImageDrawable(null);after.setImageDrawable(null);if(testing)finishTest("Зміна джерела");}
+    private void invalidate(){if(testing)finishTest("Зміна джерела");sourceEpoch++;resetAuto();holdComparison=false;displayed=null;gate.reset();ready=false;photo=null;pendingPhoto=null;selectedVideoUri=null;cached=new Lab3Processor.Pair[3];pairCaptured=0;before.setImageDrawable(null);after.setImageDrawable(null);}
     private void pick(int code,String type){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType(type);startActivityForResult(i,code);}
     private void selectCamera(){invalidate();closeSource();mode=2;sourceName="Камера · оригінальний потік; нижче — оброблені знімки";sourceLabel.setText(sourceName);preview.setVisibility(View.VISIBLE);
         if(checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.CAMERA},15);
