@@ -18,3 +18,7 @@
 
 - RED review regression run 36236532035 executed 15 emulator tests; comparison browsing and photo selection during a video test failed. The other 13 passed; 34 unit tests passed.
 - Fix pass: resetAuto no longer releases held comparison; manual spinner browsing keeps the held frame. Explicit AUTO choice/on-off/strength/source/Process actions release it. invalidate finishes the prior test before resetting the new source's state. Final GREEN run pending.
+- Final GREEN run 36237919552 at code commit 18052cc5d44140f5ade8e18e7c27c706f3506e12: full 34 unit tests and 15 Android emulator tests passed; model export parity, ARM64 APK build, manifest/package and signature verification succeeded.
+- Final: fixed frozen-comparison regression — manualBrowsingKeepsAllThreeComparedVideoResults RED→GREEN. Fixed new-source suppression — photoSelectedDuringVideoTestStartsAuto RED→GREEN. Whole suite 49/49.
+- Downloaded final artifact 10904289932; ZIP digest 81ec862e56b13e80b679ac2336fa759ab03c14f3d50ab83ff482becf7cbf9a8a verified. APK 22,735,032 bytes; SHA256 8b53c373e38cfe5e1fc95fd740136e74a5da1f230a4d1b847daa95d0816fa828. APK ZIP integrity, bundled ONNX hash/parity metadata and ARM64 runtime verified locally.
+- Branch retained separately; no main merge or changes to existing Android/web applications. AUTO APK is ready for user device comparison. QGC APK received; integration is the next stage.
