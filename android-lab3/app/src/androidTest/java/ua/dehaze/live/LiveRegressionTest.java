@@ -112,7 +112,7 @@ public class LiveRegressionTest {
     @Test public void classicChangesGpuPixelsAndMenuLayoutsStayLive() throws Exception {
         try(ActivityScenario<MainActivity> scene=video()){
             scene.onActivity(a->{((android.widget.CheckBox)field(a,"manualCheck")).setChecked(true);((android.widget.SeekBar)field(a,"strengthSeek")).setProgress(80);});
-            await(scene,a->field(renderer(a),"currentHybrid")!=null);
+            await(scene,a->field(renderer(a),"currentHybrid")!=null&&((TextView)field(a,"statsView")).getText().toString().contains("80%"));
             Bitmap on=capture(scene);int half=on.getWidth()/2;long delta=0;
             for(int y=on.getHeight()/4;y<on.getHeight()*3/4;y+=9)for(int x=half/4;x<half*3/4;x+=9){int l=on.getPixel(x,y),r=on.getPixel(x+half,y);for(int shift=0;shift<=16;shift+=8)delta+=Math.abs(((l>>shift)&255)-((r>>shift)&255));}
             assertTrue("Filter did not change rendered pixels",delta>100);on.recycle();screenshot("01-live");

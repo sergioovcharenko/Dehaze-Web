@@ -3,6 +3,7 @@
 set -u
 adb shell wm size 1200x1920
 adb shell wm density 240
+adb shell settings put secure immersive_mode_confirmations confirmed
 gradle -p android-lab3 -PlabTestAbi=x86_64 --no-daemon connectedDebugAndroidTest
 test_status=$?
 mkdir -p live-screenshots

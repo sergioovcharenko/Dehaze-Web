@@ -342,8 +342,6 @@ public final class MainActivity extends Activity {
 
         menuTitle(list,"LAB 4 LIVE  •  ОФЛАЙН");
         menuItem(list,"Фото / порівняти 5 режимів",this::openComparison);
-        menuItem(list,"🔧  ДІАГНОСТИКА / САМОТЕСТ",this::openDiagnostics);
-        menuItem(list,"▣  ФОТО MAX — вибрати зображення",this::openPhotoMax);
         menuItem(list,"✕  Сховати",()->setDrawer(false));
         toggle=button("Антитуман: ON",this::toggleEnhanced);
         LinearLayout.LayoutParams toggleParams=new LinearLayout.LayoutParams(-1,dp(40));
@@ -358,20 +356,10 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams maxParams=new LinearLayout.LayoutParams(-1,dp(40));
         maxParams.bottomMargin=dp(5);
         list.addView(maxModeButton,maxParams);
-        headerSafeButton=button("GPU SAFE: OFF",()->{
-            safeGpu=!safeGpu;renderer.setForceFast(safeGpu);
-            headerSafeButton.setText(safeGpu?"GPU SAFE: ON":"GPU SAFE: OFF");
-            renderer.refresh();
-        });
-        list.addView(headerSafeButton,new LinearLayout.LayoutParams(-1,dp(40)));
-        TextView liveNote=text("LIVE AUTO регулює силу CLASSIC. Вибір усіх 5 алгоритмів — у «Фото / порівняти 5».",11,MUTED);
-        liveNote.setPadding(0,dp(8),0,dp(6));list.addView(liveNote);
-
-
         menuTitle(list,"ДЖЕРЕЛО");
         menuItem(list,"◉  Камера",this::useCamera);
         menuItem(list,"▣  Відкрити відео",this::pickVideo);
-        menuItem(list,"↻  Калібрування камери (+90°)",this::calibrateCamera);
+        menuItem(list,"↻  Камера +90°",this::calibrateCamera);
 
         menuTitle(list,"ПОРІВНЯННЯ");
         menuItem(list,"50/50  •  весь кадр",()->selectMode(0));
@@ -440,6 +428,19 @@ public final class MainActivity extends Activity {
         });
         renderer.setManualMode(false);
 
+        menuTitle(list,"ДОДАТКОВО");
+        headerSafeButton=button("GPU SAFE: OFF",()->{
+            safeGpu=!safeGpu;renderer.setForceFast(safeGpu);
+            headerSafeButton.setText(safeGpu?"GPU SAFE: ON":"GPU SAFE: OFF");
+            renderer.refresh();
+        });
+        list.addView(headerSafeButton,new LinearLayout.LayoutParams(-1,dp(40)));
+        TextView liveNote=text("LIVE AUTO регулює силу CLASSIC. Вибір усіх 5 алгоритмів — у «Фото / порівняти 5».",11,MUTED);
+        liveNote.setPadding(0,dp(8),0,dp(6));list.addView(liveNote);
+
+
+        menuItem(list,"Діагностика",this::openDiagnostics);
+        menuItem(list,"Фото MAX · DCP",this::openPhotoMax);
         menuTitle(list,"ДІЇ");
         menuItem(list,"▣  Знімок",this::takeSnapshot);
         drawerFreezeButton=button("Ⅱ  Стоп-кадр",this::toggleFreeze);
