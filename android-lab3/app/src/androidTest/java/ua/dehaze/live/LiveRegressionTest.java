@@ -36,7 +36,7 @@ public class LiveRegressionTest {
             try(InputStream output=new android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor)){while(output.read()!=-1){}}
         }
         File file=new File(inst.getTargetContext().getCacheDir(),"live-regression.mp4");
-        try(InputStream in=inst.getContext().getAssets().open("test-video.mp4");OutputStream out=new FileOutputStream(file)){byte[] b=new byte[4096];int n;while((n=in.read(b))>0)out.write(b,0,n);}
+        try(InputStream in=inst.getContext().getAssets().open("live-motion.mp4");OutputStream out=new FileOutputStream(file)){byte[] b=new byte[4096];int n;while((n=in.read(b))>0)out.write(b,0,n);}
         ActivityScenario<MainActivity> scene=ActivityScenario.launch(MainActivity.class);
         await(scene,a->field(a,"cameraTexture")!=null);
         scene.onActivity(a->a.onActivityResult(20,Activity.RESULT_OK,new Intent().setData(Uri.fromFile(file))));
@@ -102,7 +102,7 @@ public class LiveRegressionTest {
     }
     @Test public void classicChangesGpuPixelsAndMenuLayoutsStayLive() throws Exception {
         try(ActivityScenario<MainActivity> scene=video()){
-            scene.onActivity(a->{renderer(a).setManualMode(true);renderer(a).setStrength(.8f);});
+            scene.onActivity(a->{((android.widget.CheckBox)field(a,"manualCheck")).setChecked(true);((android.widget.SeekBar)field(a,"strengthSeek")).setProgress(80);});
             await(scene,a->field(renderer(a),"currentHybrid")!=null);
             Bitmap on=capture(scene);int half=on.getWidth()/2;long delta=0;
             for(int y=on.getHeight()/4;y<on.getHeight()*3/4;y+=9)for(int x=half/4;x<half*3/4;x+=9){int l=on.getPixel(x,y),r=on.getPixel(x+half,y);for(int shift=0;shift<=16;shift+=8)delta+=Math.abs(((l>>shift)&255)-((r>>shift)&255));}

@@ -27,3 +27,11 @@ Review pass: no critical findings; corrected stale package assertion, old-frame
 validity on source replacement, fallback mode label, and FPS interval reset.
 Readback captures the epoch before sampling and checks after it. Added missing
 replacement-file regression. Android 35 full suite and visual inspection pending.
+
+Android 35 run 36259085347: 22 existing Android tests passed; first LIVE test
+exposed PhoneWindow.getInsetsController() dereferencing a missing decor before
+setContentView. Initialize decor and query View's nullable controller instead.
+The existing 2-second fixture has 20 identical decoded frames (framemd5); retain
+it for previous tests, add a separate moving 4-second 24fps testsrc2 fixture
+with a fixed gray veil for the LIVE motion regression. Collect screenshots
+on failed test runs as well as successful ones.
