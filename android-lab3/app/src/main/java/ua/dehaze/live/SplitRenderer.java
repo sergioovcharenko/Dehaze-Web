@@ -169,8 +169,15 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     });
     private final AtomicBoolean hybridBusy=new AtomicBoolean(false);
     private final AtomicInteger sourceEpoch=new AtomicInteger(0);
-    private volatile VideoDehazeProcessor.Result readyHybrid;
-    private VideoDehazeProcessor.Result currentHybrid;
+    private static final class ReadyMap {
+        final VideoDehazeProcessor.Result result;final int epoch;final long sampledNs;
+        ReadyMap(VideoDehazeProcessor.Result result,int epoch,long sampledNs){this.result=result;this.epoch=epoch;this.sampledNs=sampledNs;}
+    }
+    private volatile ReadyMap readyHybrid;
+    private int appliedEpoch=-1;
+    private long mapSampledNs;
+    private final LiveFrameStats frameStats=new LiveFrameStats();
+    private volatile VideoDehazeProcessor.Result currentHybrid;
     private boolean hybridMapsUploaded=false;
     private boolean hybridShaderAvailable=true;
     private boolean analysisReady=false;
@@ -183,7 +190,6 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     private long lastDeviceSampleNs=0;
     private int screenWidth,screenHeight;
     private long lastStatsNanos=0;
-    private int framesSinceStats=0;
     private boolean textureHasFrame=false;
 
     SplitRenderer(MainActivity activity,GLSurfaceView view,
@@ -195,9 +201,13 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         quad.put(pts).position(0);
     }
 
-    void setEnhanced(boolean value){enhanced=value;}
-    void setMaxMode(boolean value){maxMode=value;}
-    void setForceFast(boolean value){forceFast=value;view.requestRender();}
+    void setEnhanced(boolean value){enhanced=value;sourceEpoch.incrementAndGet();view.requestRender();}
+    void invalidateSource(){
+        sourceEpoch.incrementAndGet();frameStats.reset();
+        view.queueEvent(()->{textureHasFrame=false;framePending.set(false);});
+    }
+    void setMaxMode(boolean value){maxMode=value;sourceEpoch.incrementAndGet();}
+    void setForceFast(boolean value){forceFast=value;sourceEpoch.incrementAndGet();view.requestRender();}
     void shutdown(){hybridWorker.shutdownNow();}
     void setFill(boolean value){fill=value;}
     void setViewMode(int value){viewMode=Math.max(0,Math.min(2,value));}
@@ -210,7 +220,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     // One-time per-device camera alignment is stored by the Activity.
     // It changes the image texture only, never the Android screen orientation.
     void setUserRotation(int degrees){
-        userRotation=((degrees%360)+360)%360;
+        userRotation=((degrees%360)+360)%360;sourceEpoch.incrementAndGet();
     }
     void rotate90(){setUserRotation(userRotation+90);}
     int effectiveRotation(){return (rotation+userRotation)%360;}
@@ -224,7 +234,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     void setCameraInfo(int w,int h,int orient,boolean realtime) {
         cameraWidth=Math.max(1,w);cameraHeight=Math.max(1,h);
         sourceEpoch.incrementAndGet();
-        readyHybrid=null;currentHybrid=null;hybridMapsUploaded=false;lastHybridNs=0;
+        frameStats.reset();
         // Fixed landscape UI. Sensor metadata controls frame orientation, not accelerometer.
         rotation=((orient%360)+360)%360;userRotation=0;
         realtimeTimestamps=realtime;
@@ -400,6 +410,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         lastAnalysisNs=nowNs;
         // Reading only 64x36 pixels. Sampling the same Camera2 OES texture,
         // without uploading data or generating an extra camera/video stream.
+        activateProgram(fastProgram);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER,analysisFbo);
         GLES20.glViewport(0,0,SAMPLE_W,SAMPLE_H);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
@@ -495,8 +506,15 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     }
 
     private void bindHybridMaps(){
-        VideoDehazeProcessor.Result next=readyHybrid;
+        int epoch=sourceEpoch.get();
+        if(appliedEpoch!=epoch){
+            currentHybrid=null;hybridMapsUploaded=false;mapSampledNs=0;lastHybridNs=0;appliedEpoch=epoch;
+        }
+        ReadyMap ready=readyHybrid;
+        if(ready!=null&&ready.epoch!=epoch){readyHybrid=null;ready=null;}
+        VideoDehazeProcessor.Result next=ready!=null&&ready.epoch==epoch?ready.result:null;
         if(hybridShaderAvailable&&next!=null&&next!=currentHybrid){
+            mapSampledNs=ready.sampledNs;
             currentHybrid=next;
             readyHybrid=null;
             GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
@@ -523,7 +541,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     }
 
     private void scheduleHybrid(long nowNs){
-        if(!hybridShaderAvailable||!hybridTargetReady||!maxMode||forceFast||!textureHasFrame||frozen||hybridBusy.get())return;
+        if(!hybridShaderAvailable||!hybridTargetReady||!maxMode||!enhanced||forceFast||!textureHasFrame||frozen||hybridBusy.get())return;
         if(lastHybridNs>0&&nowNs-lastHybridNs<400_000_000L)return;
         lastHybridNs=nowNs;
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER,hybridTargetFbo);
@@ -556,7 +574,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
                     VideoDehazeProcessor.Result mapped=
                         VideoDehazeProcessor.process(sample,previous,flags);
                     if(epoch==sourceEpoch.get()){
-                        readyHybrid=mapped;
+                        readyHybrid=new ReadyMap(mapped,epoch,nowNs);
                         int[] stages={LabRuntime.DCP,LabRuntime.GUIDED,
                             LabRuntime.CLAHE,LabRuntime.TEMPORAL};
                         long[] times={mapped.dcpMs,mapped.guidedMs,
@@ -569,7 +587,8 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
                             else LabRuntime.live(stage,times[i],"Обробка кадру • "+mapped.computationMs+" мс загалом");
                         }
                     }
-                }catch(RuntimeException error){
+                }catch(RuntimeException|OutOfMemoryError error){
+                    if(epoch!=sourceEpoch.get())return;
                     LabRuntime.error(LabRuntime.DCP,error);
                     LabRuntime.autoDisable(LabRuntime.DCP,error.toString());
                     // A bad DCP frame must not interrupt the original video.
@@ -603,7 +622,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
             vx=x+(width-vw)/2;vy=y+(height-vh)/2;
         }
         GLES20.glViewport(vx,vy,vw,vh);
-        final boolean useHybridProgram=useFilter&&maxMode&&hybridShaderAvailable&&!forceFast;
+        final boolean useHybridProgram=useFilter&&maxMode&&hybridShaderAvailable&&!forceFast&&hybridMapsUploaded&&mapSampledNs>0&&SystemClock.elapsedRealtimeNanos()-mapSampledNs<2_000_000_000L;
         activateProgram(useHybridProgram?program:fastProgram);
         GLES20.glUniform1f(enhancedLoc,useFilter?1f:0f);
         GLES20.glUniform1f(strengthLoc,strength);
@@ -684,11 +703,12 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         // Always consume queued camera frames even while the freeze overlay is visible.
 // Otherwise SurfaceTexture's buffer queue fills and Camera2 can stall permanently
 // after the user taps "Stop-frame"; drawing is hidden by the native overlay.
+        boolean freshFrame=false;
         if(framePending.getAndSet(false)){
             try{
                 surfaceTexture.updateTexImage();
                 surfaceTexture.getTransformMatrix(stMatrix);
-                textureHasFrame=true;
+                textureHasFrame=true;freshFrame=true;
                 DeviceTest.newFrame();
             }
             catch(RuntimeException e){return;}
@@ -697,6 +717,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         if(!textureHasFrame)return;
         long started=SystemClock.elapsedRealtimeNanos();
+        frameStats.frame(started/1_000_000L,freshFrame);
         long cameraTimestamp=surfaceTexture.getTimestamp();
         activeProgram=0;
         activateProgram(program);
@@ -754,21 +775,24 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         scheduleHybrid(started);
         GLES20.glDisableVertexAttribArray(positionLoc);
         long submitted=SystemClock.elapsedRealtimeNanos();
-        framesSinceStats++;
+
         if(lastStatsNanos==0)lastStatsNanos=submitted;
         if(submitted-lastStatsNanos>=550_000_000L){
-            double fps=framesSinceStats*1_000_000_000.0/(submitted-lastStatsNanos);
+            double fps=frameStats.fps(submitted/1_000_000L);
             double submitMs=(submitted-started)/1_000_000.0;
             String age="—";
             if(realtimeTimestamps&&cameraTimestamp>0){
                 long ms=(submitted-cameraTimestamp)/1_000_000L;
                 if(ms>=0&&ms<5000)age=Long.toString(ms)+" мс";
             }
+            String map=enhanced&&maxMode&&!forceFast&&currentHybrid!=null
+                ? " • карта "+currentHybrid.computationMs+" мс / вік "+Math.max(0,(submitted-mapSampledNs)/1_000_000L)+" мс" : "";
             final String stats=String.format(Locale.US,
-                "%.0f FPS  •  кадр %s  •  подача %.1f мс  •  %d×%d",
-                fps,age,submitMs,cameraWidth,cameraHeight)+(hybridShaderAvailable?"":" • GPU FAST");
+                "%.0f FPS • камера→GL %s • CPU подача %.1f мс • %d×%d",
+                fps,age,submitMs,cameraWidth,cameraHeight)+map+
+                (hybridShaderAvailable?"":" • GPU FAST");
             statsCallback.onStats(stats);
-            framesSinceStats=0;lastStatsNanos=submitted;
+            frameStats.interval(submitted/1_000_000L);lastStatsNanos=submitted;
         }
     }
 }

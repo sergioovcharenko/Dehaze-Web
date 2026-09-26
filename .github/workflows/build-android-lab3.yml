@@ -1,7 +1,7 @@
-name: Meti LAB 4 AUTO APK
+name: Meti LAB 4 LIVE correction
 on:
   push:
-    branches: [feat/lab4-auto]
+    branches: [fix/lab4-live-ui]
     paths: ['android-lab3/**', 'tools/lab3/**', '.github/workflows/build-android-lab3.yml']
   workflow_dispatch:
 permissions:
@@ -49,7 +49,7 @@ jobs:
           tool=$(find "$sdk/build-tools" -name aapt -type f | sort -V | tail -1)
           signer="$(dirname "$tool")/apksigner"
           "$tool" dump badging "$apk" > /tmp/lab3-package.txt
-          grep "name='ua.meti.tuman.lab4.auto'" /tmp/lab3-package.txt
+          grep "name='ua.meti.tuman.lab4.live'" /tmp/lab3-package.txt
           if "$tool" dump permissions "$apk" | grep -q android.permission.INTERNET; then exit 1; fi
           "$signer" verify --verbose "$apk"
           python - <<'PY'
@@ -63,16 +63,16 @@ jobs:
               assert 'lib/arm64-v8a/libonnxruntime.so' in z.namelist()
           PY
           mkdir -p lab3-delivery
-          cp "$apk" lab3-delivery/Meti-Tuman-LAB4-AUTO.apk
+          cp "$apk" lab3-delivery/Meti-Tuman-LAB4-LIVE.apk
           cp android-lab3/engine/src/main/assets/dehazeformer-t-outdoor-256.json lab3-delivery/model-provenance.json
-          cp docs/LAB4-QUICKSTART.md lab3-delivery/
+          cp docs/LAB4-LIVE-QUICKSTART.txt lab3-delivery/
           cp android-lab3/engine/build/outputs/aar/engine-release.aar lab3-delivery/Meti-AntiFog-Engine.aar
           cp docs/ANTIFOG-INTEGRATION.md lab3-delivery/
           python tools/lab3/package_source.py lab3-delivery/Meti-AntiFog-Code.zip
-          sha256sum lab3-delivery/Meti-Tuman-LAB4-AUTO.apk > lab3-delivery/SHA256.txt
+          sha256sum lab3-delivery/Meti-Tuman-LAB4-LIVE.apk > lab3-delivery/SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: Meti-Tuman-LAB4-AUTO
+          name: Meti-Tuman-LAB4-LIVE
           path: lab3-delivery/
           retention-days: 90
       - name: Enable KVM for emulator
@@ -82,11 +82,16 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 29
+          api-level: 35
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          script: gradle -p android-lab3 -PlabTestAbi=x86_64 --no-daemon connectedDebugAndroidTest
+          script: |
+            adb shell wm size 1200x1920
+            adb shell wm density 240
+            gradle -p android-lab3 -PlabTestAbi=x86_64 --no-daemon connectedDebugAndroidTest
+            mkdir -p live-screenshots
+            adb pull /sdcard/Android/data/ua.meti.tuman.lab4.live/files/live-screenshots/ live-screenshots/
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -94,3 +99,4 @@ jobs:
           path: |
             android-lab3/app/build/reports/
             android-lab3/app/build/outputs/androidTest-results/
+            live-screenshots/

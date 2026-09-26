@@ -70,11 +70,11 @@ public final class Lab3Activity extends Activity {
     }};
 
     @Override public void onCreate(Bundle state){
-        super.onCreate(state);getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        super.onCreate(state);getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         processor=new Lab3Processor(this);frameProcessor=processor::process;LabRuntime.init(this);
         cameraThread=new HandlerThread("lab3-camera");cameraThread.start();cameraHandler=new Handler(cameraThread.getLooper());
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(8),dp(6),dp(8),dp(6));root.setBackgroundColor(Color.rgb(28,32,37));
-        TextView title=label("МЕТІ ТУМАН LAB 4 AUTO",18);root.addView(title);
+        TextView title=label("LAB 4 • ПОРІВНЯННЯ 5 РЕЖИМІВ",18);root.addView(title);
         LinearLayout sources=row(root);
         button(sources,"Фото",()->pick(10,"image/*"));button(sources,"Відеофайл",()->pick(11,"video/*"));
         button(sources,"Камера",this::selectCamera);button(sources,"▶ / Ⅱ",()->{if(player!=null&&prepared){userPaused=!userPaused;if(userPaused)player.pause();else player.start();}});
