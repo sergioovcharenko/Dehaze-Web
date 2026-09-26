@@ -22,6 +22,7 @@ public final class Lab3Activity extends Activity {
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private final FrameGate gate=new FrameGate();
     private Lab3Processor processor;
+    private AutoProcessing.Processor frameProcessor;
     private static final int COUNT=Lab3Processor.NAMES.length, AUTO=COUNT;
     private static final String[] CHOICES={Lab3Processor.NAMES[0],Lab3Processor.NAMES[1],Lab3Processor.NAMES[2],Lab3Processor.NAMES[3],Lab3Processor.NAMES[4],"AUTO · самостійний вибір"};
     private final AutoPolicy autoPolicy=new AutoPolicy(COUNT);
@@ -70,7 +71,7 @@ public final class Lab3Activity extends Activity {
 
     @Override public void onCreate(Bundle state){
         super.onCreate(state);getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        processor=new Lab3Processor(this);LabRuntime.init(this);
+        processor=new Lab3Processor(this);frameProcessor=processor::process;LabRuntime.init(this);
         cameraThread=new HandlerThread("lab3-camera");cameraThread.start();cameraHandler=new Handler(cameraThread.getLooper());
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(8),dp(6),dp(8),dp(6));root.setBackgroundColor(Color.rgb(28,32,37));
         TextView title=label("МЕТІ ТУМАН LAB 4 AUTO",18);root.addView(title);
@@ -182,10 +183,17 @@ public final class Lab3Activity extends Activity {
         final int current=autoPolicy.current();final boolean[] allowed=new boolean[COUNT];for(int k=0;k<COUNT;k++)allowed[k]=autoPolicy.allowed(k,captured);
         if(isPhoto||all)note(automatic?"AUTO порівнює результати…":"Обробка…");
         worker.execute(()->{
-            Lab3Processor.Pair[] pairs=new Lab3Processor.Pair[COUNT];AutoProcessing.Batch batch=null;String failure=null;
+            Lab3Processor.Pair[] pairs=new Lab3Processor.Pair[COUNT];AutoProcessing.Batch batch=null;String failure=null;StringBuilder candidateFailures=new StringBuilder();
             try{
-                if(automatic)batch=AutoProcessing.run(all?Lab3Processor.fit(snapshot,256):snapshot,useStrength,isPhoto,flags,allowed,probe?-2:current,processor::process);
-                else{Bitmap input=all?Lab3Processor.fit(snapshot,256):snapshot;if(all){for(int k=0;k<COUNT;k++){BcDehaze.checkCancel();pairs[k]=processor.process(input,k,amount,isPhoto,flags);}}else pairs[algorithm]=processor.process(input,algorithm,amount,isPhoto,flags);}
+                if(automatic)batch=AutoProcessing.run(all?Lab3Processor.fit(snapshot,256):snapshot,useStrength,isPhoto,flags,allowed,probe?-2:current,frameProcessor);
+                else{
+                    Bitmap input=all?Lab3Processor.fit(snapshot,256):snapshot;
+                    if(all){for(int k=0;k<COUNT;k++){
+                        try{BcDehaze.checkCancel();pairs[k]=frameProcessor.process(input,k,amount,isPhoto,flags);}
+                        catch(CancellationException e){throw e;}
+                        catch(Exception|LinkageError|OutOfMemoryError e){candidateFailures.append(algorithmName(k)).append(": ").append(e).append("\n");}
+                    }}else pairs[algorithm]=frameProcessor.process(input,algorithm,amount,isPhoto,flags);
+                }
             }catch(Exception|LinkageError|OutOfMemoryError e){failure=e.toString();}
             final String error=failure;final AutoProcessing.Batch result=batch;
             ui.post(()->{
@@ -200,9 +208,9 @@ public final class Lab3Activity extends Activity {
                     note("AUTO → "+algorithmName(displayed.algorithm)+" • сила "+Math.round(autoStrength*100)+"% • цикл "+result.totalMs+" мс\n"+(all?"Порівняння зафіксовано. «Обробити кадр» відновить AUTO.":"Оцінка якості автоматична; нижче — знімок, не поточний live-кадр."));
                     log.addLast(result.report());
                 }else{
-                    cached=pairs;Lab3Processor.Pair pair=pairs[algorithm];if(pair==null)pair=pairs[0];showPair(pair);
+                    cached=pairs;Lab3Processor.Pair pair=pairs[algorithm];if(pair==null){for(Lab3Processor.Pair p:pairs)if(p!=null){pair=p;break;}}if(pair==null)pair=new Lab3Processor.Pair(snapshot,snapshot,"All candidates failed; original",0,-1);showPair(pair);
                     for(Lab3Processor.Pair p:pairs)if(p!=null)log.addLast(p.report);
-                    if(all)note("Порівняння готове: усі 5 режимів обробили один кадр до 256 px. Перемикай список.");
+                    if(all){int count=0;for(Lab3Processor.Pair p:pairs)if(p!=null)count++;if(candidateFailures.length()>0)log.addLast(candidateFailures.toString());note("Порівняння готове: "+count+"/"+COUNT+" режимів, один кадр до 256 px. Перемикай список."+(count<COUNT?" Помилки — у звіті TXT.":""));}
                 }
                 while(log.size()>200)log.removeFirst();
             });
