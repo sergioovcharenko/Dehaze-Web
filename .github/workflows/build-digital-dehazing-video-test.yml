@@ -1,0 +1,84 @@
+name: Build Digital Dehazing VIDEO TEST APK
+on:
+  push:
+    branches:
+      - feat/digital-dehazing-video-test
+    paths:
+      - 'android-digital-dehazing-test/**'
+      - '.github/workflows/build-digital-dehazing-video-test.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: digital-dehazing-video-test
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Configure Android SDK
+        run: |
+          set -euo pipefail
+          sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$sdk" >> "$GITHUB_ENV"
+          tool="$sdk/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$tool"
+          yes | "$tool" --licenses >/dev/null 2>&1 || true
+          "$tool" 'platforms;android-35' 'build-tools;35.0.0' 'platform-tools'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Unit tests
+        run: gradle -p android-digital-dehazing-test --no-daemon --stacktrace testDebugUnitTest
+      - name: Build APK
+        run: gradle -p android-digital-dehazing-test --no-daemon --stacktrace assembleDebug
+      - name: Verify APK
+        run: |
+          set -euo pipefail
+          apk=android-digital-dehazing-test/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          aapt="${ANDROID_HOME}/build-tools/35.0.0/aapt"
+          "$aapt" dump badging "$apk" | tee badging.txt
+          grep "name='ua.meti.digitaldehazing.videotest'" badging.txt
+          if "$aapt" dump permissions "$apk" | grep -q 'android.permission.INTERNET'; then
+            echo "Unexpected INTERNET permission"; exit 1
+          fi
+          if "$aapt" dump permissions "$apk" | grep -q 'android.permission.CAMERA'; then
+            echo "Unexpected CAMERA permission in recorded-video test"; exit 1
+          fi
+          unzip -t "$apk" | tail -1
+          "${ANDROID_HOME}/build-tools/35.0.0/apksigner" verify --verbose "$apk"
+          cp "$apk" Digital-Dehazing-VIDEO-TEST.apk
+          sha256sum Digital-Dehazing-VIDEO-TEST.apk | tee Digital-Dehazing-VIDEO-TEST.apk.sha256
+          ls -lh Digital-Dehazing-VIDEO-TEST.apk
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Digital-Dehazing-VIDEO-TEST
+          path: |
+            Digital-Dehazing-VIDEO-TEST.apk
+            Digital-Dehazing-VIDEO-TEST.apk.sha256
+          if-no-files-found: error
+          retention-days: 90
+      - name: Publish test release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=digital-dehazing-video-test-latest
+          notes='Standalone recorded-video tester. Digital Dehazing AUTO/ON/OFF; manual LOW/MEDIUM/HIGH; direct original-video bypass when OFF; AUTO can fall to zero on clear scenes; adaptive analysis cadence; day/night guard; panel/HUD exclusion; multi-scale edge-aware transmission refinement. This is a test build for visual comparison before any live-stream integration.'
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" Digital-Dehazing-VIDEO-TEST.apk Digital-Dehazing-VIDEO-TEST.apk.sha256 --clobber
+          else
+            gh release create "$tag" --target "$GITHUB_SHA" --title "Digital Dehazing VIDEO TEST" --notes "$notes" --prerelease Digital-Dehazing-VIDEO-TEST.apk Digital-Dehazing-VIDEO-TEST.apk.sha256
+          fi
