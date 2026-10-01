@@ -32,6 +32,8 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.view.Gravity;
 import android.view.Surface;
+import android.view.SurfaceView;
+import android.view.SurfaceHolder;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
@@ -50,6 +52,9 @@ import java.util.Locale;
 public final class MainActivity extends Activity {
     private static final int CAMERA_PERMISSION = 12;
     private GLSurfaceView glView;
+    private SurfaceView directVideoView;
+    private SurfaceHolder directHolder;
+    private boolean directSurfaceReady=false;
     private SplitRenderer renderer;
     private SurfaceTexture cameraTexture;
     private CameraManager cameraManager;
@@ -59,13 +64,14 @@ public final class MainActivity extends Activity {
     private CameraCaptureSession session;
     private Surface cameraSurface;
     private TextView statsView,diagnosticView,headerSafeButton;
+    private TextView autoModeButton,onModeButton,offModeButton,lowButton,mediumButton,highButton,panelButton;
     private boolean safeGpu=false;
     private TextView stateView;
     private TextView toggle;
     private TextView videoLabelsLeft,videoLabelsRight,zoomBadge,modeBadge;
     private FrameLayout root,drawer,videoArea;
     private boolean fillMode=true,frozen=false,drawerVisible=false;
-    private int viewMode=1;  // 0 = 50/50 wipe, 1 = two identical FILL previews, 2 = processed fullscreen
+    private int viewMode=2;  // 0 = 50/50 wipe, 1 = two identical FILL previews, 2 = processed fullscreen
     private View drawerScrim;
     private ImageView freezeOverlay;
     private TextView resumeOverlay;
@@ -73,7 +79,7 @@ public final class MainActivity extends Activity {
     private TextView drawerFreezeButton;
     private Bitmap heldFrame;
     private boolean pausedFileForFreeze=false;
-    private boolean usingFile=false;
+    private boolean usingFile=true;
     private Uri fileUri;
     private MediaPlayer mediaPlayer;
     private static final int FILE_REQUEST=20;
@@ -83,6 +89,12 @@ public final class MainActivity extends Activity {
     private boolean active, opening;
     private boolean enhanced = true;
     private boolean liveMaxMode = true;
+    private int dehazeMode=0; // 0=AUTO, 1=ON/manual, 2=OFF/direct video
+    private int manualLevel=DigitalDehazePolicy.MEDIUM;
+    private boolean panelProtection=true;
+    private String autoProfile="DAY";
+    private float autoHaze=0f;
+    private long autoCadenceMs=420;
     private TextView maxModeButton;
     private int strength = 60;
     private volatile int autoStrength = 60;
@@ -174,16 +186,16 @@ public final class MainActivity extends Activity {
         logo.setGravity(Gravity.CENTER_VERTICAL);
         logo.setPadding(dp(4),0,dp(10),0);
         bar.addView(logo);
-        TextView title=text("Меті Туман VIDEO MAX",15,INK);
+        TextView title=text("Digital Dehazing VIDEO TEST",15,INK);
         title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         bar.addView(title);
         bar.addView(new View(this),new LinearLayout.LayoutParams(0,dp(1),1f));
         statsView=text("Очікування камери",11,MUTED);
         statsView.setSingleLine(true);
         bar.addView(statsView);
-        TextView photoTop=button("Фото MAX",this::openPhotoMax);
+        TextView photoTop=button("Відкрити відео",this::pickVideo);
         photoTop.setBackgroundColor(Color.rgb(70,103,91));
-        LinearLayout.LayoutParams photoTopParams=new LinearLayout.LayoutParams(dp(109),dp(37));
+        LinearLayout.LayoutParams photoTopParams=new LinearLayout.LayoutParams(dp(132),dp(37));
         photoTopParams.leftMargin=dp(8);
         bar.addView(photoTop,photoTopParams);
         headerSafeButton=button("GPU SAFE",()->{
@@ -218,7 +230,7 @@ public final class MainActivity extends Activity {
         overlay.setGravity(Gravity.TOP);
         overlay.setPadding(dp(9),dp(9),dp(9),0);
         videoLabelsLeft=text("ОРИГІНАЛ",12,INK);
-        videoLabelsRight=text("АНТИТУМАН",12,INK);
+        videoLabelsRight=text("DIGITAL DEHAZING",12,INK);
         for(TextView v:new TextView[]{videoLabelsLeft,videoLabelsRight}){
             v.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
             v.setPadding(dp(9),dp(5),dp(9),dp(5));
@@ -260,7 +272,7 @@ public final class MainActivity extends Activity {
         renderer.setViewMode(mode);
         // Both 50/50 and full-screen sample exactly the same full-frame geometry.
         videoLabelsLeft.setVisibility(mode==2?View.GONE:View.VISIBLE);
-        videoLabelsRight.setText(mode==2?"АНТИТУМАН":"АНТИТУМАН");
+        videoLabelsRight.setText("DIGITAL DEHAZING");
         renderer.refresh();
         setDrawer(false);
         setState(mode==0?"Порівняння 50/50 без деформації":
@@ -292,31 +304,47 @@ public final class MainActivity extends Activity {
         scroll.addView(list);
         drawer.addView(scroll);
 
-        menuTitle(list,"VIDEO MAX  •  ОФЛАЙН");
-        menuItem(list,"▣  ФОТО MAX — вибрати зображення",this::openPhotoMax);
-        menuItem(list,"✕  Сховати",()->setDrawer(false));
-        toggle=button("Антитуман: ON",()->{
-            enhanced=!enhanced;renderer.setEnhanced(enhanced);
-            toggle.setText(enhanced?"Антитуман: ON":"Антитуман: OFF");
-            renderer.refresh();
-        });
-        LinearLayout.LayoutParams toggleParams=new LinearLayout.LayoutParams(-1,dp(40));
-        toggleParams.bottomMargin=dp(4);
-        list.addView(toggle,toggleParams);
-        maxModeButton=button("VIDEO MAX: УВІМКНЕНО",()->{
-            liveMaxMode=!liveMaxMode;
-            renderer.setMaxMode(liveMaxMode);
-            maxModeButton.setText(liveMaxMode?"VIDEO MAX: УВІМКНЕНО":"LIVE FAST: УВІМКНЕНО");
-            renderer.refresh();
-        });
-        LinearLayout.LayoutParams maxParams=new LinearLayout.LayoutParams(-1,dp(40));
-        maxParams.bottomMargin=dp(5);
-        list.addView(maxModeButton,maxParams);
-
-        menuTitle(list,"ДЖЕРЕЛО");
-        menuItem(list,"◉  Камера",this::useCamera);
+        menuTitle(list,"DIGITAL DEHAZING  •  VIDEO TEST");
         menuItem(list,"▣  Відкрити відео",this::pickVideo);
-        menuItem(list,"↻  Калібрування камери (+90°)",this::calibrateCamera);
+        menuItem(list,"✕  Сховати",()->setDrawer(false));
+
+        menuTitle(list,"DIGITAL DEHAZING");
+        LinearLayout modeRow=new LinearLayout(this);
+        modeRow.setOrientation(LinearLayout.HORIZONTAL);
+        autoModeButton=button("AUTO",()->setDehazeMode(0));
+        onModeButton=button("ON",()->setDehazeMode(1));
+        offModeButton=button("OFF",()->setDehazeMode(2));
+        modeRow.addView(autoModeButton,new LinearLayout.LayoutParams(0,dp(44),1));
+        LinearLayout.LayoutParams onLp=new LinearLayout.LayoutParams(0,dp(44),1);onLp.leftMargin=dp(6);
+        modeRow.addView(onModeButton,onLp);
+        LinearLayout.LayoutParams offLp=new LinearLayout.LayoutParams(0,dp(44),1);offLp.leftMargin=dp(6);
+        modeRow.addView(offModeButton,offLp);
+        list.addView(modeRow,new LinearLayout.LayoutParams(-1,dp(44)));
+
+        menuTitle(list,"DEHAZING LEVEL");
+        LinearLayout levelRow=new LinearLayout(this);
+        levelRow.setOrientation(LinearLayout.HORIZONTAL);
+        lowButton=button("LOW",()->setManualLevel(DigitalDehazePolicy.LOW));
+        mediumButton=button("MEDIUM",()->setManualLevel(DigitalDehazePolicy.MEDIUM));
+        highButton=button("HIGH",()->setManualLevel(DigitalDehazePolicy.HIGH));
+        levelRow.addView(lowButton,new LinearLayout.LayoutParams(0,dp(44),1));
+        LinearLayout.LayoutParams medLp=new LinearLayout.LayoutParams(0,dp(44),1);medLp.leftMargin=dp(6);
+        levelRow.addView(mediumButton,medLp);
+        LinearLayout.LayoutParams highLp=new LinearLayout.LayoutParams(0,dp(44),1);highLp.leftMargin=dp(6);
+        levelRow.addView(highButton,highLp);
+        list.addView(levelRow,new LinearLayout.LayoutParams(-1,dp(44)));
+        strengthLabel=text("AUTO • аналіз сцени",12,INK);
+        strengthLabel.setPadding(0,dp(7),0,dp(7));
+        list.addView(strengthLabel);
+
+        panelButton=button("Панелі: захист ON",()->{
+            panelProtection=!panelProtection;
+            renderer.setPanelProtection(panelProtection);
+            panelButton.setText(panelProtection?"Панелі: захист ON":"Панелі: захист OFF");
+        });
+        LinearLayout.LayoutParams panelLp=new LinearLayout.LayoutParams(-1,dp(42));
+        panelLp.topMargin=dp(6);list.addView(panelButton,panelLp);
+        syncDehazeButtons();
 
         menuTitle(list,"ПОРІВНЯННЯ");
         menuItem(list,"50/50  •  весь кадр",()->selectMode(0));
@@ -331,60 +359,6 @@ public final class MainActivity extends Activity {
             renderer.resetZoom();zoomBadge.setText("1.0×");renderer.refresh();setDrawer(false);
         });
 
-        menuTitle(list,"СИЛА АНТИТУМАНУ");
-        LinearLayout strengthRow=new LinearLayout(this);
-        strengthRow.setOrientation(LinearLayout.HORIZONTAL);
-        strengthRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView autoName=text("AUTO",13,ACCENT);
-        autoName.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        strengthRow.addView(autoName);
-        strengthRow.addView(new View(this),new LinearLayout.LayoutParams(0,1,1f));
-        manualCheck=new CheckBox(this);
-        manualCheck.setText("Ручний");
-        manualCheck.setTextColor(INK);
-        manualCheck.setTextSize(13);
-        manualCheck.setButtonTintList(ColorStateList.valueOf(ACCENT));
-        manualCheck.setChecked(false);
-        strengthRow.addView(manualCheck);
-        list.addView(strengthRow,new LinearLayout.LayoutParams(-1,dp(38)));
-        strengthLabel=text("AUTO • "+autoStrength+"%",13,INK);
-        list.addView(strengthLabel);
-        strengthSeek=new SeekBar(this);
-        strengthSeek.setMax(100);
-        strengthSeek.setProgress(autoStrength);
-        strengthSeek.setProgressTintList(ColorStateList.valueOf(ACCENT));
-        strengthSeek.setEnabled(false);
-        strengthSeek.setAlpha(.40f);
-        list.addView(strengthSeek,new LinearLayout.LayoutParams(-1,dp(35)));
-        manualCheck.setOnCheckedChangeListener((box,checked)->{
-            manualMode=checked;
-            renderer.setManualMode(checked);
-            strengthSeek.setEnabled(checked);
-            strengthSeek.setAlpha(checked?1f:.40f);
-            autoName.setTextColor(checked?MUTED:ACCENT);
-            if(checked){
-                strengthSeek.setProgress(strength);
-                strengthLabel.setText("РУЧНИЙ • "+strength+"%");
-                renderer.setStrength(strength/100f);
-            }else{
-                strengthSeek.setProgress(autoStrength);
-                strengthLabel.setText("AUTO • "+autoStrength+"%");
-            }
-            renderer.refresh();
-        });
-        strengthSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
-            @Override public void onProgressChanged(SeekBar bar,int value,boolean fromUser){
-                if(!manualMode)return;
-                strength=value;
-                renderer.setStrength(value/100f);
-                strengthLabel.setText("РУЧНИЙ • "+value+"%");
-                renderer.refresh();
-            }
-            @Override public void onStartTrackingTouch(SeekBar b){}
-            @Override public void onStopTrackingTouch(SeekBar b){}
-        });
-        renderer.setManualMode(false);
-
         menuTitle(list,"ДІЇ");
         menuItem(list,"▣  Знімок",this::takeSnapshot);
         drawerFreezeButton=button("Ⅱ  Стоп-кадр",this::toggleFreeze);
@@ -392,11 +366,11 @@ public final class MainActivity extends Activity {
             new LinearLayout.LayoutParams(-1,dp(44));
         freezeMenuParams.bottomMargin=dp(6);
         list.addView(drawerFreezeButton,freezeMenuParams);
-        stateView=text("Камера та відеофайли • без інтернету",10,MUTED);
+        stateView=text("Локальне відео • офлайн • AUTO за замовчуванням",10,MUTED);
         stateView.setPadding(0,dp(10),0,dp(5));
         list.addView(stateView);
 
-        FrameLayout.LayoutParams side=new FrameLayout.LayoutParams(dp(229),-1,Gravity.RIGHT);
+        FrameLayout.LayoutParams side=new FrameLayout.LayoutParams(dp(315),-1,Gravity.RIGHT);
         side.topMargin=dp(46);
         root.addView(drawer,side);
         setDrawer(false);
@@ -408,10 +382,82 @@ public final class MainActivity extends Activity {
         drawerScrim.setVisibility(show?View.VISIBLE:View.GONE);
     }
 
+    private void syncDehazeButtons(){
+        if(autoModeButton==null)return;
+        int selected=Color.rgb(45,109,89),normal=PANEL,disabled=Color.rgb(55,58,62);
+        autoModeButton.setBackgroundColor(dehazeMode==0?selected:normal);
+        onModeButton.setBackgroundColor(dehazeMode==1?selected:normal);
+        offModeButton.setBackgroundColor(dehazeMode==2?Color.rgb(126,66,58):normal);
+        boolean manual=dehazeMode==1;
+        lowButton.setBackgroundColor(manual&&manualLevel==DigitalDehazePolicy.LOW?selected:disabled);
+        mediumButton.setBackgroundColor(manual&&manualLevel==DigitalDehazePolicy.MEDIUM?selected:disabled);
+        highButton.setBackgroundColor(manual&&manualLevel==DigitalDehazePolicy.HIGH?selected:disabled);
+        lowButton.setAlpha(manual?1f:.55f);mediumButton.setAlpha(manual?1f:.55f);highButton.setAlpha(manual?1f:.55f);
+    }
+
+    private void setDehazeMode(int mode){
+        dehazeMode=Math.max(0,Math.min(2,mode));
+        if(dehazeMode==0){
+            enhanced=true;manualMode=false;
+            renderer.setEnhanced(true);renderer.setManualMode(false);
+            setState("Digital Dehazing • AUTO • DAY/NIGHT визначається автоматично");
+        }else if(dehazeMode==1){
+            enhanced=true;manualMode=true;
+            renderer.setEnhanced(true);renderer.setManualMode(true);
+            renderer.setStrength(DigitalDehazePolicy.manualStrength(manualLevel));
+            strength=manualLevel;
+            if(strengthLabel!=null)strengthLabel.setText("MANUAL • "+manualLevel+"%");
+            setState("Digital Dehazing • ON • ручний рівень "+manualLevel+"%");
+        }else{
+            enhanced=false;manualMode=true;
+            renderer.setEnhanced(false);renderer.setManualMode(true);
+            if(strengthLabel!=null)strengthLabel.setText("OFF • пряме оригінальне відео");
+            setState("Digital Dehazing • OFF • GPU dehaze bypass");
+        }
+        syncDehazeButtons();
+        routeFileOutput();
+        renderer.refresh();
+    }
+
+    private void setManualLevel(int level){
+        manualLevel=level;
+        if(dehazeMode!=1)setDehazeMode(1);
+        renderer.setStrength(DigitalDehazePolicy.manualStrength(level));
+        strength=level;
+        if(strengthLabel!=null)strengthLabel.setText("MANUAL • "+level+"%");
+        syncDehazeButtons();renderer.refresh();
+    }
+
+    private void routeFileOutput(){
+        if(!usingFile||mediaPlayer==null)return;
+        try{
+            if(!enhanced&&directSurfaceReady&&directHolder!=null&&directHolder.getSurface().isValid()){
+                mediaPlayer.setSurface(directHolder.getSurface());
+                directVideoView.setVisibility(View.VISIBLE);
+                glView.setVisibility(View.GONE);
+            }else{
+                if(cameraSurface==null&&cameraTexture!=null)cameraSurface=new Surface(cameraTexture);
+                if(cameraSurface!=null)mediaPlayer.setSurface(cameraSurface);
+                directVideoView.setVisibility(View.GONE);
+                glView.setVisibility(View.VISIBLE);
+                renderer.refresh();
+            }
+        }catch(IllegalStateException e){setState("Не вдалося перемкнути відеовихід: "+e.getMessage());}
+    }
+
     private void makeUi(){
         root=new FrameLayout(this);
         root.setBackgroundColor(BG);
         videoArea=new FrameLayout(this);
+        directVideoView=new SurfaceView(this);
+        directHolder=directVideoView.getHolder();
+        directVideoView.setVisibility(View.GONE);
+        directHolder.addCallback(new SurfaceHolder.Callback(){
+            @Override public void surfaceCreated(SurfaceHolder holder){directSurfaceReady=true;routeFileOutput();}
+            @Override public void surfaceChanged(SurfaceHolder holder,int format,int width,int height){directSurfaceReady=true;routeFileOutput();}
+            @Override public void surfaceDestroyed(SurfaceHolder holder){directSurfaceReady=false;}
+        });
+        videoArea.addView(directVideoView,new FrameLayout.LayoutParams(-1,-1));
         glView=new GLSurfaceView(this);
         glView.setEGLContextClientVersion(2);
         glView.setPreserveEGLContextOnPause(true);
@@ -419,11 +465,12 @@ public final class MainActivity extends Activity {
         renderer.setStrength(strength/100f);
         renderer.setMaxMode(true);
         renderer.setFill(true);
-        renderer.setViewMode(1);
+        renderer.setViewMode(2);
+        renderer.setPanelProtection(panelProtection);
         glView.setRenderer(renderer);
         glView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
         videoArea.addView(glView,new FrameLayout.LayoutParams(-1,-1));
-        diagnosticView=text("Очікування камери • натисни ☰ для джерела",11,Color.WHITE);
+        diagnosticView=text("Відкрий відео • Digital Dehazing AUTO",11,Color.WHITE);
         diagnosticView.setBackgroundColor(Color.argb(184,12,18,23));
         diagnosticView.setPadding(dp(8),dp(5),dp(8),dp(5));
         diagnosticView.setMaxLines(2);
@@ -440,6 +487,8 @@ public final class MainActivity extends Activity {
         freezeOverlay.setOnClickListener(v->resumeFreeze());
         videoArea.addView(freezeOverlay,new FrameLayout.LayoutParams(-1,-1));
         drawLabels();
+        videoLabelsLeft.setVisibility(View.GONE);
+        videoLabelsRight.setVisibility(View.GONE);
         resumeOverlay=button("▶  ПРОДОВЖИТИ",this::resumeFreeze);
         resumeOverlay.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         resumeOverlay.setVisibility(View.GONE);
@@ -499,8 +548,8 @@ public final class MainActivity extends Activity {
 
     private void toggleFreeze(){
         if(frozen){resumeFreeze();return;}
-        if(!active||cameraTexture==null){
-            setState("Спочатку запусти камеру або відкрий відео");
+        if(!active||fileUri==null){
+            setState("Спочатку відкрий відео");
             setDrawer(false);return;
         }
         // Do not stop camera capture or let its SurfaceTexture queue accumulate.
@@ -516,6 +565,11 @@ public final class MainActivity extends Activity {
         }
         renderer.setFrozen(true); // pauses only AUTO analysis, not input frame updates
         syncFreezeUi();
+        if(!enhanced){
+            setDrawer(false);
+            setState("Пауза • оригінальне відео • Digital Dehazing OFF");
+            return;
+        }
         setDrawer(false);
         setState("Стоп-кадр • ▶ Продовжити на екрані");
         renderer.captureNext(bitmap->runOnUiThread(()->{
@@ -600,9 +654,9 @@ public final class MainActivity extends Activity {
             mediaPlayer=new MediaPlayer();
             mediaPlayer.setDataSource(this,fileUri);
             cameraSurface=new Surface(cameraTexture);
-            mediaPlayer.setSurface(cameraSurface);
+            routeFileOutput();
             mediaPlayer.setLooping(true);
-            mediaPlayer.setOnPreparedListener(mp->{mp.start();setState("Локальне відео • працює без інтернету");});
+            mediaPlayer.setOnPreparedListener(mp->{routeFileOutput();mp.start();setState("Локальне відео • Digital Dehazing "+(dehazeMode==0?"AUTO":dehazeMode==1?"ON":"OFF"));});
             mediaPlayer.setOnErrorListener((mp,what,extra)->{
                 setState("Не вдалося відкрити відео: "+what);
                 return false;
@@ -626,6 +680,7 @@ public final class MainActivity extends Activity {
     }
 
     private void takeSnapshot(){
+        if(!enhanced){setState("Для знімка увімкни AUTO або ON");return;}
         renderer.captureNext(bitmap->new Thread(()->{
             try{
                 String name="Meti-Tuman-MAX-"+System.currentTimeMillis()+".png";
@@ -661,9 +716,16 @@ public final class MainActivity extends Activity {
     public void onAutoStrength(float value){
         autoStrength=Math.round(value*100f);
         runOnUiThread(()->{
-            if(!active||manualMode||strengthLabel==null)return;
-            strengthLabel.setText("AUTO • "+autoStrength+"%");
-            if(strengthSeek!=null)strengthSeek.setProgress(autoStrength);
+            if(!active||dehazeMode!=0||strengthLabel==null)return;
+            strengthLabel.setText("AUTO • "+autoProfile+" • "+autoStrength+"% • haze "+Math.round(autoHaze*100f)+"%");
+        });
+    }
+
+    public void onAutoProfile(boolean night,float haze,long cadenceMs){
+        autoProfile=night?"NIGHT":"DAY";autoHaze=haze;autoCadenceMs=cadenceMs;
+        runOnUiThread(()->{
+            if(dehazeMode==0&&strengthLabel!=null)
+                strengthLabel.setText("AUTO • "+autoProfile+" • "+autoStrength+"% • haze "+Math.round(autoHaze*100f)+"%");
         });
     }
 
@@ -679,9 +741,10 @@ public final class MainActivity extends Activity {
     private void onFrameStats(final String stats) {
         runOnUiThread(()->{
             if(!active)return;
-            statsView.setText(stats+" • "+(manualMode?"РУЧНИЙ "+strength:"AUTO "+autoStrength)+"%");
-            if(diagnosticView!=null)diagnosticView.setText("КАДРИ Є • "+stats+
-                (safeGpu?" • GPU FAST": " • VIDEO MAX"));
+            String mode=dehazeMode==0?"AUTO "+autoProfile+" "+autoStrength+"%":dehazeMode==1?"MANUAL "+manualLevel+"%":"OFF DIRECT";
+            statsView.setText(stats+" • "+mode);
+            if(diagnosticView!=null)diagnosticView.setText("КАДРИ Є • "+mode+" • "+stats+
+                (dehazeMode==0?" • аналіз "+autoCadenceMs+" мс":""));
         });
     }
 
@@ -694,12 +757,12 @@ public final class MainActivity extends Activity {
 
     private void onCameraTextureReady(SurfaceTexture texture) {
         cameraTexture=texture;
-        if(active){if(usingFile)startVideoFile();else maybeOpenCamera();}
+        if(active&&usingFile)startVideoFile();
     }
 
     @Override protected void onResume() {
         super.onResume();showImmersive();active=true;glView.onResume();
-        if(usingFile)startVideoFile();else maybeOpenCamera();
+        if(usingFile)startVideoFile();
     }
 
     @Override protected void onPause() {
