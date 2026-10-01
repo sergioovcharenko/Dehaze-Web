@@ -21,16 +21,30 @@ final class DigitalDehazePolicy {
         return .60f;
     }
     static Decision decide(float haze,float mean,float sceneDelta,long processingMs){
+        return decide(haze,mean,48f,0f,sceneDelta,processingMs);
+    }
+
+    static Decision decide(float haze,float mean,float saturationMean,float darkRatio,
+                           float sceneDelta,long processingMs){
         haze=clamp01(haze);
         mean=Math.max(0f,Math.min(255f,mean));
+        saturationMean=Math.max(0f,Math.min(255f,saturationMean));
+        darkRatio=clamp01(darkRatio);
+
+        // Night video can be digitally amplified and therefore have a fairly bright
+        // mean level. Detect monochrome/IR-like scenes with a large dark population,
+        // instead of relying only on average brightness.
+        boolean lowLight=mean<72f;
+        boolean monochromeNight=saturationMean<10f&&darkRatio>.12f;
+        boolean night=lowLight||monochromeNight;
+
         // Clean images should remain effectively original. No permanent 22% floor.
         float normalized=clamp01((haze-.14f)/.56f);
         float target=normalized*.90f;
-        boolean night=mean<72f;
         if(night){
             target*=.62f;
             target=Math.min(target,.55f);
-            if(mean<38f)target=Math.min(target,.38f);
+            if(mean<38f||darkRatio>.32f)target=Math.min(target,.38f);
         }
         if(haze<.14f)target=0f;
         long interval;
