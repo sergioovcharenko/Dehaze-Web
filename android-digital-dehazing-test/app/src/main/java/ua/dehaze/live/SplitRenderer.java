@@ -214,7 +214,13 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     void captureNext(CaptureCallback c){capture=c;}
     void refresh(){view.requestRender();}
     void setStrength(float value){strength=Math.max(0f,Math.min(1f,value));}
-    void setManualMode(boolean value){manualMode=value;lastAnalysisNs=0;}
+    void setManualMode(boolean value){
+        manualMode=value;
+        lastAnalysisNs=0;
+        // Re-evaluate the already loaded frame when AUTO is selected while paused.
+        // This does not re-upload the video frame to the GPU.
+        if(!value)lastAnalysisFrameTimestampNs=-2;
+    }
     boolean isManualMode(){return manualMode;}
     void setCameraInfo(int w,int h,int orient,boolean realtime) {
         cameraWidth=Math.max(1,w);cameraHeight=Math.max(1,h);
@@ -442,7 +448,10 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         float contrastScore=clamp01((105f-(p90-p10))/100f);
         float edgeMean=edgeSum/Math.max(1,edgeCount);
         float textureScore=clamp01((18f-edgeMean)/18f);
-        float saturationMean=saturation/count;
+        float saturationMean=saturation/Math.max(1,count);
+        int darkCount=0;
+        for(int i=0;i<=40;i++)darkCount+=hist[i];
+        float darkRatio=darkCount/(float)Math.max(1,count);
         float grayScore=clamp01((48f-saturationMean)/48f);
         float hazeProxy=contrastScore*.45f+textureScore*.35f+grayScore*.20f;
         float mean=sum/Math.max(1,count);
@@ -450,7 +459,8 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
             Math.abs(mean-previousAutoMean)/255f+Math.abs(hazeProxy-previousAutoHaze);
         long processingMs=currentHybrid==null?0:currentHybrid.computationMs;
         DigitalDehazePolicy.Decision decision=
-            DigitalDehazePolicy.decide(hazeProxy,mean,sceneDelta,processingMs);
+            DigitalDehazePolicy.decide(hazeProxy,mean,saturationMean,darkRatio,
+                sceneDelta,processingMs);
         float weight=sceneDelta>.10f?.62f:.36f;
         strength=clamp01(strength*(1f-weight)+decision.strength*weight);
         autoIntervalNs=decision.intervalNs;
