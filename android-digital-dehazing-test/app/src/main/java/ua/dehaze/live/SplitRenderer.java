@@ -190,7 +190,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     }
 
     void setEnhanced(boolean value){enhanced=value;}
-    void setPanelProtection(boolean value){panelProtection=value;view.requestRender();}
+    void setPanelProtection(boolean value){panelProtection=value;}
     void setMaxMode(boolean value){maxMode=value;}
     void setForceFast(boolean value){forceFast=value;view.requestRender();}
     void shutdown(){hybridWorker.shutdownNow();}
