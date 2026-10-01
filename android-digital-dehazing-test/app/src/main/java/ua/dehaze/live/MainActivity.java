@@ -340,6 +340,7 @@ public final class MainActivity extends Activity {
         panelButton=button("Панелі: захист ON",()->{
             panelProtection=!panelProtection;
             renderer.setPanelProtection(panelProtection);
+            renderer.refresh();
             panelButton.setText(panelProtection?"Панелі: захист ON":"Панелі: захист OFF");
         });
         LinearLayout.LayoutParams panelLp=new LinearLayout.LayoutParams(-1,dp(42));
