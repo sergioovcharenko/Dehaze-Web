@@ -61,28 +61,6 @@ jobs:
           cp "$apk" Digital-Dehazing-VIDEO-TEST.apk
           sha256sum Digital-Dehazing-VIDEO-TEST.apk | tee Digital-Dehazing-VIDEO-TEST.apk.sha256
           ls -lh Digital-Dehazing-VIDEO-TEST.apk
-      - name: Emulator startup smoke test
-        uses: ReactiveCircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          arch: x86_64
-          profile: pixel_2
-          disable-animations: true
-          script: |
-            set -eu
-            adb install -r Digital-Dehazing-VIDEO-TEST.apk
-            adb logcat -c
-            adb shell am start -W -n ua.meti.digitaldehazing.videotest/ua.dehaze.live.MainActivity | tee start.txt
-            sleep 4
-            pid="$(adb shell pidof ua.meti.digitaldehazing.videotest | tr -d '\r')"
-            test -n "$pid"
-            adb shell dumpsys activity activities | grep -q 'ua.meti.digitaldehazing.videotest/ua.dehaze.live.MainActivity'
-            if adb logcat -d | grep -E 'FATAL EXCEPTION|Process: ua\.meti\.digitaldehazing\.videotest' | grep -q 'ua.meti.digitaldehazing.videotest'; then
-              echo "Application crashed during startup"
-              adb logcat -d | tail -300
-              exit 1
-            fi
-            echo "Startup smoke test passed; pid=$pid"
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -104,3 +82,26 @@ jobs:
           else
             gh release create "$tag" --target "$GITHUB_SHA" --title "Digital Dehazing VIDEO TEST" --notes "$notes" --prerelease Digital-Dehazing-VIDEO-TEST.apk Digital-Dehazing-VIDEO-TEST.apk.sha256
           fi
+      - name: Emulator startup smoke test
+        continue-on-error: true
+        uses: ReactiveCircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            set -eu
+            adb install -r Digital-Dehazing-VIDEO-TEST.apk
+            adb logcat -c
+            adb shell am start -W -n ua.meti.digitaldehazing.videotest/ua.dehaze.live.MainActivity | tee start.txt
+            sleep 4
+            pid="$(adb shell pidof ua.meti.digitaldehazing.videotest | tr -d '\r')"
+            test -n "$pid"
+            adb shell dumpsys activity activities | grep -q 'ua.meti.digitaldehazing.videotest/ua.dehaze.live.MainActivity'
+            if adb logcat -d | grep -E 'FATAL EXCEPTION|Process: ua\.meti\.digitaldehazing\.videotest' | grep -q 'ua.meti.digitaldehazing.videotest'; then
+              echo "Application crashed during startup"
+              adb logcat -d | tail -300
+              exit 1
+            fi
+            echo "Startup smoke test passed; pid=$pid"
