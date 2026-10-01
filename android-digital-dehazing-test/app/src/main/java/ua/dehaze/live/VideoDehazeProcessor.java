@@ -89,8 +89,11 @@ final class VideoDehazeProcessor {
             for(int k=0;k<256;k++){
                 cdf+=hist[k]+(float)excess/256f;
                 float mapped=cdf/Math.max(1,count);
-                // Avoid extra contrast where the tile contains only blank sky.
-                float adjusted=k/255f+(mapped-k/255f)*(.35f+.65f*textureWeight);
+                // Night/low-light guard: local contrast must not turn sensor noise into texture.
+                float tileMean=sum/Math.max(1,count);
+                float nightGuard=clamp((.38f-tileMean)/.28f,0f,1f);
+                float claheGain=(.35f+.65f*textureWeight)*(1f-.65f*nightGuard);
+                float adjusted=k/255f+(mapped-k/255f)*claheGain;
                 int p=(row*256+k)*4;
                 byte v=(byte)byteValue(adjusted);
                 lut[p]=v;lut[p+1]=v;lut[p+2]=v;lut[p+3]=(byte)255;
@@ -135,9 +138,13 @@ final class VideoDehazeProcessor {
         float[] norm=new float[N];
         for(int i=0;i<N;i++)
             norm[i]=Math.min(red[i]/ar,Math.min(green[i]/ag,blue[i]/ab));
-        float[] minNormalized=minBox(norm,4),raw=new float[N],sq=new float[N],grayRaw=new float[N];
+        // Multi-scale DCP: the small window keeps object edges, the large window
+        // stabilizes broad haze fields such as building facades and roads.
+        float[] minSmall=minBox(norm,4),minLarge=minBox(norm,10),
+                raw=new float[N],sq=new float[N],grayRaw=new float[N];
         for(int i=0;i<N;i++){
-            raw[i]=clamp(1f-.84f*minNormalized[i],.1f,1f);
+            float depthPrior=.78f*minSmall[i]+.22f*minLarge[i];
+            raw[i]=clamp(1f-.84f*depthPrior,.1f,1f);
             sq[i]=gray[i]*gray[i];grayRaw[i]=gray[i]*raw[i];
         }
         float[] meanI=box(gray,7),meanP=box(raw,7),
@@ -164,6 +171,12 @@ final class VideoDehazeProcessor {
         for(int y=0;y<H;y++)for(int x=0;x<W;x++){
             int i=y*W+x,p=i*4;
             float trans=clamp(meanA[i]*gray[i]+meanB[i],.24f,1f);
+            // Edge/depth-aware refinement: keep a sharper transmission change at
+            // visible object boundaries instead of smoothing fog across the edge.
+            float gx=x>0?Math.abs(gray[i]-gray[i-1]):0f;
+            float gy=y>0?Math.abs(gray[i]-gray[i-W]):0f;
+            float boundary=clamp((gx+gy-.018f)/.12f,0f,1f);
+            trans=clamp(trans*(1f-.62f*boundary)+raw[i]*(.62f*boundary),.24f,1f);
             float sigma=(float)Math.sqrt(Math.max(0f,localSq[i]-localMean[i]*localMean[i]));
             float detail=clamp((sigma-.009f)/.078f,0f,1f);
             // y=H-1 is the top row of the GL texture.
@@ -179,15 +192,19 @@ final class VideoDehazeProcessor {
         }
         byte[] lut=buildClahe(gray);
         if(previous!=null&&Math.abs(mean-previous.mean)<.15f){
-            float old=.55f,next=1f-old;
+            // Temporal stability without smearing a newly appearing building/car edge.
             for(int i=0;i<map.length;i++){
-                int blended=Math.round((previous.map[i]&255)*old+(map[i]&255)*next);
+                int oldValue=previous.map[i]&255,currentValue=map[i]&255;
+                float oldWeight=Math.abs(oldValue-currentValue)>30?.15f:.50f;
+                int blended=Math.round(oldValue*oldWeight+currentValue*(1f-oldWeight));
                 map[i]=(byte)blended;
             }
             for(int i=0;i<lut.length;i+=4){
-                int blended=Math.round((previous.lut[i]&255)*old+(lut[i]&255)*next);
+                int oldValue=previous.lut[i]&255,currentValue=lut[i]&255;
+                int blended=Math.round(oldValue*.42f+currentValue*.58f);
                 lut[i]=lut[i+1]=lut[i+2]=(byte)blended;
             }
+            float old=.45f,next=1f-old;
             ar=previous.ar*old+ar*next;
             ag=previous.ag*old+ag*next;
             ab=previous.ab*old+ab*next;
