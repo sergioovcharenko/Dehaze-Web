@@ -428,6 +428,19 @@ public final class MainActivity extends Activity {
         syncDehazeButtons();renderer.refresh();
     }
 
+    private void layoutDirectSurface(int width,int height,int rotation){
+        final int rw=(rotation==90||rotation==270)?height:width;
+        final int rh=(rotation==90||rotation==270)?width:height;
+        videoArea.post(()->{
+            int aw=videoArea.getWidth(),ah=videoArea.getHeight();
+            if(aw<=0||ah<=0||rw<=0||rh<=0)return;
+            float scale=Math.min((float)aw/rw,(float)ah/rh);
+            int w=Math.max(1,Math.round(rw*scale)),h=Math.max(1,Math.round(rh*scale));
+            FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(w,h,Gravity.CENTER);
+            directVideoView.setLayoutParams(lp);
+        });
+    }
+
     private void routeFileOutput(){
         if(!usingFile||mediaPlayer==null)return;
         try{
@@ -647,6 +660,7 @@ public final class MainActivity extends Activity {
             int rotation=rawRotation==null?0:Integer.parseInt(rawRotation);
             meta.release();
             renderer.setCameraInfo(width,height,rotation,false);
+            layoutDirectSurface(width,height,rotation);
             // Media files carry their own orientation metadata; a camera-device
             // calibration must NEVER rotate an imported movie.
             renderer.setUserRotation(0);
