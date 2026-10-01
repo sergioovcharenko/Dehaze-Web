@@ -69,7 +69,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           script: |
-            set -euo pipefail
+            set -eu
             adb install -r Digital-Dehazing-VIDEO-TEST.apk
             adb logcat -c
             adb shell am start -W -n ua.meti.digitaldehazing.videotest/ua.dehaze.live.MainActivity | tee start.txt
