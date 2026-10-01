@@ -45,6 +45,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         "uniform vec3 uAir;\n" +
         "uniform vec2 uCrop;\n" +
         "uniform vec2 uPan;\n" +
+        "uniform float uPanelProtect;\n" +
         "vec2 rotateUV(vec2 uv){\n" +
         "  if(uRotation<45.0) return uv;\n" +
         "  if(uRotation<135.0) return vec2(uv.y,1.0-uv.x);\n" +
@@ -55,6 +56,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         "void main(){\n" +
         " vec3 color=grab(vUV);\n" +
         " vec2 aligned=clamp((vUV-.5)*uCrop+.5+uPan,vec2(0.001),vec2(0.999));\n" +
+        " if(uPanelProtect>.5&&(vUV.y<.11||vUV.y>.88||vUV.x>.88)){gl_FragColor=vec4(color,1.0);return;}\n" +
         " if(uEnhanced<0.5||uStrength<0.001){gl_FragColor=vec4(color,1.0);return;}\n" +
         " vec3 local=(grab(vUV+vec2(uPixel.x*2.0,0.0))+grab(vUV-vec2(uPixel.x*2.0,0.0))+\n" +
         "             grab(vUV+vec2(0.0,uPixel.y*2.0))+grab(vUV-vec2(0.0,uPixel.y*2.0)))*0.25;\n" +
@@ -64,9 +66,10 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         " float protect=1.0-.95*sky;\n" +
         " if(uHybrid>0.5){\n" +
         "  vec4 m=texture2D(uTransmission,aligned);\n" +
-        "  float transmission=max(.26,m.r);\n" +
+        "  float night=1.0-smoothstep(.12,.42,m.b);\n" +
+        "  float transmission=max(mix(.26,.40,night),m.r);\n" +
         "  float protectedSky=clamp(m.g,0.0,1.0);\n" +
-        "  float blend=clamp(uStrength*1.02*(1.0-.91*protectedSky),0.0,.96);\n" +
+        "  float blend=clamp(uStrength*1.02*(1.0-.91*protectedSky)*mix(1.0,.68,night),0.0,.96);\n" +
         "  vec3 restored=clamp((color-uAir)/transmission+uAir,0.0,1.0);\n" +
         "  vec3 dcp=mix(color,restored,blend);\n" +
         "  float lum=dot(dcp,vec3(.299,.587,.114));\n" +
@@ -79,9 +82,9 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         "  float c=texture2D(uClahe,vec2((bin+.5)/256.0,(high.y*8.0+low.x+.5)/48.0)).r;\n" +
         "  float d=texture2D(uClahe,vec2((bin+.5)/256.0,(high.y*8.0+high.x+.5)/48.0)).r;\n" +
         "  float mapped=mix(mix(a,b,factor.x),mix(c,d,factor.x),factor.y);\n" +
-        "  float delta=clamp(mapped-lum,-.18,.18)*.39*blend*(1.0-protectedSky);\n" +
+        "  float delta=clamp(mapped-lum,-.18,.18)*.39*blend*(1.0-protectedSky)*mix(1.0,.35,night);\n" +
         "  dcp=clamp(dcp+vec3(delta),0.0,1.0);\n" +
-        "  dcp=clamp(dcp+clamp(color-local,vec3(-.09),vec3(.09))*(.35*blend*m.a),0.0,1.0);\n" +
+        "  dcp=clamp(dcp+clamp(color-local,vec3(-.09),vec3(.09))*(mix(.35,.10,night)*blend*m.a),0.0,1.0);\n" +
         "  gl_FragColor=vec4(dcp,1.0);return;\n" +
         " }\n" +
         " float level=mix(uStrength,min(1.0,uStrength*1.16),uMax);\n" +
@@ -104,6 +107,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         "uniform float uMax;\n" +
         "uniform vec2 uCrop;\n" +
         "uniform vec2 uPan;\n" +
+        "uniform float uPanelProtect;\n" +
         "vec2 rotateUV(vec2 uv){\n" +
         "  if(uRotation<45.0) return uv;\n" +
         "  if(uRotation<135.0) return vec2(uv.y,1.0-uv.x);\n" +
@@ -113,6 +117,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         "vec3 grab(vec2 uv){vec2 p=clamp((uv-.5)*uCrop+.5+uPan,vec2(.001),vec2(.999));return texture2D(uCamera,(uMatrix*vec4(rotateUV(p),0.0,1.0)).xy).rgb;}\n" +
         "void main(){\n" +
         " vec3 color=grab(vUV);\n" +
+        " if(uPanelProtect>.5&&(vUV.y<.11||vUV.y>.88||vUV.x>.88)){gl_FragColor=vec4(color,1.0);return;}\n" +
         " if(uEnhanced<0.5||uStrength<0.001){gl_FragColor=vec4(color,1.0);return;}\n" +
         " vec3 local=(grab(vUV+vec2(uPixel.x*2.0,0.0))+grab(vUV-vec2(uPixel.x*2.0,0.0))+\n" +
         "             grab(vUV+vec2(0.0,uPixel.y*2.0))+grab(vUV-vec2(0.0,uPixel.y*2.0)))*0.25;\n" +
@@ -120,11 +125,12 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         " float edge=length(color-local);\n" +
         " float sky=smoothstep(.62,.84,luminance)*(1.0-smoothstep(.01,.065,edge))*smoothstep(.18,.85,vUV.y);\n" +
         " float protect=1.0-.95*sky;\n" +
-        " float level=mix(uStrength,min(1.0,uStrength*1.16),uMax);\n" +
+        " float night=1.0-smoothstep(.10,.38,luminance);\n" +
+        " float level=mix(uStrength,min(1.0,uStrength*1.16),uMax)*mix(1.0,.65,night);\n" +
         " float t=max(mix(.60,.48,uMax),1.0-level*mix(.24+.13*luminance,.32+.17*luminance,uMax));\n" +
         " vec3 corrected=clamp((color-vec3(.84))/t+vec3(.84),0.0,1.0);\n" +
         " vec3 result=mix(color,corrected,level*mix(.76,.90,uMax)*protect);\n" +
-        " result+=clamp(color-local,-.10,.10)*(mix(.34,.46,uMax)*level*protect);\n" +
+        " result+=clamp(color-local,-.10,.10)*(mix(.34,.46,uMax)*level*protect*mix(1.0,.25,night));\n" +
         " gl_FragColor=vec4(clamp(result,0.0,1.0),1.0);\n" +
         "}";
     private final MainActivity activity;
@@ -134,7 +140,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     private final FloatBuffer quad;
     private final AtomicBoolean framePending=new AtomicBoolean(false);
     private final float[] stMatrix=new float[16];
-    private volatile boolean enhanced=true,fill=true,frozen=false,maxMode=true;
+    private volatile boolean enhanced=true,fill=true,frozen=false,maxMode=true,panelProtection=true;
     // 0: full-frame 50/50 wipe (no stretching), 1: separate FIT frames, 2: processed fullscreen.
     private volatile int viewMode=0;
     private volatile float zoom=1f,panX=0f,panY=0f;
@@ -147,6 +153,9 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     private final java.nio.ByteBuffer analysisPixels=java.nio.ByteBuffer.allocateDirect(SAMPLE_W*SAMPLE_H*4);
     private long lastAnalysisNs=0;
     private long lastHybridNs=0;
+    private volatile long autoIntervalNs=420_000_000L,hybridIntervalNs=420_000_000L;
+    private long frameTimestampNs=-1,lastAnalysisFrameTimestampNs=-2,lastHybridFrameTimestampNs=-2;
+    private float previousAutoMean=-1f,previousAutoHaze=-1f;
     private boolean hybridTargetReady=false;
     private int hybridTargetTexture,hybridTargetFbo,transmissionTexture,claheTexture;
     private final java.nio.ByteBuffer hybridPixels=java.nio.ByteBuffer.allocateDirect(VideoDehazeProcessor.N*4);
@@ -163,7 +172,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     private volatile int cameraWidth=1280,cameraHeight=720,rotation=0;
     private volatile boolean realtimeTimestamps=false;
     private SurfaceTexture surfaceTexture;
-    private int textureId,program,fastProgram,activeProgram,positionLoc,matrixLoc,pixelLoc,rotationLoc,enhancedLoc,strengthLoc;
+    private int textureId,program,fastProgram,activeProgram,positionLoc,matrixLoc,pixelLoc,rotationLoc,enhancedLoc,strengthLoc,panelProtectLoc;
     private volatile boolean forceFast=false;
     private int drawErrors=0;
     private int screenWidth,screenHeight;
@@ -181,6 +190,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     }
 
     void setEnhanced(boolean value){enhanced=value;}
+    void setPanelProtection(boolean value){panelProtection=value;view.requestRender();}
     void setMaxMode(boolean value){maxMode=value;}
     void setForceFast(boolean value){forceFast=value;view.requestRender();}
     void shutdown(){hybridWorker.shutdownNow();}
@@ -279,6 +289,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
             lutSamplerLoc=GLES20.glGetUniformLocation(next,"uClahe");
             cropLoc=GLES20.glGetUniformLocation(next,"uCrop");
             panLoc=GLES20.glGetUniformLocation(next,"uPan");
+            panelProtectLoc=GLES20.glGetUniformLocation(next,"uPanelProtect");
             GLES20.glUniform1i(GLES20.glGetUniformLocation(next,"uCamera"),0);
             if(next==program&&hybridShaderAvailable){
                 GLES20.glUniform1i(mapSamplerLoc,1);
@@ -288,6 +299,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         GLES20.glUniformMatrix4fv(matrixLoc,1,false,stMatrix,0);
         GLES20.glUniform1f(rotationLoc,(float)effectiveRotation());
         GLES20.glUniform2f(pixelLoc,1f/Math.max(1,cameraWidth),1f/Math.max(1,cameraHeight));
+        if(panelProtectLoc>=0)GLES20.glUniform1f(panelProtectLoc,panelProtection?1f:0f);
         if(positionLoc>=0){
             GLES20.glEnableVertexAttribArray(positionLoc);
             quad.position(0);
@@ -313,6 +325,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         lutSamplerLoc=GLES20.glGetUniformLocation(program,"uClahe");
         cropLoc=GLES20.glGetUniformLocation(program,"uCrop");
         panLoc=GLES20.glGetUniformLocation(program,"uPan");
+        panelProtectLoc=GLES20.glGetUniformLocation(program,"uPanelProtect");
         // Distinct sampler units are mandatory even if the hybrid branch is disabled.
         // Previously all sampler uniforms initially pointed at GL_TEXTURE0,
         // mixing external OES and TEXTURE_2D samplers and blacking out preview.
@@ -374,8 +387,10 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
 
     private void updateAutomaticStrength(long nowNs){
         if(manualMode||!enhanced||frozen||!analysisReady||!textureHasFrame)return;
-        if(lastAnalysisNs!=0&&nowNs-lastAnalysisNs<1_250_000_000L)return;
+        if(frameTimestampNs==lastAnalysisFrameTimestampNs)return;
+        if(lastAnalysisNs!=0&&nowNs-lastAnalysisNs<autoIntervalNs)return;
         lastAnalysisNs=nowNs;
+        lastAnalysisFrameTimestampNs=frameTimestampNs;
         // Reading only 64x36 pixels. Sampling the same Camera2 OES texture,
         // without uploading data or generating an extra camera/video stream.
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER,analysisFbo);
@@ -393,7 +408,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER,0);
         analysisPixels.rewind();
 
-        final int count=SAMPLE_W*SAMPLE_H;
+        int count=0;
         final int[] hist=new int[256];
         final int[] previousRow=new int[SAMPLE_W];
         float sum=0f,edgeSum=0f,saturation=0f;
@@ -408,11 +423,15 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
                 int luminance=Math.min(255,Math.round(.299f*red+.587f*green+.114f*blue));
                 int min=Math.min(red,Math.min(green,blue));
                 int max=Math.max(red,Math.max(green,blue));
-                saturation+=max-min;
-                hist[luminance]++;
-                sum+=luminance;
-                if(x>0){edgeSum+=Math.abs(luminance-left);edgeCount++;}
-                if(y>0){edgeSum+=Math.abs(luminance-previousRow[x]);edgeCount++;}
+                boolean panel=panelProtection&&(y<SAMPLE_H*.11f||y>SAMPLE_H*.88f||x>SAMPLE_W*.88f);
+                if(!panel){
+                    saturation+=max-min;
+                    hist[luminance]++;
+                    sum+=luminance;
+                    count++;
+                    if(x>0){edgeSum+=Math.abs(luminance-left);edgeCount++;}
+                    if(y>0){edgeSum+=Math.abs(luminance-previousRow[x]);edgeCount++;}
+                }
                 left=luminance;previousRow[x]=luminance;
             }
         }
@@ -426,12 +445,19 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         float saturationMean=saturation/count;
         float grayScore=clamp01((48f-saturationMean)/48f);
         float hazeProxy=contrastScore*.45f+textureScore*.35f+grayScore*.20f;
-        float target=.22f+.64f*hazeProxy;
-        float mean=sum/count;
-        if(mean<65f)target=.22f+(target-.22f)*.65f;
-        // Smooth per-frame changes to avoid pulsing when the camera pans.
-        strength=clamp01(strength*.72f+target*.28f);
+        float mean=sum/Math.max(1,count);
+        float sceneDelta=previousAutoMean<0?1f:
+            Math.abs(mean-previousAutoMean)/255f+Math.abs(hazeProxy-previousAutoHaze);
+        long processingMs=currentHybrid==null?0:currentHybrid.computationMs;
+        DigitalDehazePolicy.Decision decision=
+            DigitalDehazePolicy.decide(hazeProxy,mean,sceneDelta,processingMs);
+        float weight=sceneDelta>.10f?.62f:.36f;
+        strength=clamp01(strength*(1f-weight)+decision.strength*weight);
+        autoIntervalNs=decision.intervalNs;
+        hybridIntervalNs=Math.max(220_000_000L,decision.intervalNs);
+        previousAutoMean=mean;previousAutoHaze=hazeProxy;
         activity.onAutoStrength(strength);
+        activity.onAutoProfile(decision.night,decision.haze,decision.intervalNs/1_000_000L);
     }
 
 
@@ -501,9 +527,11 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     }
 
     private void scheduleHybrid(long nowNs){
-        if(!hybridShaderAvailable||!hybridTargetReady||!maxMode||!textureHasFrame||frozen||hybridBusy.get())return;
-        if(lastHybridNs>0&&nowNs-lastHybridNs<400_000_000L)return;
+        if(!hybridShaderAvailable||!hybridTargetReady||!maxMode||!enhanced||!textureHasFrame||frozen||hybridBusy.get())return;
+        if(frameTimestampNs==lastHybridFrameTimestampNs)return;
+        if(lastHybridNs>0&&nowNs-lastHybridNs<hybridIntervalNs)return;
         lastHybridNs=nowNs;
+        lastHybridFrameTimestampNs=frameTimestampNs;
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER,hybridTargetFbo);
         GLES20.glViewport(0,0,VideoDehazeProcessor.W,VideoDehazeProcessor.H);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
@@ -531,7 +559,14 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
             hybridWorker.execute(()->{
                 try{
                     VideoDehazeProcessor.Result mapped=VideoDehazeProcessor.process(sample,previous);
-                    if(epoch==sourceEpoch.get())readyHybrid=mapped;
+                    if(epoch==sourceEpoch.get()){
+                        float delta=previous==null?1f:
+                            Math.abs(mapped.mean-previous.mean)+Math.abs(mapped.haze-previous.haze);
+                        DigitalDehazePolicy.Decision d=DigitalDehazePolicy.decide(
+                            mapped.haze,mapped.mean*255f,delta,mapped.computationMs);
+                        hybridIntervalNs=Math.max(220_000_000L,d.intervalNs);
+                        readyHybrid=mapped;
+                    }
                 }catch(RuntimeException ignored){
                     // Keep the last-good map and the ordinary fast GPU fallback.
                 }finally{hybridBusy.set(false);}
@@ -575,6 +610,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         float z=Math.max(1f,zoom);
         GLES20.glUniform2f(cropLoc,cropX/z,cropY/z);
         GLES20.glUniform2f(panLoc,panX,panY);
+        if(panelProtectLoc>=0)GLES20.glUniform1f(panelProtectLoc,panelProtection?1f:0f);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP,0,4);
     }
 
@@ -615,6 +651,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         if(!textureHasFrame)return;
         long started=SystemClock.elapsedRealtimeNanos();
         long cameraTimestamp=surfaceTexture.getTimestamp();
+        frameTimestampNs=cameraTimestamp;
         activeProgram=0;
         activateProgram(program);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
