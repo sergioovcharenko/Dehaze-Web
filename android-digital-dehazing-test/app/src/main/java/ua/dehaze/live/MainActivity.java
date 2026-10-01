@@ -479,8 +479,8 @@ public final class MainActivity extends Activity {
         renderer.setMaxMode(true);
         renderer.setFill(true);
         renderer.setViewMode(2);
-        renderer.setPanelProtection(panelProtection);
         glView.setRenderer(renderer);
+        renderer.setPanelProtection(panelProtection);
         glView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
         videoArea.addView(glView,new FrameLayout.LayoutParams(-1,-1));
         diagnosticView=text("Відкрий відео • Digital Dehazing AUTO",11,Color.WHITE);
