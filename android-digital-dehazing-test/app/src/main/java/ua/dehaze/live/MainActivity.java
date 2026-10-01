@@ -82,6 +82,12 @@ public final class MainActivity extends Activity {
     private boolean usingFile=true;
     private Uri fileUri;
     private MediaPlayer mediaPlayer;
+    private LinearLayout playerControls;
+    private TextView playerPlayPause,playerTime;
+    private SeekBar playerSeek;
+    private Handler playerUiHandler;
+    private Runnable playerProgressTask;
+    private boolean playerSeeking=false;
     private static final int FILE_REQUEST=20;
     private ScaleGestureDetector scaleDetector;
     private GestureDetector gestureDetector;
@@ -115,6 +121,7 @@ public final class MainActivity extends Activity {
         cameraThread = new HandlerThread("camera2-preview");
         cameraThread.start();
         cameraHandler = new Handler(cameraThread.getLooper());
+        playerUiHandler = new Handler(getMainLooper());
         makeUi();
     }
 
@@ -459,6 +466,121 @@ public final class MainActivity extends Activity {
         }catch(IllegalStateException e){setState("Не вдалося перемкнути відеовихід: "+e.getMessage());}
     }
 
+    private static String mediaTime(int ms){
+        int total=Math.max(0,ms)/1000;
+        int h=total/3600,m=(total%3600)/60,s=total%60;
+        return h>0?String.format(Locale.US,"%d:%02d:%02d",h,m,s):
+            String.format(Locale.US,"%02d:%02d",m,s);
+    }
+
+    private void updatePlayerUi(){
+        if(playerPlayPause==null||playerSeek==null||playerTime==null)return;
+        MediaPlayer mp=mediaPlayer;
+        if(mp==null){
+            playerPlayPause.setText("▶");
+            playerSeek.setProgress(0);
+            playerTime.setText("00:00 / 00:00");
+            return;
+        }
+        try{
+            int duration=Math.max(1,mp.getDuration());
+            int position=Math.max(0,Math.min(duration,mp.getCurrentPosition()));
+            playerSeek.setMax(duration);
+            if(!playerSeeking)playerSeek.setProgress(position);
+            playerPlayPause.setText(mp.isPlaying()?"Ⅱ":"▶");
+            playerTime.setText(mediaTime(playerSeeking?playerSeek.getProgress():position)+" / "+mediaTime(duration));
+        }catch(IllegalStateException ignored){}
+    }
+
+    private void startPlayerProgress(){
+        if(playerUiHandler==null)return;
+        if(playerProgressTask!=null)playerUiHandler.removeCallbacks(playerProgressTask);
+        playerProgressTask=new Runnable(){
+            @Override public void run(){
+                updatePlayerUi();
+                if(mediaPlayer!=null&&playerUiHandler!=null)playerUiHandler.postDelayed(this,250);
+            }
+        };
+        playerUiHandler.post(playerProgressTask);
+    }
+
+    private void togglePlayback(){
+        MediaPlayer mp=mediaPlayer;
+        if(mp==null){setState("Спочатку відкрий відео");return;}
+        try{
+            if(mp.isPlaying()){
+                mp.pause();
+                setState("Пауза • можна порівнювати AUTO / LOW / MEDIUM / HIGH / OFF");
+            }else{
+                clearFreeze();
+                mp.start();
+                setState("Відтворення відео • Digital Dehazing");
+            }
+            updatePlayerUi();
+        }catch(IllegalStateException e){setState("Плеєр ще не готовий");}
+    }
+
+    private void seekRelative(int deltaMs){
+        MediaPlayer mp=mediaPlayer;
+        if(mp==null)return;
+        try{
+            int duration=Math.max(1,mp.getDuration());
+            int next=Math.max(0,Math.min(duration,mp.getCurrentPosition()+deltaMs));
+            mp.seekTo(next);
+            if(playerSeek!=null)playerSeek.setProgress(next);
+            updatePlayerUi();
+        }catch(IllegalStateException ignored){}
+    }
+
+    private void makePlayerControls(){
+        playerControls=new LinearLayout(this);
+        playerControls.setOrientation(LinearLayout.HORIZONTAL);
+        playerControls.setGravity(Gravity.CENTER_VERTICAL);
+        playerControls.setPadding(dp(8),dp(5),dp(8),dp(5));
+        playerControls.setBackgroundColor(Color.argb(220,25,28,32));
+
+        TextView back=button("−10с",()->seekRelative(-10_000));
+        playerPlayPause=button("▶",this::togglePlayback);
+        TextView forward=button("+10с",()->seekRelative(10_000));
+        playerControls.addView(back,new LinearLayout.LayoutParams(dp(68),dp(42)));
+        LinearLayout.LayoutParams playLp=new LinearLayout.LayoutParams(dp(58),dp(42));playLp.leftMargin=dp(6);
+        playerControls.addView(playerPlayPause,playLp);
+        LinearLayout.LayoutParams fwdLp=new LinearLayout.LayoutParams(dp(68),dp(42));fwdLp.leftMargin=dp(6);
+        playerControls.addView(forward,fwdLp);
+
+        playerSeek=new SeekBar(this);
+        playerSeek.setMax(1);
+        playerSeek.setProgress(0);
+        playerSeek.setProgressTintList(ColorStateList.valueOf(ACCENT));
+        LinearLayout.LayoutParams seekLp=new LinearLayout.LayoutParams(0,dp(42),1f);
+        seekLp.leftMargin=dp(8);seekLp.rightMargin=dp(8);
+        playerControls.addView(playerSeek,seekLp);
+
+        playerTime=text("00:00 / 00:00",12,INK);
+        playerTime.setGravity(Gravity.CENTER_VERTICAL|Gravity.RIGHT);
+        playerTime.setSingleLine(true);
+        playerControls.addView(playerTime,new LinearLayout.LayoutParams(dp(126),dp(42)));
+
+        playerSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
+            @Override public void onStartTrackingTouch(SeekBar bar){playerSeeking=true;}
+            @Override public void onProgressChanged(SeekBar bar,int value,boolean fromUser){
+                if(fromUser&&playerTime!=null){
+                    int duration=mediaPlayer==null?bar.getMax():Math.max(1,bar.getMax());
+                    playerTime.setText(mediaTime(value)+" / "+mediaTime(duration));
+                }
+            }
+            @Override public void onStopTrackingTouch(SeekBar bar){
+                MediaPlayer mp=mediaPlayer;
+                if(mp!=null){
+                    try{mp.seekTo(bar.getProgress());}catch(IllegalStateException ignored){}
+                }
+                playerSeeking=false;updatePlayerUi();
+            }
+        });
+        FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(-1,dp(54),Gravity.BOTTOM);
+        videoArea.addView(playerControls,lp);
+    }
+
     private void makeUi(){
         root=new FrameLayout(this);
         root.setBackgroundColor(BG);
@@ -489,7 +611,7 @@ public final class MainActivity extends Activity {
         diagnosticView.setPadding(dp(8),dp(5),dp(8),dp(5));
         diagnosticView.setMaxLines(2);
         FrameLayout.LayoutParams diagLp=new FrameLayout.LayoutParams(-2,-2,Gravity.LEFT|Gravity.BOTTOM);
-        diagLp.leftMargin=dp(10);diagLp.bottomMargin=dp(9);
+        diagLp.leftMargin=dp(10);diagLp.bottomMargin=dp(63);
         videoArea.addView(diagnosticView,diagLp);
         // Freeze is an Android bitmap overlay, not a paused Camera2 consumer.
         // Camera frames continue to be drained behind it, so resume never
@@ -503,13 +625,14 @@ public final class MainActivity extends Activity {
         drawLabels();
         videoLabelsLeft.setVisibility(View.GONE);
         videoLabelsRight.setVisibility(View.GONE);
+        makePlayerControls();
         resumeOverlay=button("▶  ПРОДОВЖИТИ",this::resumeFreeze);
         resumeOverlay.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         resumeOverlay.setVisibility(View.GONE);
         resumeOverlay.setBackgroundColor(Color.rgb(56,98,106));
         FrameLayout.LayoutParams resumeLayout=
             new FrameLayout.LayoutParams(dp(180),dp(49),Gravity.CENTER_HORIZONTAL|Gravity.BOTTOM);
-        resumeLayout.bottomMargin=dp(56);
+        resumeLayout.bottomMargin=dp(68);
         FrameLayout.LayoutParams area=new FrameLayout.LayoutParams(-1,-1);
         area.topMargin=dp(46);
         root.addView(videoArea,area);
@@ -574,6 +697,7 @@ public final class MainActivity extends Activity {
                 if(mediaPlayer.isPlaying()){
                     mediaPlayer.pause();
                     pausedFileForFreeze=true;
+                    updatePlayerUi();
                 }
             }catch(IllegalStateException ignored){}
         }
@@ -604,7 +728,7 @@ public final class MainActivity extends Activity {
         frozen=false;
         renderer.setFrozen(false);
         if(pausedFileForFreeze&&usingFile&&mediaPlayer!=null){
-            try{mediaPlayer.start();}catch(IllegalStateException ignored){}
+            try{mediaPlayer.start();updatePlayerUi();}catch(IllegalStateException ignored){}
         }
         pausedFileForFreeze=false;
         if(freezeOverlay!=null){
@@ -671,7 +795,14 @@ public final class MainActivity extends Activity {
             cameraSurface=new Surface(cameraTexture);
             routeFileOutput();
             mediaPlayer.setLooping(true);
-            mediaPlayer.setOnPreparedListener(mp->{routeFileOutput();mp.start();setState("Локальне відео • Digital Dehazing "+(dehazeMode==0?"AUTO":dehazeMode==1?"ON":"OFF"));});
+            mediaPlayer.setOnPreparedListener(mp->{
+                routeFileOutput();
+                if(playerSeek!=null)playerSeek.setMax(Math.max(1,mp.getDuration()));
+                mp.start();
+                startPlayerProgress();
+                updatePlayerUi();
+                setState("Локальне відео • Digital Dehazing "+(dehazeMode==0?"AUTO":dehazeMode==1?"ON":"OFF"));
+            });
             mediaPlayer.setOnErrorListener((mp,what,extra)->{
                 setState("Не вдалося відкрити відео: "+what);
                 return false;
@@ -681,10 +812,13 @@ public final class MainActivity extends Activity {
     }
 
     private void stopMedia(){
+        if(playerUiHandler!=null&&playerProgressTask!=null)playerUiHandler.removeCallbacks(playerProgressTask);
+        playerProgressTask=null;
         if(mediaPlayer!=null){
             try{mediaPlayer.stop();}catch(Exception ignored){}
             mediaPlayer.release();mediaPlayer=null;
         }
+        updatePlayerUi();
         if(usingFile&&cameraSurface!=null){cameraSurface.release();cameraSurface=null;}
     }
 
