@@ -58,6 +58,7 @@ public final class MainActivity extends Activity {
     private Handler cameraHandler;
     private CameraDevice cameraDevice;
     private CameraCaptureSession session;
+    private CameraCharacteristics cameraCharacteristics;
     private Surface cameraSurface;
     private TextView statsView,diagnosticView,latencyView,headerSafeButton;
     private boolean safeGpu=false;
@@ -972,6 +973,7 @@ public final class MainActivity extends Activity {
             }
             if(chosen==null){setState("На пристрої немає доступної камери.");return;}
             CameraCharacteristics c=cameraManager.getCameraCharacteristics(chosen);
+            cameraCharacteristics=c;
             StreamConfigurationMap map=c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
             if(map==null)throw new IllegalStateException("Немає підтримуваних розмірів камери");
             Integer sensor=c.get(CameraCharacteristics.SENSOR_ORIENTATION);
@@ -1009,26 +1011,95 @@ public final class MainActivity extends Activity {
 
     private static Size pickSize(Size[] choices,int correctedRotation){
         if(choices==null||choices.length==0)return null;
-        // Prefer a camera buffer that becomes landscape AFTER the sensor's
-        // orientation correction. On some tablets the available buffers are
-        // all landscape and become portrait when rotated; in that case we
-        // crop the upright picture (FILL), rather than stretch it sideways.
         final boolean quarterTurn=((correctedRotation%180)+180)%180==90;
-        Size chosen=choices[0];
-        double best=Double.POSITIVE_INFINITY;
+        final double targetAspect=16d/9d;
+        Size best16=null,bestAny=null;
+        long best16Pixels=-1,bestAnyPixels=-1;
+        double bestAnyAspect=Double.POSITIVE_INFINITY;
+
         for(Size size:choices){
-            int w=quarterTurn?size.getHeight():size.getWidth();
-            int h=quarterTurn?size.getWidth():size.getHeight();
-            if(w<=0||h<=0)continue;
-            double ratio=(double)w/h;
-            double pixels=(double)size.getWidth()*size.getHeight();
-            double targetAspect=16d/9d;
-            double cost=Math.abs(Math.log(ratio/targetAspect))*3.0
-                +Math.abs(Math.log(pixels/(1280d*720d)))*.30
-                +(pixels>1920d*1080d?1.5:0.0);
-            if(cost<best){best=cost;chosen=size;}
+            int rw=quarterTurn?size.getHeight():size.getWidth();
+            int rh=quarterTurn?size.getWidth():size.getHeight();
+            if(rw<=0||rh<=0)continue;
+            long pixels=(long)size.getWidth()*size.getHeight();
+            // 4K is the practical ceiling for real-time GPU preview.
+            if(pixels>(long)3840*2160)continue;
+            double ratio=(double)rw/rh;
+            double aspectError=Math.abs(ratio-targetAspect)/targetAspect;
+            if(aspectError<=0.035 && pixels>best16Pixels){
+                best16=size;best16Pixels=pixels;
+            }
+            if(aspectError<bestAnyAspect-.0001 ||
+               (Math.abs(aspectError-bestAnyAspect)<.0001 && pixels>bestAnyPixels)){
+                bestAny=size;bestAnyPixels=pixels;bestAnyAspect=aspectError;
+            }
+        }
+        if(best16!=null)return best16;
+        if(bestAny!=null)return bestAny;
+
+        // If every mode is above 4K, use the smallest of those to avoid OOM.
+        Size chosen=choices[0];
+        long chosenPixels=(long)chosen.getWidth()*chosen.getHeight();
+        for(Size size:choices){
+            long pixels=(long)size.getWidth()*size.getHeight();
+            if(pixels<chosenPixels){chosen=size;chosenPixels=pixels;}
         }
         return chosen;
+    }
+
+    private static boolean hasMode(int[] modes,int wanted){
+        if(modes==null)return false;
+        for(int mode:modes)if(mode==wanted)return true;
+        return false;
+    }
+
+    private void applyMaxQuality(CaptureRequest.Builder builder){
+        if(cameraCharacteristics==null)return;
+        try{
+            builder.set(CaptureRequest.CONTROL_AF_MODE,CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO);
+            builder.set(CaptureRequest.CONTROL_AE_MODE,CaptureRequest.CONTROL_AE_MODE_ON);
+            builder.set(CaptureRequest.CONTROL_AWB_MODE,CaptureRequest.CONTROL_AWB_MODE_AUTO);
+
+            int[] edge=cameraCharacteristics.get(CameraCharacteristics.EDGE_AVAILABLE_EDGE_MODES);
+            if(hasMode(edge,CaptureRequest.EDGE_MODE_HIGH_QUALITY))
+                builder.set(CaptureRequest.EDGE_MODE,CaptureRequest.EDGE_MODE_HIGH_QUALITY);
+
+            int[] noise=cameraCharacteristics.get(CameraCharacteristics.NOISE_REDUCTION_AVAILABLE_NOISE_REDUCTION_MODES);
+            if(hasMode(noise,CaptureRequest.NOISE_REDUCTION_MODE_HIGH_QUALITY))
+                builder.set(CaptureRequest.NOISE_REDUCTION_MODE,CaptureRequest.NOISE_REDUCTION_MODE_HIGH_QUALITY);
+
+            int[] tone=cameraCharacteristics.get(CameraCharacteristics.TONEMAP_AVAILABLE_TONE_MAP_MODES);
+            if(hasMode(tone,CaptureRequest.TONEMAP_MODE_HIGH_QUALITY))
+                builder.set(CaptureRequest.TONEMAP_MODE,CaptureRequest.TONEMAP_MODE_HIGH_QUALITY);
+
+            int[] hot=cameraCharacteristics.get(CameraCharacteristics.HOT_PIXEL_AVAILABLE_HOT_PIXEL_MODES);
+            if(hasMode(hot,CaptureRequest.HOT_PIXEL_MODE_HIGH_QUALITY))
+                builder.set(CaptureRequest.HOT_PIXEL_MODE,CaptureRequest.HOT_PIXEL_MODE_HIGH_QUALITY);
+
+            int[] shade=cameraCharacteristics.get(CameraCharacteristics.SHADING_AVAILABLE_MODES);
+            if(hasMode(shade,CaptureRequest.SHADING_MODE_HIGH_QUALITY))
+                builder.set(CaptureRequest.SHADING_MODE,CaptureRequest.SHADING_MODE_HIGH_QUALITY);
+
+            int[] aberr=cameraCharacteristics.get(CameraCharacteristics.COLOR_CORRECTION_AVAILABLE_ABERRATION_MODES);
+            if(hasMode(aberr,CaptureRequest.COLOR_CORRECTION_ABERRATION_MODE_HIGH_QUALITY))
+                builder.set(CaptureRequest.COLOR_CORRECTION_ABERRATION_MODE,
+                    CaptureRequest.COLOR_CORRECTION_ABERRATION_MODE_HIGH_QUALITY);
+
+            if(Build.VERSION.SDK_INT>=28){
+                int[] distortion=cameraCharacteristics.get(CameraCharacteristics.DISTORTION_CORRECTION_AVAILABLE_MODES);
+                if(hasMode(distortion,CaptureRequest.DISTORTION_CORRECTION_MODE_HIGH_QUALITY))
+                    builder.set(CaptureRequest.DISTORTION_CORRECTION_MODE,
+                        CaptureRequest.DISTORTION_CORRECTION_MODE_HIGH_QUALITY);
+            }
+        }catch(IllegalArgumentException ignored){
+            // Vendor camera stacks can advertise a mode but reject it on PREVIEW.
+            // Keep the highest resolution stream and fall back to standard ISP settings.
+        }
+    }
+
+    private String cameraWidthText(){
+        if(renderer==null)return "—";
+        return renderer.cameraSizeLabel();
     }
 
     private void startPreview(){
@@ -1037,15 +1108,14 @@ public final class MainActivity extends Activity {
             cameraSurface=new Surface(cameraTexture);
             CaptureRequest.Builder builder=cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
             builder.addTarget(cameraSurface);
-            builder.set(CaptureRequest.CONTROL_AF_MODE,CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO);
-            builder.set(CaptureRequest.CONTROL_AE_MODE,CaptureRequest.CONTROL_AE_MODE_ON);
+            applyMaxQuality(builder);
             cameraDevice.createCaptureSession(Arrays.asList(cameraSurface),new CameraCaptureSession.StateCallback(){
                 @Override public void onConfigured(CameraCaptureSession cs){
                     if(!active||cameraDevice==null){cs.close();return;}
                     session=cs;
                     try{session.setRepeatingRequest(builder.build(),null,cameraHandler);
-                        opening=false;setState("Камера • корекція "+cameraCorrectionDegrees+
-                            "° • GPU • офлайн");
+                        opening=false;setState("Камера MAX QUALITY • "+cameraWidthText()+
+                            " • корекція "+cameraCorrectionDegrees+"° • GPU • офлайн");
                     }catch(CameraAccessException e){opening=false;setState("Помилка відеопотоку: "+e.getMessage());}
                 }
                 @Override public void onConfigureFailed(CameraCaptureSession cs){
