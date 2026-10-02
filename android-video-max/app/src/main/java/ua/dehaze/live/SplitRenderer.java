@@ -58,9 +58,9 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         " vec2 aligned=clamp((vUV-.5)*uCrop+.5+uPan,vec2(0.001),vec2(0.999));\n" +
         " if(uEnhanced<0.5||uStrength<0.001){gl_FragColor=vec4(color,1.0);return;}\n" +
         " if(uZoneProtect>0.5){\n" +
-        "  float topBar=step(.915,vUV.y);\n" +
-        "  float navHud=step(.715,vUV.x)*step(.690,vUV.y);\n" +
-        "  float telemetry=(1.0-step(.205,vUV.y))*step(.255,vUV.x)*(1.0-step(.805,vUV.x));\n" +
+        "  float topBar=step(.925,vUV.y);\n" +
+        "  float navHud=step(.735,vUV.x)*step(.705,vUV.y);\n" +
+        "  float telemetry=(1.0-step(.205,vUV.y))*step(.245,vUV.x)*(1.0-step(.820,vUV.x));\n" +
         "  if(max(topBar,max(navHud,telemetry))>0.5){gl_FragColor=vec4(color,1.0);return;}\n" +
         " }\n" +
         " vec3 local=(grab(vUV+vec2(uPixel.x*2.0,0.0))+grab(vUV-vec2(uPixel.x*2.0,0.0))+\n" +
@@ -123,9 +123,9 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         " vec3 color=grab(vUV);\n" +
         " if(uEnhanced<0.5||uStrength<0.001){gl_FragColor=vec4(color,1.0);return;}\n" +
         " if(uZoneProtect>0.5){\n" +
-        "  float topBar=step(.915,vUV.y);\n" +
-        "  float navHud=step(.715,vUV.x)*step(.690,vUV.y);\n" +
-        "  float telemetry=(1.0-step(.205,vUV.y))*step(.255,vUV.x)*(1.0-step(.805,vUV.x));\n" +
+        "  float topBar=step(.925,vUV.y);\n" +
+        "  float navHud=step(.735,vUV.x)*step(.705,vUV.y);\n" +
+        "  float telemetry=(1.0-step(.205,vUV.y))*step(.245,vUV.x)*(1.0-step(.820,vUV.x));\n" +
         "  if(max(topBar,max(navHud,telemetry))>0.5){gl_FragColor=vec4(color,1.0);return;}\n" +
         " }\n" +
         " vec3 local=(grab(vUV+vec2(uPixel.x*2.0,0.0))+grab(vUV-vec2(uPixel.x*2.0,0.0))+\n" +
@@ -614,9 +614,9 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
             int middle=screenWidth/2;
             GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
             GLES20.glScissor(0,0,middle,screenHeight);
-            drawImage(0,0,screenWidth,screenHeight,false,true);
+            drawImage(0,0,screenWidth,screenHeight,false,false);
             GLES20.glScissor(middle,0,screenWidth-middle,screenHeight);
-            drawImage(0,0,screenWidth,screenHeight,enhanced,true);
+            drawImage(0,0,screenWidth,screenHeight,enhanced,false);
             GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         }else if(mode==1){
             // Independent original and processed previews: FIT by default,
