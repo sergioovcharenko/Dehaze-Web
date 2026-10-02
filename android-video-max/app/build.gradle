@@ -7,8 +7,8 @@ android {
         applicationId 'ua.meti.tuman.videomax'
         minSdk 26
         targetSdk 35
-        versionCode 11
-        versionName '2.4.3-startup-npe-fix'
+        versionCode 12
+        versionName '2.4.4-launch-fix'
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
