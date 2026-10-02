@@ -53,6 +53,7 @@ public final class MainActivity extends Activity {
     private GLSurfaceView glView;
     private SplitRenderer renderer;
     private TextView startPlaceholder;
+    private LinearLayout startButtonsPanel;
     private SurfaceTexture cameraTexture;
     private CameraManager cameraManager;
     private HandlerThread cameraThread;
@@ -545,8 +546,8 @@ public final class MainActivity extends Activity {
 
     private void updatePlayerUi(){
         if(playerBar==null)return;
-        setPlayerVisible(usingFile);
-        if(!usingFile||mediaPlayer==null)return;
+        setPlayerVisible(usingFile&&fileUri!=null&&mediaPlayer!=null);
+        if(!usingFile||fileUri==null||mediaPlayer==null)return;
         try{
             int duration=Math.max(1,mediaPlayer.getDuration());
             int position=Math.max(0,mediaPlayer.getCurrentPosition());
@@ -647,7 +648,11 @@ public final class MainActivity extends Activity {
             renderer.setViewMode(viewMode);
             glView.setRenderer(renderer);
             glView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
-            if(startPlaceholder!=null){
+            if(startButtonsPanel!=null){
+                videoArea.removeView(startButtonsPanel);
+                startButtonsPanel=null;
+                startPlaceholder=null;
+            }else if(startPlaceholder!=null){
                 videoArea.removeView(startPlaceholder);
                 startPlaceholder=null;
             }
@@ -677,14 +682,62 @@ public final class MainActivity extends Activity {
         });
     }
 
+
+    private void buildStartPanel(){
+        startButtonsPanel=new LinearLayout(this);
+        startButtonsPanel.setOrientation(LinearLayout.VERTICAL);
+        startButtonsPanel.setGravity(Gravity.CENTER);
+        startButtonsPanel.setPadding(dp(28),dp(24),dp(28),dp(24));
+        startButtonsPanel.setBackgroundColor(Color.rgb(12,17,21));
+
+        startPlaceholder=text("Оберіть джерело",20,Color.WHITE);
+        startPlaceholder.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        startPlaceholder.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams titleLp=new LinearLayout.LayoutParams(-2,-2);
+        titleLp.bottomMargin=dp(22);
+        startButtonsPanel.addView(startPlaceholder,titleLp);
+
+        LinearLayout buttons=new LinearLayout(this);
+        buttons.setOrientation(LinearLayout.HORIZONTAL);
+        buttons.setGravity(Gravity.CENTER);
+
+        TextView max=button("КАМЕРА MAX",()->useCameraMode(true));
+        TextView safe=button("КАМЕРА SAFE",()->useCameraMode(false));
+        TextView video=button("ВІДКРИТИ ВІДЕО",this::pickVideo);
+
+        max.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        safe.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        video.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+
+        android.graphics.drawable.GradientDrawable maxBg=new android.graphics.drawable.GradientDrawable();
+        maxBg.setColor(Color.rgb(43,108,87));maxBg.setCornerRadius(dp(10));
+        maxBg.setStroke(dp(1),Color.rgb(82,145,121));max.setBackground(maxBg);
+
+        android.graphics.drawable.GradientDrawable safeBg=new android.graphics.drawable.GradientDrawable();
+        safeBg.setColor(Color.rgb(58,77,82));safeBg.setCornerRadius(dp(10));
+        safeBg.setStroke(dp(1),Color.rgb(93,116,122));safe.setBackground(safeBg);
+
+        LinearLayout.LayoutParams buttonLp=new LinearLayout.LayoutParams(dp(190),dp(58));
+        buttonLp.setMargins(dp(8),0,dp(8),0);
+        buttons.addView(max,new LinearLayout.LayoutParams(buttonLp));
+        buttons.addView(safe,new LinearLayout.LayoutParams(buttonLp));
+        buttons.addView(video,new LinearLayout.LayoutParams(buttonLp));
+
+        startButtonsPanel.addView(buttons,new LinearLayout.LayoutParams(-2,-2));
+
+        TextView hint=text("MAX — найвища доступна якість  •  SAFE — стабільний режим  •  відео — локальний файл",11,MUTED);
+        hint.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams hintLp=new LinearLayout.LayoutParams(-2,-2);
+        hintLp.topMargin=dp(16);
+        startButtonsPanel.addView(hint,hintLp);
+
+        videoArea.addView(startButtonsPanel,new FrameLayout.LayoutParams(-1,-1));
+    }
+
     private void makeUi(){
         root=new FrameLayout(this);
         root.setBackgroundColor(BG);
         videoArea=new FrameLayout(this);
-        startPlaceholder=text("Оберіть джерело:  Камера SAFE / Камера MAX / Відкрити відео",14,Color.WHITE);
-        startPlaceholder.setGravity(Gravity.CENTER);
-        startPlaceholder.setBackgroundColor(Color.rgb(12,17,21));
-        videoArea.addView(startPlaceholder,new FrameLayout.LayoutParams(-1,-1));
         diagnosticView=text("Очікування камери • натисни ☰ для джерела",11,Color.WHITE);
         diagnosticView.setBackgroundColor(Color.argb(184,12,18,23));
         diagnosticView.setPadding(dp(8),dp(5),dp(8),dp(5));
@@ -710,6 +763,8 @@ public final class MainActivity extends Activity {
         videoArea.addView(freezeOverlay,new FrameLayout.LayoutParams(-1,-1));
         drawLabels();
         buildPlayerControls();
+        setPlayerVisible(false);
+        buildStartPanel();
         resumeOverlay=button("▶  ПРОДОВЖИТИ",this::resumeFreeze);
         resumeOverlay.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         resumeOverlay.setVisibility(View.GONE);
@@ -826,6 +881,7 @@ public final class MainActivity extends Activity {
     }
 
     private void pickVideo(){
+        setPlayerVisible(false);
         ensureRenderer();
         Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.setType("video/*");intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -835,6 +891,9 @@ public final class MainActivity extends Activity {
 
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
+        if(request==FILE_REQUEST&&result!=RESULT_OK){
+            setPlayerVisible(false);
+        }
         if(request==FILE_REQUEST&&result==RESULT_OK&&data!=null&&data.getData()!=null){
             clearFreeze();
             fileUri=data.getData();
