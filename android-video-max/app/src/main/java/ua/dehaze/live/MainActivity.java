@@ -52,6 +52,7 @@ public final class MainActivity extends Activity {
     private static final int CAMERA_PERMISSION = 12;
     private GLSurfaceView glView;
     private SplitRenderer renderer;
+    private TextView startPlaceholder;
     private SurfaceTexture cameraTexture;
     private CameraManager cameraManager;
     private HandlerThread cameraThread;
@@ -140,9 +141,9 @@ public final class MainActivity extends Activity {
         getPreferences(MODE_PRIVATE).edit()
             .putInt("camera_alignment_degrees",cameraCorrectionDegrees).apply();
         renderer.setUserRotation(cameraCorrectionDegrees);
-        renderer.resetZoom();
+        if(renderer!=null)renderer.resetZoom();
         zoomBadge.setText("1.0×");
-        renderer.refresh();
+        if(renderer!=null)renderer.refresh();
         android.widget.Toast.makeText(this,
             "Корекція камери +"+cameraCorrectionDegrees+"° збережена",
             android.widget.Toast.LENGTH_SHORT).show();
@@ -203,7 +204,7 @@ public final class MainActivity extends Activity {
         bar.addView(photoTop,photoTopParams);
         headerSafeButton=button("GPU SAFE",()->{
             safeGpu=!safeGpu;
-            renderer.setForceFast(safeGpu);
+            if(renderer!=null)renderer.setForceFast(safeGpu);
             headerSafeButton.setText(safeGpu?"GPU FAST":"GPU SAFE");
             setState(safeGpu?"Увімкнено стабільний GPU FAST":"Увімкнено VIDEO MAX (перевір зображення)");
         });
@@ -272,11 +273,11 @@ public final class MainActivity extends Activity {
 
     private void selectMode(int mode){
         viewMode=mode;
-        renderer.setViewMode(mode);
+        if(renderer!=null)renderer.setViewMode(mode);
         // Both 50/50 and full-screen sample exactly the same full-frame geometry.
         videoLabelsLeft.setVisibility(mode==2?View.GONE:View.VISIBLE);
         videoLabelsRight.setText(mode==2?"АНТИТУМАН":"АНТИТУМАН");
-        renderer.refresh();
+        if(renderer!=null)renderer.refresh();
         setDrawer(false);
         setState(mode==0?"Порівняння 50/50 без деформації":
             mode==1?"Два повні кадри зі збереженням пропорцій":
@@ -293,10 +294,10 @@ public final class MainActivity extends Activity {
 
     private void setMonochrome(boolean value){
         monochrome=value;
-        renderer.setMonochrome(value);
+        if(renderer!=null)renderer.setMonochrome(value);
         if(videoLabelsLeft!=null)videoLabelsLeft.setText(value?"ОРИГІНАЛ • Ч/Б":"ОРИГІНАЛ");
         if(videoLabelsRight!=null)videoLabelsRight.setText(value?"АНТИТУМАН • Ч/Б":"АНТИТУМАН");
-        renderer.refresh();
+        if(renderer!=null)renderer.refresh();
         setState(value?"Чорно-білий режим увімкнено":"Кольоровий режим увімкнено");
     }
 
@@ -322,20 +323,20 @@ public final class MainActivity extends Activity {
             renderer.setEnhanced(true);
             renderer.setManualMode(true);
             strength=dehazePreset==2?35:(dehazePreset==3?60:85);
-            renderer.setStrength(strength/100f);
+            if(renderer!=null)renderer.setStrength(strength/100f);
             if(strengthSeek!=null)strengthSeek.setProgress(strength);
             if(strengthLabel!=null)strengthLabel.setText(
                 (dehazePreset==2?"LOW":dehazePreset==3?"MEDIUM":"HIGH")+" • "+strength+"%");
             if(toggle!=null)toggle.setText("ANTI-FOG "+(dehazePreset==2?"LOW":dehazePreset==3?"MED":"HIGH"));
             setState((dehazePreset==2?"LOW":dehazePreset==3?"MEDIUM":"HIGH")+" • "+strength+"%");
         }
-        renderer.refresh();
+        if(renderer!=null)renderer.refresh();
     }
 
     private void applySceneMode(int mode){
         sceneMode=Math.max(0,Math.min(2,mode));
-        renderer.setSceneMode(sceneMode);
-        renderer.refresh();
+        if(renderer!=null)renderer.setSceneMode(sceneMode);
+        if(renderer!=null)renderer.refresh();
         setState("SCENE • "+(sceneMode==0?"AUTO":sceneMode==1?"DAY":"NIGHT"));
     }
 
@@ -361,18 +362,18 @@ public final class MainActivity extends Activity {
         menuItem(list,"▣  ФОТО MAX — вибрати зображення",this::openPhotoMax);
         menuItem(list,"✕  Сховати",()->setDrawer(false));
         toggle=button("Антитуман: ON",()->{
-            enhanced=!enhanced;renderer.setEnhanced(enhanced);
+            enhanced=!enhanced;if(renderer!=null)renderer.setEnhanced(enhanced);
             toggle.setText(enhanced?"Антитуман: ON":"Антитуман: OFF");
-            renderer.refresh();
+            if(renderer!=null)renderer.refresh();
         });
         LinearLayout.LayoutParams toggleParams=new LinearLayout.LayoutParams(-1,dp(40));
         toggleParams.bottomMargin=dp(4);
         list.addView(toggle,toggleParams);
         maxModeButton=button("VIDEO MAX: УВІМКНЕНО",()->{
             liveMaxMode=!liveMaxMode;
-            renderer.setMaxMode(liveMaxMode);
+            if(renderer!=null)renderer.setMaxMode(liveMaxMode);
             maxModeButton.setText(liveMaxMode?"VIDEO MAX: УВІМКНЕНО":"LIVE FAST: УВІМКНЕНО");
-            renderer.refresh();
+            if(renderer!=null)renderer.refresh();
         });
         LinearLayout.LayoutParams maxParams=new LinearLayout.LayoutParams(-1,dp(40));
         maxParams.bottomMargin=dp(5);
@@ -394,7 +395,7 @@ public final class MainActivity extends Activity {
         });
         menuItem(list,"Тільки оброблене",()->selectMode(2));
         menuItem(list,"Скинути зум  •  1×",()->{
-            renderer.resetZoom();zoomBadge.setText("1.0×");renderer.refresh();setDrawer(false);
+            if(renderer!=null)renderer.resetZoom();zoomBadge.setText("1.0×");if(renderer!=null)renderer.refresh();setDrawer(false);
         });
 
         menuTitle(list,"DIGITAL DEHAZING");
@@ -440,27 +441,27 @@ public final class MainActivity extends Activity {
         list.addView(strengthSeek,new LinearLayout.LayoutParams(-1,dp(35)));
         manualCheck.setOnCheckedChangeListener((box,checked)->{
             manualMode=checked;
-            renderer.setManualMode(checked);
+            if(renderer!=null)renderer.setManualMode(checked);
             strengthSeek.setEnabled(checked);
             strengthSeek.setAlpha(checked?1f:.40f);
             autoName.setTextColor(checked?MUTED:ACCENT);
             if(checked){
                 strengthSeek.setProgress(strength);
                 strengthLabel.setText("РУЧНИЙ • "+strength+"%");
-                renderer.setStrength(strength/100f);
+                if(renderer!=null)renderer.setStrength(strength/100f);
             }else{
                 strengthSeek.setProgress(autoStrength);
                 strengthLabel.setText("AUTO • "+autoStrength+"%");
             }
-            renderer.refresh();
+            if(renderer!=null)renderer.refresh();
         });
         strengthSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
             @Override public void onProgressChanged(SeekBar bar,int value,boolean fromUser){
                 if(!manualMode)return;
                 strength=value;
-                renderer.setStrength(value/100f);
+                if(renderer!=null)renderer.setStrength(value/100f);
                 strengthLabel.setText("РУЧНИЙ • "+value+"%");
-                renderer.refresh();
+                if(renderer!=null)renderer.refresh();
             }
             @Override public void onStartTrackingTouch(SeekBar b){}
             @Override public void onStopTrackingTouch(SeekBar b){}
@@ -475,7 +476,7 @@ public final class MainActivity extends Activity {
         zoneProtectCheck.setButtonTintList(ColorStateList.valueOf(ACCENT));
         zoneProtectCheck.setChecked(true);
         zoneProtectCheck.setOnCheckedChangeListener((box,checked)->{
-            renderer.setZoneProtect(checked);
+            if(renderer!=null)renderer.setZoneProtect(checked);
             setState(checked?"Захист зон HUD увімкнено":"Захист зон HUD вимкнено");
         });
         list.addView(zoneProtectCheck,new LinearLayout.LayoutParams(-1,dp(48)));
@@ -619,22 +620,47 @@ public final class MainActivity extends Activity {
         playerUiHandler.post(playerUiTick);
     }
 
+
+    private void ensureRenderer(){
+        if(renderer!=null&&glView!=null)return;
+        try{
+            glView=new GLSurfaceView(this);
+            glView.setEGLContextClientVersion(2);
+            glView.setPreserveEGLContextOnPause(true);
+            renderer=new SplitRenderer(this,glView,this::onCameraTextureReady,this::onFrameStats);
+            if(renderer!=null)renderer.setStrength(strength/100f);
+            renderer.setMonochrome(monochrome);
+            renderer.setMaxMode(true);
+            renderer.setFill(false);
+            renderer.setViewMode(viewMode);
+            glView.setRenderer(renderer);
+            glView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
+            if(startPlaceholder!=null){
+                videoArea.removeView(startPlaceholder);
+                startPlaceholder=null;
+            }
+            videoArea.addView(glView,0,new FrameLayout.LayoutParams(-1,-1));
+            if(active)glView.onResume();
+            if(scaleDetector!=null&&gestureDetector!=null)attachVideoTouch();
+        }catch(Throwable error){
+            renderer=null;glView=null;
+            setState("GPU не запущено: "+error.getClass().getSimpleName());
+        }
+    }
+
+    private void attachVideoTouch(){
+        if(glView==null)return;
+        attachVideoTouch();
+    }
+
     private void makeUi(){
         root=new FrameLayout(this);
         root.setBackgroundColor(BG);
         videoArea=new FrameLayout(this);
-        glView=new GLSurfaceView(this);
-        glView.setEGLContextClientVersion(2);
-        glView.setPreserveEGLContextOnPause(true);
-        renderer=new SplitRenderer(this,glView,this::onCameraTextureReady,this::onFrameStats);
-        renderer.setStrength(strength/100f);
-        renderer.setMonochrome(monochrome);
-        renderer.setMaxMode(true);
-        renderer.setFill(false);
-        renderer.setViewMode(0);
-        glView.setRenderer(renderer);
-        glView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
-        videoArea.addView(glView,new FrameLayout.LayoutParams(-1,-1));
+        startPlaceholder=text("Оберіть джерело:  Камера SAFE / Камера MAX / Відкрити відео",14,Color.WHITE);
+        startPlaceholder.setGravity(Gravity.CENTER);
+        startPlaceholder.setBackgroundColor(Color.rgb(12,17,21));
+        videoArea.addView(startPlaceholder,new FrameLayout.LayoutParams(-1,-1));
         diagnosticView=text("Очікування камери • натисни ☰ для джерела",11,Color.WHITE);
         diagnosticView.setBackgroundColor(Color.argb(184,12,18,23));
         diagnosticView.setPadding(dp(8),dp(5),dp(8),dp(5));
@@ -678,17 +704,19 @@ public final class MainActivity extends Activity {
         setContentView(root);
         scaleDetector=new ScaleGestureDetector(this,new ScaleGestureDetector.SimpleOnScaleGestureListener(){
             @Override public boolean onScale(ScaleGestureDetector d){
+                if(renderer==null)return false;
                 renderer.setZoom(renderer.getZoom()*d.getScaleFactor());
                 zoomBadge.setText(String.format(Locale.US,"%.1f×",renderer.getZoom()));
-                renderer.refresh();
+                if(renderer!=null)renderer.refresh();
                 return true;
             }
         });
         gestureDetector=new GestureDetector(this,new GestureDetector.SimpleOnGestureListener(){
             @Override public boolean onDoubleTap(MotionEvent e){
+                if(renderer==null)return false;
                 renderer.setZoom(renderer.getZoom()<1.5f?2f:1f);
                 zoomBadge.setText(String.format(Locale.US,"%.1f×",renderer.getZoom()));
-                renderer.refresh();return true;
+                if(renderer!=null)renderer.refresh();return true;
             }
         });
         glView.setOnTouchListener((v,e)->{
@@ -697,7 +725,7 @@ public final class MainActivity extends Activity {
             if(e.getActionMasked()==MotionEvent.ACTION_MOVE&&e.getPointerCount()==1&&!scaleDetector.isInProgress()){
                 renderer.panBy(-(e.getX()-touchX)/Math.max(1,glView.getWidth()),
                     (e.getY()-touchY)/Math.max(1,glView.getHeight()));
-                renderer.refresh();
+                if(renderer!=null)renderer.refresh();
             }
             touchX=e.getX();touchY=e.getY();
             return true;
@@ -748,7 +776,7 @@ public final class MainActivity extends Activity {
             freezeOverlay.setVisibility(View.VISIBLE);
             if(old!=null&&old!=bitmap)old.recycle();
         }));
-        renderer.refresh();
+        if(renderer!=null)renderer.refresh();
     }
 
     private void resumeFreeze(){
@@ -766,7 +794,7 @@ public final class MainActivity extends Activity {
         syncFreezeUi();
         Bitmap old=heldFrame;heldFrame=null;
         if(old!=null)old.recycle();
-        renderer.refresh();
+        if(renderer!=null)renderer.refresh();
         setState(usingFile?"Відтворення відеофайлу":"Камера працює • LIVE");
     }
 
@@ -784,6 +812,7 @@ public final class MainActivity extends Activity {
     }
 
     private void pickVideo(){
+        ensureRenderer();
         Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.setType("video/*");intent.addCategory(Intent.CATEGORY_OPENABLE);
         startActivityForResult(intent,FILE_REQUEST);
@@ -853,6 +882,8 @@ public final class MainActivity extends Activity {
 
     private void useCameraMode(boolean maxQuality){
         clearFreeze();
+        ensureRenderer();
+        if(renderer==null||glView==null){setState("GPU не вдалося запустити");return;}
         stopMedia();usingFile=false;fileUri=null;
         cameraRequested=true;
         cameraMaxQuality=maxQuality;
@@ -862,6 +893,7 @@ public final class MainActivity extends Activity {
     }
 
     private void takeSnapshot(){
+        if(renderer==null){setState("Спочатку відкрий камеру або відео");return;}
         renderer.captureNext(bitmap->new Thread(()->{
             try{
                 String name="Meti-Tuman-MAX-"+System.currentTimeMillis()+".png";
@@ -889,7 +921,7 @@ public final class MainActivity extends Activity {
                 setState("Знімок збережено • Pictures/Dehaze");
             }catch(Exception e){setState("Помилка знімка: "+e.getMessage());}
         }).start());
-        renderer.refresh();
+        if(renderer!=null)renderer.refresh();
     }
 
     // AUTO is a local video contrast/texture estimate, not a calibrated
@@ -948,14 +980,14 @@ public final class MainActivity extends Activity {
     }
 
     @Override protected void onResume() {
-        super.onResume();showImmersive();active=true;glView.onResume();
+        super.onResume();showImmersive();active=true;if(glView!=null)glView.onResume();
         if(usingFile)startVideoFile();
         else if(cameraRequested)maybeOpenCamera();
         else setState("Готово • обери Камера MAX / Камера SAFE або Відкрити відео");
     }
 
     @Override protected void onPause() {
-        clearFreeze();active=false;stopMedia();closeCamera();glView.onPause();
+        clearFreeze();active=false;stopMedia();closeCamera();if(glView!=null)glView.onPause();
         super.onPause();
     }
 
