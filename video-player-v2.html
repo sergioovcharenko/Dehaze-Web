@@ -37,6 +37,8 @@ h2{font-size:13px;color:#c3c8cc;margin:5px 0 8px}.grid5{display:grid;grid-templa
 <button data-mode="medium">MEDIUM · 60%</button>
 <button data-mode="high">HIGH · 85%</button>
 </div>
+<h2 style="margin-top:16px">ЗОБРАЖЕННЯ</h2>
+<div class="grid3"><button id="colorMode" class="active">COLOR</button><button id="bwMode">Ч/Б</button></div>
 <h2 style="margin-top:16px">SCENE</h2>
 <div class="grid3">
 <button data-scene="auto" class="active">AUTO</button>
@@ -47,7 +49,7 @@ h2{font-size:13px;color:#c3c8cc;margin:5px 0 8px}.grid5{display:grid;grid-templa
 <h2 style="margin-top:16px">ЗАХИСТ ЗОН</h2>
 <div class="grid3"><button id="zoneProtect" class="active" style="grid-column:1/-1">ON · HUD protected</button></div>
 <div id="status" class="status">Відкрий локальний відеофайл. Обробка виконується на пристрої.</div>
-<p class="small">AUTO аналізує контраст, текстуру та насиченість кадру приблизно раз на 1.2 с. DAY трохи підсилює dehaze, NIGHT зменшує агресивність. За замовчуванням 50/50: ліва половина оригінал, права — антитуман, при цьому видно весь кадр. Захист зон залишає без фільтра верхню панель, навігоризонт/компас і нижню телеметрію. Відео не завантажується на сервер.</p>
+<p class="small">AUTO аналізує контраст, текстуру та насиченість кадру приблизно раз на 1.2 с. DAY трохи підсилює dehaze, NIGHT зменшує агресивність. За замовчуванням 50/50: ліва половина оригінал, права — антитуман, при цьому видно весь кадр. COLOR/Ч-Б перемикає обидві половини для коректного порівняння. Захист зон залишає без фільтра верхню панель, навігоризонт/компас і нижню телеметрію. Відео не завантажується на сервер.</p>
 </aside>
 </main>
 <script>
@@ -55,7 +57,7 @@ h2{font-size:13px;color:#c3c8cc;margin:5px 0 8px}.grid5{display:grid;grid-templa
 const src=document.getElementById('src'),out=document.getElementById('out'),badge=document.getElementById('badge');
 const seek=document.getElementById('seek'),play=document.getElementById('play'),statusEl=document.getElementById('status');
 const strengthEl=document.getElementById('strength'),strengthVal=document.getElementById('strengthVal');
-let mode='auto',scene='auto',strength=.60,zoneProtect=true,stream=null,url=null,gl=null,program=null,tex=null,vbo=null,rendering=false,lastAnalysis=0;
+let mode='auto',scene='auto',strength=.60,zoneProtect=true,mono=(new URLSearchParams(location.search).get('mono')==='1'),stream=null,url=null,gl=null,program=null,tex=null,vbo=null,rendering=false,lastAnalysis=0;
 const analysis=document.createElement('canvas');analysis.width=64;analysis.height=36;const actx=analysis.getContext('2d',{willReadFrequently:true});
 
 function fmt(s){if(!isFinite(s))return'00:00';s=Math.max(0,Math.round(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
@@ -70,7 +72,9 @@ function effectiveStrength(){
 function updateUI(){
  document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
  document.querySelectorAll('[data-scene]').forEach(b=>b.classList.toggle('active',b.dataset.scene===scene));
- badge.textContent=(mode==='off'?'OFF':mode.toUpperCase())+' · '+scene.toUpperCase();
+ document.getElementById('colorMode').classList.toggle('active',!mono);
+ document.getElementById('bwMode').classList.toggle('active',mono);
+ badge.textContent=(mode==='off'?'OFF':mode.toUpperCase())+' · '+scene.toUpperCase()+(mono?' · Ч/Б':'');
  strengthEl.disabled=mode!=='auto';strengthEl.value=Math.round(strength*100);strengthVal.textContent=Math.round(effectiveStrength()*100)+'%';
  if(mode==='off'){out.style.display='none';src.style.display='block';stopRender();}
  else{src.style.display='none';out.style.display='block';startRender();}
@@ -82,16 +86,17 @@ function initGL(){
  if(!gl)throw Error('WebGL недоступний');
  const vs=shader(gl.VERTEX_SHADER,'attribute vec2 p;varying vec2 uv;void main(){uv=(p+1.0)*.5;gl_Position=vec4(p,0,1);}');
  const fs=shader(gl.FRAGMENT_SHADER,`precision mediump float;
- varying vec2 uv;uniform sampler2D t;uniform vec2 px;uniform float s;uniform float z;
+ varying vec2 uv;uniform sampler2D t;uniform vec2 px;uniform float s;uniform float z;uniform float m;
+ vec3 bw(vec3 c){float y=dot(c,vec3(.299,.587,.114));return vec3(y);}
  vec3 g(vec2 q){return texture2D(t,clamp(q,vec2(.001),vec2(.999))).rgb;}
  void main(){
   vec3 c=g(uv);
-  if(uv.x<.5){gl_FragColor=vec4(c,1.);return;}
+  if(uv.x<.5){gl_FragColor=vec4(m>.5?bw(c):c,1.);return;}
   if(z>.5){
    float topBar=step(.925,uv.y);
    float navHud=step(.735,uv.x)*step(.705,uv.y);
    float telemetry=(1.0-step(.205,uv.y))*step(.245,uv.x)*(1.0-step(.820,uv.x));
-   if(max(topBar,max(navHud,telemetry))>.5){gl_FragColor=vec4(c,1.);return;}
+   if(max(topBar,max(navHud,telemetry))>.5){gl_FragColor=vec4(m>.5?bw(c):c,1.);return;}
   }
   vec3 l=(g(uv+vec2(px.x*2.,0.))+g(uv-vec2(px.x*2.,0.))+g(uv+vec2(0.,px.y*2.))+g(uv-vec2(0.,px.y*2.)))*.25;
   float y=dot(c,vec3(.299,.587,.114));float e=length(c-l);
@@ -103,7 +108,7 @@ function initGL(){
   r+=clamp(c-l,-.10,.10)*(.40*s*protect);
   float lum=dot(r,vec3(.299,.587,.114));
   r=mix(vec3(lum),r,1.+.14*s*protect);
-  gl_FragColor=vec4(clamp(r,0.,1.),1.);
+  r=clamp(r,0.,1.);if(m>.5)r=bw(r);gl_FragColor=vec4(r,1.);
  }`);
  program=gl.createProgram();gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);
  if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(program));
@@ -125,7 +130,7 @@ function frame(now){
  if(!rendering)return;
  if(src.readyState>=2&&!src.paused){
   const started=performance.now();
-  try{initGL();analyze(now);const w=src.videoWidth,h=src.videoHeight;if(w&&h){const max=1920,k=Math.min(1,max/Math.max(w,h)),cw=Math.max(2,Math.round(w*k)),ch=Math.max(2,Math.round(h*k));if(out.width!==cw||out.height!==ch){out.width=cw;out.height=ch;gl.viewport(0,0,cw,ch)}gl.useProgram(program);gl.bindTexture(gl.TEXTURE_2D,tex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,src);gl.uniform1i(gl.getUniformLocation(program,'t'),0);gl.uniform2f(gl.getUniformLocation(program,'px'),1/cw,1/ch);gl.uniform1f(gl.getUniformLocation(program,'s'),effectiveStrength());gl.uniform1f(gl.getUniformLocation(program,'z'),zoneProtect?1:0);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);document.getElementById('latency').textContent='ЗАТРИМКА ОБРОБКИ '+(performance.now()-started).toFixed(1)+' мс'}}catch(e){setStatus('Помилка обробки: '+e.message);mode='off';updateUI()}
+  try{initGL();analyze(now);const w=src.videoWidth,h=src.videoHeight;if(w&&h){const max=1920,k=Math.min(1,max/Math.max(w,h)),cw=Math.max(2,Math.round(w*k)),ch=Math.max(2,Math.round(h*k));if(out.width!==cw||out.height!==ch){out.width=cw;out.height=ch;gl.viewport(0,0,cw,ch)}gl.useProgram(program);gl.bindTexture(gl.TEXTURE_2D,tex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,src);gl.uniform1i(gl.getUniformLocation(program,'t'),0);gl.uniform2f(gl.getUniformLocation(program,'px'),1/cw,1/ch);gl.uniform1f(gl.getUniformLocation(program,'s'),effectiveStrength());gl.uniform1f(gl.getUniformLocation(program,'z'),zoneProtect?1:0);gl.uniform1f(gl.getUniformLocation(program,'m'),mono?1:0);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);document.getElementById('latency').textContent='ЗАТРИМКА ОБРОБКИ '+(performance.now()-started).toFixed(1)+' мс'}}catch(e){setStatus('Помилка обробки: '+e.message);mode='off';updateUI()}
  }
  requestAnimationFrame(frame);
 }
@@ -137,6 +142,8 @@ document.getElementById('file').onchange=e=>openFile(e.target.files[0]);
 document.getElementById('camera').onclick=openCamera;
 document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;if(mode==='low')strength=.35;if(mode==='medium')strength=.60;if(mode==='high')strength=.85;updateUI()});
 document.querySelectorAll('[data-scene]').forEach(b=>b.onclick=()=>{scene=b.dataset.scene;updateUI()});
+document.getElementById('colorMode').onclick=()=>{mono=false;updateUI();setStatus('Кольоровий режим');};
+document.getElementById('bwMode').onclick=()=>{mono=true;updateUI();setStatus('Чорно-білий режим');};
 strengthEl.oninput=()=>{strength=Number(strengthEl.value)/100;updateUI()};
 document.getElementById('zoneProtect').onclick=()=>{
  zoneProtect=!zoneProtect;
