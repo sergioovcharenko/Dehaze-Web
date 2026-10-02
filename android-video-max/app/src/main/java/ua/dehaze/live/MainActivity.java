@@ -30,6 +30,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Looper;
 import android.view.Gravity;
 import android.view.Surface;
 import android.view.View;
@@ -90,6 +91,14 @@ public final class MainActivity extends Activity {
     private CheckBox manualCheck;
     private SeekBar strengthSeek;
     private TextView strengthLabel;
+    private LinearLayout playerBar;
+    private TextView playerPlayButton,playerTimeView;
+    private SeekBar playerSeek;
+    private boolean playerUserSeeking=false;
+    private final Handler playerUiHandler=new Handler(Looper.getMainLooper());
+    private final Runnable playerUiTick=new Runnable(){
+        @Override public void run(){updatePlayerUi();playerUiHandler.postDelayed(this,250);}
+    };
     private int dehazePreset = 1; // 0 OFF, 1 AUTO, 2 LOW, 3 MEDIUM, 4 HIGH
     private int sceneMode = 0;    // 0 AUTO, 1 DAY, 2 NIGHT
     private int cameraCorrectionDegrees; // saved hardware camera alignment; never rotates the UI
@@ -439,6 +448,19 @@ public final class MainActivity extends Activity {
         });
         renderer.setManualMode(false);
 
+        menuTitle(list,"ЗАХИСТ ЗОН");
+        CheckBox zoneProtectCheck=new CheckBox(this);
+        zoneProtectCheck.setText("HUD • верхня панель • навігоризонт/компас • нижня телеметрія");
+        zoneProtectCheck.setTextColor(INK);
+        zoneProtectCheck.setTextSize(12);
+        zoneProtectCheck.setButtonTintList(ColorStateList.valueOf(ACCENT));
+        zoneProtectCheck.setChecked(true);
+        zoneProtectCheck.setOnCheckedChangeListener((box,checked)->{
+            renderer.setZoneProtect(checked);
+            setState(checked?"Захист зон HUD увімкнено":"Захист зон HUD вимкнено");
+        });
+        list.addView(zoneProtectCheck,new LinearLayout.LayoutParams(-1,dp(48)));
+
         menuTitle(list,"ДІЇ");
         menuItem(list,"▣  Знімок",this::takeSnapshot);
         drawerFreezeButton=button("Ⅱ  Стоп-кадр",this::toggleFreeze);
@@ -460,6 +482,101 @@ public final class MainActivity extends Activity {
         drawerVisible=show;
         drawer.setVisibility(show?View.VISIBLE:View.GONE);
         drawerScrim.setVisibility(show?View.VISIBLE:View.GONE);
+    }
+
+
+    private static String mediaTime(int ms){
+        int total=Math.max(0,ms/1000),minutes=total/60,seconds=total%60;
+        return String.format(Locale.US,"%02d:%02d",minutes,seconds);
+    }
+
+    private void updatePlayerUi(){
+        if(playerBar==null)return;
+        playerBar.setVisibility(usingFile?View.VISIBLE:View.GONE);
+        if(!usingFile||mediaPlayer==null)return;
+        try{
+            int duration=Math.max(1,mediaPlayer.getDuration());
+            int position=Math.max(0,mediaPlayer.getCurrentPosition());
+            if(!playerUserSeeking&&playerSeek!=null)
+                playerSeek.setProgress(Math.min(1000,Math.round(position*1000f/duration)));
+            if(playerTimeView!=null)playerTimeView.setText(mediaTime(position)+" / "+mediaTime(duration));
+            if(playerPlayButton!=null)playerPlayButton.setText(mediaPlayer.isPlaying()?"Ⅱ":"▶");
+        }catch(IllegalStateException ignored){}
+    }
+
+    private void togglePlayback(){
+        if(!usingFile||mediaPlayer==null)return;
+        try{
+            if(mediaPlayer.isPlaying()){mediaPlayer.pause();setState("Пауза");}
+            else{mediaPlayer.start();setState("Відтворення");}
+            updatePlayerUi();
+        }catch(IllegalStateException ignored){}
+    }
+
+    private void stopPlaybackAtStart(){
+        if(!usingFile||mediaPlayer==null)return;
+        try{
+            if(mediaPlayer.isPlaying())mediaPlayer.pause();
+            mediaPlayer.seekTo(0);
+            setState("Стоп • 00:00");
+            updatePlayerUi();
+        }catch(IllegalStateException ignored){}
+    }
+
+    private void seekRelative(int deltaMs){
+        if(!usingFile||mediaPlayer==null)return;
+        try{
+            int duration=Math.max(0,mediaPlayer.getDuration());
+            int next=Math.max(0,Math.min(duration,mediaPlayer.getCurrentPosition()+deltaMs));
+            mediaPlayer.seekTo(next);
+            updatePlayerUi();
+        }catch(IllegalStateException ignored){}
+    }
+
+    private void buildPlayerControls(){
+        playerBar=new LinearLayout(this);
+        playerBar.setOrientation(LinearLayout.HORIZONTAL);
+        playerBar.setGravity(Gravity.CENTER_VERTICAL);
+        playerBar.setPadding(dp(8),dp(5),dp(8),dp(5));
+        playerBar.setBackgroundColor(Color.argb(220,28,31,34));
+
+        TextView back=button("« 10с",()->seekRelative(-10000));
+        TextView stop=button("■ СТОП",this::stopPlaybackAtStart);
+        playerPlayButton=button("Ⅱ",this::togglePlayback);
+        TextView forward=button("10с »",()->seekRelative(10000));
+        for(TextView b:new TextView[]{back,stop,playerPlayButton,forward}){
+            LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(dp(72),dp(40));
+            bp.rightMargin=dp(5);playerBar.addView(b,bp);
+        }
+
+        playerSeek=new SeekBar(this);
+        playerSeek.setMax(1000);
+        LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(0,dp(40),1f);
+        playerBar.addView(playerSeek,sp);
+        playerTimeView=text("00:00 / 00:00",11,INK);
+        playerTimeView.setGravity(Gravity.CENTER_VERTICAL);
+        playerTimeView.setPadding(dp(8),0,0,0);
+        playerBar.addView(playerTimeView,new LinearLayout.LayoutParams(dp(105),dp(40)));
+        playerSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
+            @Override public void onProgressChanged(SeekBar bar,int value,boolean fromUser){}
+            @Override public void onStartTrackingTouch(SeekBar bar){playerUserSeeking=true;}
+            @Override public void onStopTrackingTouch(SeekBar bar){
+                playerUserSeeking=false;
+                if(mediaPlayer!=null){
+                    try{
+                        int duration=mediaPlayer.getDuration();
+                        mediaPlayer.seekTo(Math.round(duration*bar.getProgress()/1000f));
+                    }catch(IllegalStateException ignored){}
+                }
+                updatePlayerUi();
+            }
+        });
+        playerBar.setVisibility(View.GONE);
+        FrameLayout.LayoutParams pp=new FrameLayout.LayoutParams(-1,dp(52),Gravity.BOTTOM);
+        pp.leftMargin=dp(8);pp.rightMargin=dp(8);pp.bottomMargin=dp(8);
+        videoArea.addView(playerBar,pp);
+        playerUiHandler.removeCallbacks(playerUiTick);
+        playerUiHandler.post(playerUiTick);
     }
 
     private void makeUi(){
@@ -494,6 +611,7 @@ public final class MainActivity extends Activity {
         freezeOverlay.setOnClickListener(v->resumeFreeze());
         videoArea.addView(freezeOverlay,new FrameLayout.LayoutParams(-1,-1));
         drawLabels();
+        buildPlayerControls();
         resumeOverlay=button("▶  ПРОДОВЖИТИ",this::resumeFreeze);
         resumeOverlay.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         resumeOverlay.setVisibility(View.GONE);
@@ -655,8 +773,14 @@ public final class MainActivity extends Activity {
             mediaPlayer.setDataSource(this,fileUri);
             cameraSurface=new Surface(cameraTexture);
             mediaPlayer.setSurface(cameraSurface);
-            mediaPlayer.setLooping(true);
-            mediaPlayer.setOnPreparedListener(mp->{mp.start();setState("Локальне відео • працює без інтернету");});
+            mediaPlayer.setLooping(false);
+            mediaPlayer.setOnPreparedListener(mp->{
+                mp.start();
+                if(playerBar!=null)playerBar.setVisibility(View.VISIBLE);
+                updatePlayerUi();
+                setState("Локальне відео • працює без інтернету");
+            });
+            mediaPlayer.setOnCompletionListener(mp->{updatePlayerUi();setState("Відео завершено");});
             mediaPlayer.setOnErrorListener((mp,what,extra)->{
                 setState("Не вдалося відкрити відео: "+what);
                 return false;
@@ -671,6 +795,7 @@ public final class MainActivity extends Activity {
             mediaPlayer.release();mediaPlayer=null;
         }
         if(usingFile&&cameraSurface!=null){cameraSurface.release();cameraSurface=null;}
+        if(playerBar!=null)playerBar.setVisibility(View.GONE);
     }
 
     private void useCamera(){
