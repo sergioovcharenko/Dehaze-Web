@@ -49,7 +49,7 @@ h2{font-size:13px;color:#c3c8cc;margin:5px 0 8px}.grid5{display:grid;grid-templa
 <h2 style="margin-top:16px">ЗАХИСТ ЗОН</h2>
 <div class="grid3"><button id="zoneProtect" class="active" style="grid-column:1/-1">ON · HUD protected</button></div>
 <div id="status" class="status">Відкрий локальний відеофайл. Обробка виконується на пристрої.</div>
-<p class="small">AUTO аналізує контраст, текстуру та насиченість кадру приблизно раз на 1.2 с. DAY трохи підсилює dehaze, NIGHT зменшує агресивність. За замовчуванням 50/50: ліва половина оригінал, права — антитуман, при цьому видно весь кадр. COLOR/Ч-Б перемикає обидві половини для коректного порівняння. Захист зон залишає без фільтра верхню панель, навігоризонт/компас і нижню телеметрію. Відео не завантажується на сервер.</p>
+<p class="small">AUTO аналізує контраст, текстуру та насиченість кадру приблизно раз на 1.2 с. DAY трохи підсилює dehaze, NIGHT зменшує агресивність. За замовчуванням 50/50: ліва половина оригінал, права — антитуман, при цьому видно весь кадр. COLOR/Ч-Б перемикає обидві половини для коректного порівняння. Захист зон точно повторює розмітку QGroundControl: верхня строка, навігоризонт/компас праворуч угорі та центральний нижній блок телеметрії. Відео не завантажується на сервер.</p>
 </aside>
 </main>
 <script>
@@ -93,9 +93,9 @@ function initGL(){
   vec3 c=g(uv);
   if(uv.x<.5){gl_FragColor=vec4(m>.5?bw(c):c,1.);return;}
   if(z>.5){
-   float topBar=step(.925,uv.y);
-   float navHud=step(.735,uv.x)*step(.705,uv.y);
-   float telemetry=(1.0-step(.205,uv.y))*step(.245,uv.x)*(1.0-step(.820,uv.x));
+   float topBar=step(.927,uv.y);
+   float navHud=step(.780,uv.x)*step(.755,uv.y);
+   float telemetry=(1.0-step(.195,uv.y))*step(.300,uv.x)*(1.0-step(.700,uv.x));
    if(max(topBar,max(navHud,telemetry))>.5){gl_FragColor=vec4(m>.5?bw(c):c,1.);return;}
   }
   vec3 l=(g(uv+vec2(px.x*2.,0.))+g(uv-vec2(px.x*2.,0.))+g(uv+vec2(0.,px.y*2.))+g(uv-vec2(0.,px.y*2.)))*.25;
