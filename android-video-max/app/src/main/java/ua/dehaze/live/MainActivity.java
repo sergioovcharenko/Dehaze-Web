@@ -90,6 +90,8 @@ public final class MainActivity extends Activity {
     private CheckBox manualCheck;
     private SeekBar strengthSeek;
     private TextView strengthLabel;
+    private int dehazePreset = 1; // 0 OFF, 1 AUTO, 2 LOW, 3 MEDIUM, 4 HIGH
+    private int sceneMode = 0;    // 0 AUTO, 1 DAY, 2 NIGHT
     private int cameraCorrectionDegrees; // saved hardware camera alignment; never rotates the UI
 
     @Override public void onCreate(Bundle savedInstanceState) {
@@ -274,6 +276,46 @@ public final class MainActivity extends Activity {
         startActivity(new Intent(this,PhotoActivity.class));
     }
 
+
+    private void applyDehazePreset(int mode){
+        dehazePreset=Math.max(0,Math.min(4,mode));
+        if(dehazePreset==0){
+            enhanced=false;
+            manualMode=false;
+            renderer.setEnhanced(false);
+            renderer.setManualMode(false);
+            if(toggle!=null)toggle.setText("ANTI-FOG OFF");
+            setState("Антитуман вимкнено");
+        }else if(dehazePreset==1){
+            enhanced=true;
+            manualMode=false;
+            renderer.setEnhanced(true);
+            renderer.setManualMode(false);
+            if(toggle!=null)toggle.setText("ANTI-FOG AUTO");
+            setState("AUTO • сила визначається за кадром");
+        }else{
+            enhanced=true;
+            manualMode=true;
+            renderer.setEnhanced(true);
+            renderer.setManualMode(true);
+            strength=dehazePreset==2?35:(dehazePreset==3?60:85);
+            renderer.setStrength(strength/100f);
+            if(strengthSeek!=null)strengthSeek.setProgress(strength);
+            if(strengthLabel!=null)strengthLabel.setText(
+                (dehazePreset==2?"LOW":dehazePreset==3?"MEDIUM":"HIGH")+" • "+strength+"%");
+            if(toggle!=null)toggle.setText("ANTI-FOG "+(dehazePreset==2?"LOW":dehazePreset==3?"MED":"HIGH"));
+            setState((dehazePreset==2?"LOW":dehazePreset==3?"MEDIUM":"HIGH")+" • "+strength+"%");
+        }
+        renderer.refresh();
+    }
+
+    private void applySceneMode(int mode){
+        sceneMode=Math.max(0,Math.min(2,mode));
+        renderer.setSceneMode(sceneMode);
+        renderer.refresh();
+        setState("SCENE • "+(sceneMode==0?"AUTO":sceneMode==1?"DAY":"NIGHT"));
+    }
+
     private void makeDrawer(){
         drawerScrim=new View(this);
         drawerScrim.setBackgroundColor(Color.argb(78,0,0,0));
@@ -330,6 +372,18 @@ public final class MainActivity extends Activity {
         menuItem(list,"Скинути зум  •  1×",()->{
             renderer.resetZoom();zoomBadge.setText("1.0×");renderer.refresh();setDrawer(false);
         });
+
+        menuTitle(list,"DIGITAL DEHAZING");
+        menuItem(list,"OFF",()->applyDehazePreset(0));
+        menuItem(list,"AUTO",()->applyDehazePreset(1));
+        menuItem(list,"LOW • 35%",()->applyDehazePreset(2));
+        menuItem(list,"MEDIUM • 60%",()->applyDehazePreset(3));
+        menuItem(list,"HIGH • 85%",()->applyDehazePreset(4));
+
+        menuTitle(list,"SCENE");
+        menuItem(list,"AUTO",()->applySceneMode(0));
+        menuItem(list,"DAY",()->applySceneMode(1));
+        menuItem(list,"NIGHT",()->applySceneMode(2));
 
         menuTitle(list,"СИЛА АНТИТУМАНУ");
         LinearLayout strengthRow=new LinearLayout(this);
