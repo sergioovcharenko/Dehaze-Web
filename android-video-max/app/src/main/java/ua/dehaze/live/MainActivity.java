@@ -54,6 +54,7 @@ public final class MainActivity extends Activity {
     private SplitRenderer renderer;
     private TextView startPlaceholder;
     private LinearLayout startButtonsPanel;
+    private TextView startStatusView;
     private SurfaceTexture cameraTexture;
     private CameraManager cameraManager;
     private HandlerThread cameraThread;
@@ -648,20 +649,14 @@ public final class MainActivity extends Activity {
             renderer.setViewMode(viewMode);
             glView.setRenderer(renderer);
             glView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
-            if(startButtonsPanel!=null){
-                videoArea.removeView(startButtonsPanel);
-                startButtonsPanel=null;
-                startPlaceholder=null;
-            }else if(startPlaceholder!=null){
-                videoArea.removeView(startPlaceholder);
-                startPlaceholder=null;
-            }
             videoArea.addView(glView,0,new FrameLayout.LayoutParams(-1,-1));
             if(active)glView.onResume();
             if(scaleDetector!=null&&gestureDetector!=null)attachVideoTouch();
         }catch(Throwable error){
             renderer=null;glView=null;
-            setState("GPU не запущено: "+error.getClass().getSimpleName());
+            String message="GPU не запущено: "+error.getClass().getSimpleName();
+            setState(message);
+            setStartStatus(message);
         }
     }
 
@@ -682,6 +677,24 @@ public final class MainActivity extends Activity {
         });
     }
 
+
+
+    private void setStartStatus(String value){
+        runOnUiThread(()->{
+            if(startStatusView!=null)startStatusView.setText(value);
+        });
+    }
+
+    private void hideStartPanel(){
+        runOnUiThread(()->{
+            if(startButtonsPanel!=null){
+                videoArea.removeView(startButtonsPanel);
+                startButtonsPanel=null;
+                startPlaceholder=null;
+                startStatusView=null;
+            }
+        });
+    }
 
     private void buildStartPanel(){
         startButtonsPanel=new LinearLayout(this);
@@ -730,6 +743,12 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams hintLp=new LinearLayout.LayoutParams(-2,-2);
         hintLp.topMargin=dp(16);
         startButtonsPanel.addView(hint,hintLp);
+
+        startStatusView=text("Готово",12,ACCENT);
+        startStatusView.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams statusLp=new LinearLayout.LayoutParams(-2,-2);
+        statusLp.topMargin=dp(14);
+        startButtonsPanel.addView(startStatusView,statusLp);
 
         videoArea.addView(startButtonsPanel,new FrameLayout.LayoutParams(-1,-1));
     }
@@ -882,7 +901,7 @@ public final class MainActivity extends Activity {
 
     private void pickVideo(){
         setPlayerVisible(false);
-        ensureRenderer();
+        setStartStatus("Відкриваю вибір відео…");
         Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.setType("video/*");intent.addCategory(Intent.CATEGORY_OPENABLE);
         startActivityForResult(intent,FILE_REQUEST);
@@ -893,6 +912,7 @@ public final class MainActivity extends Activity {
         super.onActivityResult(request,result,data);
         if(request==FILE_REQUEST&&result!=RESULT_OK){
             setPlayerVisible(false);
+            setStartStatus("Вибір відео скасовано");
         }
         if(request==FILE_REQUEST&&result==RESULT_OK&&data!=null&&data.getData()!=null){
             clearFreeze();
@@ -900,6 +920,12 @@ public final class MainActivity extends Activity {
             usingFile=true;
             cameraRequested=false;
             closeCamera();
+            setStartStatus("Запуск відео…");
+            ensureRenderer();
+            if(renderer==null||glView==null){
+                setStartStatus("GPU не вдалося запустити");
+                return;
+            }
             startVideoFile();
         }
     }
@@ -927,13 +953,15 @@ public final class MainActivity extends Activity {
             mediaPlayer.setLooping(false);
             mediaPlayer.setOnPreparedListener(mp->{
                 mp.start();
+                hideStartPanel();
                 setPlayerVisible(true);
                 updatePlayerUi();
                 setState("Локальне відео • працює без інтернету");
             });
             mediaPlayer.setOnCompletionListener(mp->{updatePlayerUi();setState("Відео завершено");});
             mediaPlayer.setOnErrorListener((mp,what,extra)->{
-                setState("Не вдалося відкрити відео: "+what);
+                String msg="Не вдалося відкрити відео: "+what;
+                setState(msg);setStartStatus(msg);
                 return false;
             });
             mediaPlayer.prepareAsync();
@@ -955,12 +983,17 @@ public final class MainActivity extends Activity {
 
     private void useCameraMode(boolean maxQuality){
         clearFreeze();
-        ensureRenderer();
-        if(renderer==null||glView==null){setState("GPU не вдалося запустити");return;}
         stopMedia();usingFile=false;fileUri=null;
         cameraRequested=true;
         cameraMaxQuality=maxQuality;
         setDrawer(false);
+        setStartStatus(maxQuality?"КАМЕРА MAX • запуск GPU…":"КАМЕРА SAFE • запуск GPU…");
+        ensureRenderer();
+        if(renderer==null||glView==null){
+            setState("GPU не вдалося запустити");
+            setStartStatus("GPU не вдалося запустити");
+            return;
+        }
         setState(maxQuality?"Камера MAX • запуск":"Камера SAFE • запуск");
         maybeOpenCamera();
     }
@@ -1049,7 +1082,14 @@ public final class MainActivity extends Activity {
 
     private void onCameraTextureReady(SurfaceTexture texture) {
         cameraTexture=texture;
-        if(active){if(usingFile)startVideoFile();else maybeOpenCamera();}
+        if(!active)return;
+        if(usingFile){
+            setStartStatus("Готую відео…");
+            startVideoFile();
+        }else if(cameraRequested){
+            setStartStatus(cameraMaxQuality?"КАМЕРА MAX • відкриваю…":"КАМЕРА SAFE • відкриваю…");
+            maybeOpenCamera();
+        }
     }
 
     @Override protected void onResume() {
@@ -1067,6 +1107,7 @@ public final class MainActivity extends Activity {
     private void maybeOpenCamera(){
         if(!active||usingFile||cameraTexture==null||cameraDevice!=null||opening)return;
         if(checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED){
+            setStartStatus("Потрібен дозвіл на камеру");
             requestPermissions(new String[]{Manifest.permission.CAMERA},CAMERA_PERMISSION);
             return;
         }
@@ -1079,7 +1120,10 @@ public final class MainActivity extends Activity {
             if(grants.length>0&&grants[0]==PackageManager.PERMISSION_GRANTED){
                 cameraRequested=true;maybeOpenCamera();
             }
-            else setState("Немає доступу до камери. Дозволь доступ у налаштуваннях Android.");
+            else{
+                setState("Немає доступу до камери. Дозволь доступ у налаштуваннях Android.");
+                setStartStatus("Немає дозволу на камеру");
+            }
         }
     }
 
@@ -1092,7 +1136,11 @@ public final class MainActivity extends Activity {
                 if(facing!=null&&facing==CameraCharacteristics.LENS_FACING_BACK){chosen=id;break;}
                 if(chosen==null)chosen=id;
             }
-            if(chosen==null){setState("На пристрої немає доступної камери.");return;}
+            if(chosen==null){
+                setState("На пристрої немає доступної камери.");
+                setStartStatus("Камеру не знайдено");
+                return;
+            }
             CameraCharacteristics c=cameraManager.getCameraCharacteristics(chosen);
             cameraCharacteristics=c;
             StreamConfigurationMap map=c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
@@ -1129,7 +1177,11 @@ public final class MainActivity extends Activity {
                     camera.close();cameraDevice=null;opening=false;setState("Помилка Camera2: "+error);
                 }
             },cameraHandler);
-        }catch(Exception e){opening=false;setState("Не вдалося відкрити камеру: "+e.getMessage());}
+        }catch(Exception e){
+            opening=false;
+            String msg="Не вдалося відкрити камеру: "+e.getMessage();
+            setState(msg);setStartStatus(msg);
+        }
     }
 
     private static Size pickSize(Size[] choices,int correctedRotation){
@@ -1262,12 +1314,16 @@ public final class MainActivity extends Activity {
                     if(!active||cameraDevice==null){cs.close();return;}
                     session=cs;
                     try{session.setRepeatingRequest(builder.build(),null,cameraHandler);
-                        opening=false;setState((cameraMaxQuality?"Камера MAX QUALITY • ":"Камера SAFE • ")+
+                        opening=false;
+                        hideStartPanel();
+                        setState((cameraMaxQuality?"Камера MAX QUALITY • ":"Камера SAFE • ")+
                             cameraWidthText()+" • корекція "+cameraCorrectionDegrees+"° • GPU • офлайн");
                     }catch(CameraAccessException e){opening=false;setState("Помилка відеопотоку: "+e.getMessage());}
                 }
                 @Override public void onConfigureFailed(CameraCaptureSession cs){
-                    opening=false;setState("Камера не підтримує обраний відеорежим.");
+                    opening=false;
+                    setState("Камера не підтримує обраний відеорежим.");
+                    setStartStatus("Цей режим камери не підтримується");
                 }
             },cameraHandler);
         }catch(Exception e){opening=false;setState("Не вдалося запустити відео: "+e.getMessage());}
