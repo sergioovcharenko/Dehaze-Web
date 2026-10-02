@@ -88,6 +88,7 @@ public final class MainActivity extends Activity {
     private int strength = 60;
     private volatile int autoStrength = 60;
     private boolean manualMode = false;
+    private boolean monochrome = false;
     private CheckBox manualCheck;
     private SeekBar strengthSeek;
     private TextView strengthLabel;
@@ -286,6 +287,16 @@ public final class MainActivity extends Activity {
     }
 
 
+
+    private void setMonochrome(boolean value){
+        monochrome=value;
+        renderer.setMonochrome(value);
+        if(videoLabelsLeft!=null)videoLabelsLeft.setText(value?"ОРИГІНАЛ • Ч/Б":"ОРИГІНАЛ");
+        if(videoLabelsRight!=null)videoLabelsRight.setText(value?"АНТИТУМАН • Ч/Б":"АНТИТУМАН");
+        renderer.refresh();
+        setState(value?"Чорно-білий режим увімкнено":"Кольоровий режим увімкнено");
+    }
+
     private void applyDehazePreset(int mode){
         dehazePreset=Math.max(0,Math.min(4,mode));
         if(dehazePreset==0){
@@ -388,6 +399,10 @@ public final class MainActivity extends Activity {
         menuItem(list,"LOW • 35%",()->applyDehazePreset(2));
         menuItem(list,"MEDIUM • 60%",()->applyDehazePreset(3));
         menuItem(list,"HIGH • 85%",()->applyDehazePreset(4));
+
+        menuTitle(list,"ЗОБРАЖЕННЯ");
+        menuItem(list,"COLOR",()->setMonochrome(false));
+        menuItem(list,"Ч/Б • BLACK & WHITE",()->setMonochrome(true));
 
         menuTitle(list,"SCENE");
         menuItem(list,"AUTO",()->applySceneMode(0));
@@ -609,6 +624,7 @@ public final class MainActivity extends Activity {
         glView.setPreserveEGLContextOnPause(true);
         renderer=new SplitRenderer(this,glView,this::onCameraTextureReady,this::onFrameStats);
         renderer.setStrength(strength/100f);
+        renderer.setMonochrome(monochrome);
         renderer.setMaxMode(true);
         renderer.setFill(false);
         renderer.setViewMode(0);
