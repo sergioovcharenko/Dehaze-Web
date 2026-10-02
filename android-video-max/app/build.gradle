@@ -7,8 +7,8 @@ android {
         applicationId 'ua.meti.tuman.videomax'
         minSdk 26
         targetSdk 35
-        versionCode 13
-        versionName '2.5.0-start-buttons'
+        versionCode 14
+        versionName '2.5.1-source-actions-fix'
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
