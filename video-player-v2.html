@@ -26,7 +26,7 @@ h2{font-size:13px;color:#c3c8cc;margin:5px 0 8px}.grid5{display:grid;grid-templa
 <main>
 <section>
 <div class="stage"><video id="src" playsinline muted></video><canvas id="out"></canvas><div id="badge" class="badge">OFF</div></div>
-<div class="transport"><button id="play">▶</button><input id="seek" type="range" min="0" max="1000" value="0"><span id="time" class="small">00:00 / 00:00</span></div>
+<div class="transport"><button id="back">« 10с</button><button id="stop">■ Стоп</button><button id="play">▶</button><button id="forward">10с »</button><input id="seek" type="range" min="0" max="1000" value="0"><span id="time" class="small">00:00 / 00:00</span></div>
 </section>
 <aside class="panel">
 <h2>DIGITAL DEHAZING</h2>
@@ -44,8 +44,10 @@ h2{font-size:13px;color:#c3c8cc;margin:5px 0 8px}.grid5{display:grid;grid-templa
 <button data-scene="night">NIGHT</button>
 </div>
 <div class="row"><span class="small">Сила</span><input id="strength" type="range" min="0" max="100" value="60" disabled><strong id="strengthVal">60%</strong></div>
+<h2 style="margin-top:16px">ЗАХИСТ ЗОН</h2>
+<div class="grid3"><button id="zoneProtect" class="active" style="grid-column:1/-1">ON · HUD protected</button></div>
 <div id="status" class="status">Відкрий локальний відеофайл. Обробка виконується на пристрої.</div>
-<p class="small">AUTO аналізує контраст, текстуру та насиченість кадру приблизно раз на 1.2 с. DAY трохи підсилює dehaze, NIGHT зменшує агресивність, щоб не розганяти шум. Відео не завантажується на сервер.</p>
+<p class="small">AUTO аналізує контраст, текстуру та насиченість кадру приблизно раз на 1.2 с. DAY трохи підсилює dehaze, NIGHT зменшує агресивність. Захист зон залишає без фільтра верхню панель, блок навігоризонту/компаса праворуч угорі та нижню телеметрію. Відео не завантажується на сервер.</p>
 </aside>
 </main>
 <script>
@@ -53,7 +55,7 @@ h2{font-size:13px;color:#c3c8cc;margin:5px 0 8px}.grid5{display:grid;grid-templa
 const src=document.getElementById('src'),out=document.getElementById('out'),badge=document.getElementById('badge');
 const seek=document.getElementById('seek'),play=document.getElementById('play'),statusEl=document.getElementById('status');
 const strengthEl=document.getElementById('strength'),strengthVal=document.getElementById('strengthVal');
-let mode='off',scene='auto',strength=.60,stream=null,url=null,gl=null,program=null,tex=null,vbo=null,rendering=false,lastAnalysis=0;
+let mode='off',scene='auto',strength=.60,zoneProtect=true,stream=null,url=null,gl=null,program=null,tex=null,vbo=null,rendering=false,lastAnalysis=0;
 const analysis=document.createElement('canvas');analysis.width=64;analysis.height=36;const actx=analysis.getContext('2d',{willReadFrequently:true});
 
 function fmt(s){if(!isFinite(s))return'00:00';s=Math.max(0,Math.round(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
@@ -80,10 +82,17 @@ function initGL(){
  if(!gl)throw Error('WebGL недоступний');
  const vs=shader(gl.VERTEX_SHADER,'attribute vec2 p;varying vec2 uv;void main(){uv=(p+1.0)*.5;gl_Position=vec4(p,0,1);}');
  const fs=shader(gl.FRAGMENT_SHADER,`precision mediump float;
- varying vec2 uv;uniform sampler2D t;uniform vec2 px;uniform float s;
+ varying vec2 uv;uniform sampler2D t;uniform vec2 px;uniform float s;uniform float z;
  vec3 g(vec2 q){return texture2D(t,clamp(q,vec2(.001),vec2(.999))).rgb;}
  void main(){
-  vec3 c=g(uv);vec3 l=(g(uv+vec2(px.x*2.,0.))+g(uv-vec2(px.x*2.,0.))+g(uv+vec2(0.,px.y*2.))+g(uv-vec2(0.,px.y*2.)))*.25;
+  vec3 c=g(uv);
+  if(z>.5){
+   float topBar=step(.915,uv.y);
+   float navHud=step(.715,uv.x)*step(.690,uv.y);
+   float telemetry=(1.0-step(.205,uv.y))*step(.255,uv.x)*(1.0-step(.805,uv.x));
+   if(max(topBar,max(navHud,telemetry))>.5){gl_FragColor=vec4(c,1.);return;}
+  }
+  vec3 l=(g(uv+vec2(px.x*2.,0.))+g(uv-vec2(px.x*2.,0.))+g(uv+vec2(0.,px.y*2.))+g(uv-vec2(0.,px.y*2.)))*.25;
   float y=dot(c,vec3(.299,.587,.114));float e=length(c-l);
   float sky=smoothstep(.62,.84,y)*(1.-smoothstep(.01,.065,e))*smoothstep(.18,.88,uv.y);
   float protect=1.-.93*sky;
@@ -114,7 +123,7 @@ function analyze(now){
 function frame(now){
  if(!rendering)return;
  if(src.readyState>=2&&!src.paused){
-  try{initGL();analyze(now);const w=src.videoWidth,h=src.videoHeight;if(w&&h){const max=1920,k=Math.min(1,max/Math.max(w,h)),cw=Math.max(2,Math.round(w*k)),ch=Math.max(2,Math.round(h*k));if(out.width!==cw||out.height!==ch){out.width=cw;out.height=ch;gl.viewport(0,0,cw,ch)}gl.useProgram(program);gl.bindTexture(gl.TEXTURE_2D,tex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,src);gl.uniform1i(gl.getUniformLocation(program,'t'),0);gl.uniform2f(gl.getUniformLocation(program,'px'),1/cw,1/ch);gl.uniform1f(gl.getUniformLocation(program,'s'),effectiveStrength());gl.drawArrays(gl.TRIANGLE_STRIP,0,4)}}catch(e){setStatus('Помилка обробки: '+e.message);mode='off';updateUI()}
+  try{initGL();analyze(now);const w=src.videoWidth,h=src.videoHeight;if(w&&h){const max=1920,k=Math.min(1,max/Math.max(w,h)),cw=Math.max(2,Math.round(w*k)),ch=Math.max(2,Math.round(h*k));if(out.width!==cw||out.height!==ch){out.width=cw;out.height=ch;gl.viewport(0,0,cw,ch)}gl.useProgram(program);gl.bindTexture(gl.TEXTURE_2D,tex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,src);gl.uniform1i(gl.getUniformLocation(program,'t'),0);gl.uniform2f(gl.getUniformLocation(program,'px'),1/cw,1/ch);gl.uniform1f(gl.getUniformLocation(program,'s'),effectiveStrength());gl.uniform1f(gl.getUniformLocation(program,'z'),zoneProtect?1:0);gl.drawArrays(gl.TRIANGLE_STRIP,0,4)}}catch(e){setStatus('Помилка обробки: '+e.message);mode='off';updateUI()}
  }
  requestAnimationFrame(frame);
 }
@@ -127,6 +136,15 @@ document.getElementById('camera').onclick=openCamera;
 document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;if(mode==='low')strength=.35;if(mode==='medium')strength=.60;if(mode==='high')strength=.85;updateUI()});
 document.querySelectorAll('[data-scene]').forEach(b=>b.onclick=()=>{scene=b.dataset.scene;updateUI()});
 strengthEl.oninput=()=>{strength=Number(strengthEl.value)/100;updateUI()};
+document.getElementById('zoneProtect').onclick=()=>{
+ zoneProtect=!zoneProtect;
+ const b=document.getElementById('zoneProtect');b.classList.toggle('active',zoneProtect);
+ b.textContent=(zoneProtect?'ON':'OFF')+' · HUD protected';
+ setStatus(zoneProtect?'Захист зон увімкнено: верхня панель, навігоризонт/компас, нижня телеметрія.':'Захист зон вимкнено.');
+};
+document.getElementById('back').onclick=()=>{if(isFinite(src.duration))src.currentTime=Math.max(0,src.currentTime-10)};
+document.getElementById('forward').onclick=()=>{if(isFinite(src.duration))src.currentTime=Math.min(src.duration,src.currentTime+10)};
+document.getElementById('stop').onclick=()=>{src.pause();try{src.currentTime=0}catch(e){};seek.value=0;play.textContent='▶';};
 play.onclick=()=>src.paused?src.play():src.pause();
 src.onplay=()=>{play.textContent='Ⅱ';if(mode!=='off')startRender()};src.onpause=()=>play.textContent='▶';
 src.ontimeupdate=()=>{if(src.duration){seek.value=Math.round(src.currentTime/src.duration*1000);document.getElementById('time').textContent=fmt(src.currentTime)+' / '+fmt(src.duration)}};
