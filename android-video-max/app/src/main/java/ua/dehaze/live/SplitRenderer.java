@@ -60,9 +60,9 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         " vec2 aligned=clamp((vUV-.5)*uCrop+.5+uPan,vec2(0.001),vec2(0.999));\n" +
         " if(uEnhanced<0.5||uStrength<0.001){gl_FragColor=vec4(uMono>0.5?mono(color):color,1.0);return;}\n" +
         " if(uZoneProtect>0.5){\n" +
-        "  float topBar=step(.925,vUV.y);\n" +
-        "  float navHud=step(.735,vUV.x)*step(.705,vUV.y);\n" +
-        "  float telemetry=(1.0-step(.205,vUV.y))*step(.245,vUV.x)*(1.0-step(.820,vUV.x));\n" +
+        "  float topBar=step(.927,vUV.y);\n" +
+        "  float navHud=step(.780,vUV.x)*step(.755,vUV.y);\n" +
+        "  float telemetry=(1.0-step(.195,vUV.y))*step(.300,vUV.x)*(1.0-step(.700,vUV.x));\n" +
         "  if(max(topBar,max(navHud,telemetry))>0.5){gl_FragColor=vec4(uMono>0.5?mono(color):color,1.0);return;}\n" +
         " }\n" +
         " vec3 local=(grab(vUV+vec2(uPixel.x*2.0,0.0))+grab(vUV-vec2(uPixel.x*2.0,0.0))+\n" +
@@ -130,9 +130,9 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         " vec3 color=grab(vUV);\n" +
         " if(uEnhanced<0.5||uStrength<0.001){gl_FragColor=vec4(uMono>0.5?mono(color):color,1.0);return;}\n" +
         " if(uZoneProtect>0.5){\n" +
-        "  float topBar=step(.925,vUV.y);\n" +
-        "  float navHud=step(.735,vUV.x)*step(.705,vUV.y);\n" +
-        "  float telemetry=(1.0-step(.205,vUV.y))*step(.245,vUV.x)*(1.0-step(.820,vUV.x));\n" +
+        "  float topBar=step(.927,vUV.y);\n" +
+        "  float navHud=step(.780,vUV.x)*step(.755,vUV.y);\n" +
+        "  float telemetry=(1.0-step(.195,vUV.y))*step(.300,vUV.x)*(1.0-step(.700,vUV.x));\n" +
         "  if(max(topBar,max(navHud,telemetry))>0.5){gl_FragColor=vec4(uMono>0.5?mono(color):color,1.0);return;}\n" +
         " }\n" +
         " vec3 local=(grab(vUV+vec2(uPixel.x*2.0,0.0))+grab(vUV-vec2(uPixel.x*2.0,0.0))+\n" +
@@ -213,6 +213,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     void setFill(boolean value){fill=value;}
     void setViewMode(int value){viewMode=Math.max(0,Math.min(2,value));}
     int getViewMode(){return viewMode;}
+    String cameraSizeLabel(){return cameraWidth+"×"+cameraHeight;}
     void setFrozen(boolean value){frozen=value;}
     void setZoom(float value){zoom=Math.max(1f,Math.min(8f,value));}
     float getZoom(){return zoom;}
