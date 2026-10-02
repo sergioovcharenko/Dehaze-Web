@@ -110,16 +110,28 @@ public final class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
-        showImmersive();
-        cameraCorrectionDegrees=getPreferences(MODE_PRIVATE).getInt(
-            "camera_alignment_degrees",defaultCameraCorrection());
-        cameraManager = (CameraManager)getSystemService(Context.CAMERA_SERVICE);
-        cameraThread = new HandlerThread("camera2-preview");
-        cameraThread.start();
-        cameraHandler = new Handler(cameraThread.getLooper());
-        makeUi();
+        try{
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+            showImmersive();
+            cameraCorrectionDegrees=getPreferences(MODE_PRIVATE).getInt(
+                "camera_alignment_degrees",defaultCameraCorrection());
+            cameraManager = (CameraManager)getSystemService(Context.CAMERA_SERVICE);
+            cameraThread = new HandlerThread("camera2-preview");
+            cameraThread.start();
+            cameraHandler = new Handler(cameraThread.getLooper());
+            makeUi();
+        }catch(Throwable fatal){
+            android.util.Log.e("MetiVideoMax","STARTUP CRASH",fatal);
+            TextView crash=new TextView(this);
+            crash.setTextColor(Color.WHITE);
+            crash.setBackgroundColor(Color.rgb(20,20,20));
+            crash.setPadding(dp(20),dp(20),dp(20),dp(20));
+            crash.setTextSize(16);
+            crash.setText("Помилка запуску VIDEO MAX\n\n"+
+                fatal.getClass().getSimpleName()+": "+String.valueOf(fatal.getMessage()));
+            setContentView(crash);
+        }
     }
 
     private static int defaultCameraCorrection(){
@@ -650,7 +662,19 @@ public final class MainActivity extends Activity {
 
     private void attachVideoTouch(){
         if(glView==null)return;
-        attachVideoTouch();
+        glView.setOnTouchListener((v,e)->{
+            if(scaleDetector!=null)scaleDetector.onTouchEvent(e);
+            if(gestureDetector!=null)gestureDetector.onTouchEvent(e);
+            if(renderer!=null&&scaleDetector!=null&&
+               e.getActionMasked()==MotionEvent.ACTION_MOVE&&
+               e.getPointerCount()==1&&!scaleDetector.isInProgress()){
+                renderer.panBy(-(e.getX()-touchX)/Math.max(1,glView.getWidth()),
+                    (e.getY()-touchY)/Math.max(1,glView.getHeight()));
+                renderer.refresh();
+            }
+            touchX=e.getX();touchY=e.getY();
+            return true;
+        });
     }
 
     private void makeUi(){
@@ -719,17 +743,7 @@ public final class MainActivity extends Activity {
                 if(renderer!=null)renderer.refresh();return true;
             }
         });
-        glView.setOnTouchListener((v,e)->{
-            scaleDetector.onTouchEvent(e);
-            gestureDetector.onTouchEvent(e);
-            if(e.getActionMasked()==MotionEvent.ACTION_MOVE&&e.getPointerCount()==1&&!scaleDetector.isInProgress()){
-                renderer.panBy(-(e.getX()-touchX)/Math.max(1,glView.getWidth()),
-                    (e.getY()-touchY)/Math.max(1,glView.getHeight()));
-                if(renderer!=null)renderer.refresh();
-            }
-            touchX=e.getX();touchY=e.getY();
-            return true;
-        });
+        attachVideoTouch();
     }
 
     private void syncFreezeUi(){
