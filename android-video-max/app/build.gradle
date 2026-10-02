@@ -7,8 +7,8 @@ android {
         applicationId 'ua.meti.tuman.videomax'
         minSdk 26
         targetSdk 35
-        versionCode 4
-        versionName '2.0.0-dehaze-modes'
+        versionCode 5
+        versionName '2.1.0-zone-player'
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
