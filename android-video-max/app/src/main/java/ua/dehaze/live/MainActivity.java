@@ -140,7 +140,7 @@ public final class MainActivity extends Activity {
         cameraCorrectionDegrees=(cameraCorrectionDegrees+90)%360;
         getPreferences(MODE_PRIVATE).edit()
             .putInt("camera_alignment_degrees",cameraCorrectionDegrees).apply();
-        renderer.setUserRotation(cameraCorrectionDegrees);
+        if(renderer!=null)renderer.setUserRotation(cameraCorrectionDegrees);
         if(renderer!=null)renderer.resetZoom();
         zoomBadge.setText("1.0×");
         if(renderer!=null)renderer.refresh();
@@ -306,22 +306,22 @@ public final class MainActivity extends Activity {
         if(dehazePreset==0){
             enhanced=false;
             manualMode=false;
-            renderer.setEnhanced(false);
-            renderer.setManualMode(false);
+            if(renderer!=null)renderer.setEnhanced(false);
+            if(renderer!=null)renderer.setManualMode(false);
             if(toggle!=null)toggle.setText("ANTI-FOG OFF");
             setState("Антитуман вимкнено");
         }else if(dehazePreset==1){
             enhanced=true;
             manualMode=false;
-            renderer.setEnhanced(true);
-            renderer.setManualMode(false);
+            if(renderer!=null)renderer.setEnhanced(true);
+            if(renderer!=null)renderer.setManualMode(false);
             if(toggle!=null)toggle.setText("ANTI-FOG AUTO");
             setState("AUTO • сила визначається за кадром");
         }else{
             enhanced=true;
             manualMode=true;
-            renderer.setEnhanced(true);
-            renderer.setManualMode(true);
+            if(renderer!=null)renderer.setEnhanced(true);
+            if(renderer!=null)renderer.setManualMode(true);
             strength=dehazePreset==2?35:(dehazePreset==3?60:85);
             if(renderer!=null)renderer.setStrength(strength/100f);
             if(strengthSeek!=null)strengthSeek.setProgress(strength);
@@ -388,10 +388,10 @@ public final class MainActivity extends Activity {
         menuTitle(list,"ПОРІВНЯННЯ");
         menuItem(list,"50/50  •  ВЕСЬ КАДР (за замовчуванням)",()->selectMode(0));
         menuItem(list,"Два кадри  •  FIT",()->{
-            fillMode=false;renderer.setFill(false);selectMode(1);
+            fillMode=false;if(renderer!=null)renderer.setFill(false);selectMode(1);
         });
         menuItem(list,"Два кадри  •  FILL",()->{
-            fillMode=true;renderer.setFill(true);selectMode(1);
+            fillMode=true;if(renderer!=null)renderer.setFill(true);selectMode(1);
         });
         menuItem(list,"Тільки оброблене",()->selectMode(2));
         menuItem(list,"Скинути зум  •  1×",()->{
@@ -466,7 +466,7 @@ public final class MainActivity extends Activity {
             @Override public void onStartTrackingTouch(SeekBar b){}
             @Override public void onStopTrackingTouch(SeekBar b){}
         });
-        renderer.setManualMode(false);
+        if(renderer!=null)renderer.setManualMode(false);
 
         menuTitle(list,"ЗАХИСТ ЗОН");
         CheckBox zoneProtectCheck=new CheckBox(this);
@@ -762,7 +762,7 @@ public final class MainActivity extends Activity {
                 }
             }catch(IllegalStateException ignored){}
         }
-        renderer.setFrozen(true); // pauses only AUTO analysis, not input frame updates
+        if(renderer!=null)renderer.setFrozen(true); // pauses only AUTO analysis, not input frame updates
         syncFreezeUi();
         setDrawer(false);
         setState("Стоп-кадр • ▶ Продовжити на екрані");
@@ -782,7 +782,7 @@ public final class MainActivity extends Activity {
     private void resumeFreeze(){
         if(!frozen)return;
         frozen=false;
-        renderer.setFrozen(false);
+        if(renderer!=null)renderer.setFrozen(false);
         if(pausedFileForFreeze&&usingFile&&mediaPlayer!=null){
             try{mediaPlayer.start();}catch(IllegalStateException ignored){}
         }
@@ -801,7 +801,7 @@ public final class MainActivity extends Activity {
     private void clearFreeze(){
         frozen=false;
         pausedFileForFreeze=false;
-        renderer.setFrozen(false);
+        if(renderer!=null)renderer.setFrozen(false);
         if(freezeOverlay!=null){
             freezeOverlay.setVisibility(View.GONE);
             freezeOverlay.setImageDrawable(null);
@@ -1040,7 +1040,7 @@ public final class MainActivity extends Activity {
             if(size==null)throw new IllegalStateException("Немає SurfaceTexture preview для цієї камери");
             renderer.setCameraInfo(size.getWidth(),size.getHeight(),rotation,
                 stamp!=null&&stamp==CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE_REALTIME);
-            renderer.setUserRotation(cameraCorrectionDegrees);
+            if(renderer!=null)renderer.setUserRotation(cameraCorrectionDegrees);
             cameraTexture.setDefaultBufferSize(size.getWidth(),size.getHeight());
             opening=true;
             cameraManager.openCamera(chosen,new CameraDevice.StateCallback(){
