@@ -59,14 +59,14 @@ public final class MainActivity extends Activity {
     private CameraDevice cameraDevice;
     private CameraCaptureSession session;
     private Surface cameraSurface;
-    private TextView statsView,diagnosticView,headerSafeButton;
+    private TextView statsView,diagnosticView,latencyView,headerSafeButton;
     private boolean safeGpu=false;
     private TextView stateView;
     private TextView toggle;
     private TextView videoLabelsLeft,videoLabelsRight,zoomBadge,modeBadge;
     private FrameLayout root,drawer,videoArea;
-    private boolean fillMode=true,frozen=false,drawerVisible=false;
-    private int viewMode=1;  // 0 = 50/50 wipe, 1 = two identical FILL previews, 2 = processed fullscreen
+    private boolean fillMode=false,frozen=false,drawerVisible=false;
+    private int viewMode=0;  // default: 50/50 full-frame wipe
     private View drawerScrim;
     private ImageView freezeOverlay;
     private TextView resumeOverlay;
@@ -370,7 +370,7 @@ public final class MainActivity extends Activity {
         menuItem(list,"↻  Калібрування камери (+90°)",this::calibrateCamera);
 
         menuTitle(list,"ПОРІВНЯННЯ");
-        menuItem(list,"50/50  •  весь кадр",()->selectMode(0));
+        menuItem(list,"50/50  •  ВЕСЬ КАДР (за замовчуванням)",()->selectMode(0));
         menuItem(list,"Два кадри  •  FIT",()->{
             fillMode=false;renderer.setFill(false);selectMode(1);
         });
@@ -490,9 +490,30 @@ public final class MainActivity extends Activity {
         return String.format(Locale.US,"%02d:%02d",minutes,seconds);
     }
 
+
+    private void setPlayerVisible(boolean visible){
+        if(playerBar!=null)playerBar.setVisibility(visible?View.VISIBLE:View.GONE);
+        if(glView!=null){
+            FrameLayout.LayoutParams lp=(FrameLayout.LayoutParams)glView.getLayoutParams();
+            if(lp!=null){lp.bottomMargin=visible?dp(60):0;glView.setLayoutParams(lp);}
+        }
+        if(diagnosticView!=null){
+            FrameLayout.LayoutParams lp=(FrameLayout.LayoutParams)diagnosticView.getLayoutParams();
+            if(lp!=null){lp.bottomMargin=visible?dp(70):dp(9);diagnosticView.setLayoutParams(lp);}
+        }
+        if(latencyView!=null){
+            FrameLayout.LayoutParams lp=(FrameLayout.LayoutParams)latencyView.getLayoutParams();
+            if(lp!=null){lp.bottomMargin=visible?dp(104):dp(40);latencyView.setLayoutParams(lp);}
+        }
+        if(zoomBadge!=null){
+            FrameLayout.LayoutParams lp=(FrameLayout.LayoutParams)zoomBadge.getLayoutParams();
+            if(lp!=null){lp.bottomMargin=visible?dp(70):dp(12);zoomBadge.setLayoutParams(lp);}
+        }
+    }
+
     private void updatePlayerUi(){
         if(playerBar==null)return;
-        playerBar.setVisibility(usingFile?View.VISIBLE:View.GONE);
+        setPlayerVisible(usingFile);
         if(!usingFile||mediaPlayer==null)return;
         try{
             int duration=Math.max(1,mediaPlayer.getDuration());
@@ -573,7 +594,7 @@ public final class MainActivity extends Activity {
         });
         playerBar.setVisibility(View.GONE);
         FrameLayout.LayoutParams pp=new FrameLayout.LayoutParams(-1,dp(52),Gravity.BOTTOM);
-        pp.leftMargin=dp(8);pp.rightMargin=dp(8);pp.bottomMargin=dp(8);
+        pp.leftMargin=dp(8);pp.rightMargin=dp(8);pp.bottomMargin=dp(4);
         videoArea.addView(playerBar,pp);
         playerUiHandler.removeCallbacks(playerUiTick);
         playerUiHandler.post(playerUiTick);
@@ -589,8 +610,8 @@ public final class MainActivity extends Activity {
         renderer=new SplitRenderer(this,glView,this::onCameraTextureReady,this::onFrameStats);
         renderer.setStrength(strength/100f);
         renderer.setMaxMode(true);
-        renderer.setFill(true);
-        renderer.setViewMode(1);
+        renderer.setFill(false);
+        renderer.setViewMode(0);
         glView.setRenderer(renderer);
         glView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
         videoArea.addView(glView,new FrameLayout.LayoutParams(-1,-1));
@@ -601,6 +622,13 @@ public final class MainActivity extends Activity {
         FrameLayout.LayoutParams diagLp=new FrameLayout.LayoutParams(-2,-2,Gravity.LEFT|Gravity.BOTTOM);
         diagLp.leftMargin=dp(10);diagLp.bottomMargin=dp(9);
         videoArea.addView(diagnosticView,diagLp);
+        latencyView=text("ЗАТРИМКА ОБРОБКИ —",11,Color.WHITE);
+        latencyView.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        latencyView.setBackgroundColor(Color.argb(205,12,18,23));
+        latencyView.setPadding(dp(9),dp(5),dp(9),dp(5));
+        FrameLayout.LayoutParams latencyLp=new FrameLayout.LayoutParams(-2,-2,Gravity.LEFT|Gravity.BOTTOM);
+        latencyLp.leftMargin=dp(10);latencyLp.bottomMargin=dp(68);
+        videoArea.addView(latencyView,latencyLp);
         // Freeze is an Android bitmap overlay, not a paused Camera2 consumer.
         // Camera frames continue to be drained behind it, so resume never
         // needs to restart a potentially blocked SurfaceTexture pipeline.
@@ -776,7 +804,7 @@ public final class MainActivity extends Activity {
             mediaPlayer.setLooping(false);
             mediaPlayer.setOnPreparedListener(mp->{
                 mp.start();
-                if(playerBar!=null)playerBar.setVisibility(View.VISIBLE);
+                setPlayerVisible(true);
                 updatePlayerUi();
                 setState("Локальне відео • працює без інтернету");
             });
@@ -795,7 +823,7 @@ public final class MainActivity extends Activity {
             mediaPlayer.release();mediaPlayer=null;
         }
         if(usingFile&&cameraSurface!=null){cameraSurface.release();cameraSurface=null;}
-        if(playerBar!=null)playerBar.setVisibility(View.GONE);
+        setPlayerVisible(false);
     }
 
     private void useCamera(){
@@ -855,12 +883,26 @@ public final class MainActivity extends Activity {
         });
     }
 
+    private static String statPart(String stats,String key){
+        int at=stats.indexOf(key);
+        if(at<0)return "—";
+        int start=at+key.length();
+        int end=stats.indexOf(" • ",start);
+        return (end<0?stats.substring(start):stats.substring(start,end)).trim();
+    }
+
     private void onFrameStats(final String stats) {
         runOnUiThread(()->{
             if(!active)return;
             statsView.setText(stats+" • "+(manualMode?"РУЧНИЙ "+strength:"AUTO "+autoStrength)+"%");
             if(diagnosticView!=null)diagnosticView.setText("КАДРИ Є • "+stats+
                 (safeGpu?" • GPU FAST": " • VIDEO MAX"));
+            if(latencyView!=null){
+                String frame=statPart(stats,"кадр ");
+                String processing=statPart(stats,"подача ");
+                latencyView.setText((frame.equals("—")?"":"КАДР "+frame+"  •  ")+
+                    "ЗАТРИМКА ОБРОБКИ "+processing);
+            }
         });
     }
 
@@ -1005,6 +1047,7 @@ public final class MainActivity extends Activity {
     }
 
     @Override protected void onDestroy(){
+        playerUiHandler.removeCallbacks(playerUiTick);
         clearFreeze();stopMedia();closeCamera();
         if(cameraThread!=null)cameraThread.quitSafely();
         if(renderer!=null)renderer.shutdown();
