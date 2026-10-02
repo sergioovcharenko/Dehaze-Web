@@ -142,6 +142,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     private int cropLoc,panLoc,maxLoc,hybridLoc,airLoc,mapSamplerLoc,lutSamplerLoc;
     private volatile float strength=.60f;
     private volatile boolean manualMode=false;
+    private volatile int sceneMode=0; // 0 AUTO, 1 DAY, 2 NIGHT
     private int analysisTexture=0,analysisFbo=0;
     private static final int SAMPLE_W=64,SAMPLE_H=36;
     private final java.nio.ByteBuffer analysisPixels=java.nio.ByteBuffer.allocateDirect(SAMPLE_W*SAMPLE_H*4);
@@ -205,7 +206,13 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     void refresh(){view.requestRender();}
     void setStrength(float value){strength=Math.max(0f,Math.min(1f,value));}
     void setManualMode(boolean value){manualMode=value;lastAnalysisNs=0;}
+    void setSceneMode(int value){sceneMode=Math.max(0,Math.min(2,value));lastAnalysisNs=0;}
     boolean isManualMode(){return manualMode;}
+    private float effectiveStrength(){
+        if(sceneMode==1)return clamp01(strength*1.08f);
+        if(sceneMode==2)return clamp01(strength*.78f);
+        return strength;
+    }
     void setCameraInfo(int w,int h,int orient,boolean realtime) {
         cameraWidth=Math.max(1,w);cameraHeight=Math.max(1,h);
         sourceEpoch.incrementAndGet();
@@ -429,6 +436,8 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         float target=.22f+.64f*hazeProxy;
         float mean=sum/count;
         if(mean<65f)target=.22f+(target-.22f)*.65f;
+        if(sceneMode==1)target=clamp01(target*1.08f);
+        if(sceneMode==2)target=clamp01(target*.78f);
         // Smooth per-frame changes to avoid pulsing when the camera pans.
         strength=clamp01(strength*.72f+target*.28f);
         activity.onAutoStrength(strength);
@@ -567,7 +576,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         final boolean useHybridProgram=useFilter&&maxMode&&hybridShaderAvailable&&!forceFast;
         activateProgram(useHybridProgram?program:fastProgram);
         GLES20.glUniform1f(enhancedLoc,useFilter?1f:0f);
-        GLES20.glUniform1f(strengthLoc,strength);
+        GLES20.glUniform1f(strengthLoc,effectiveStrength());
         GLES20.glUniform1f(maxLoc,maxMode?1f:0f);
         GLES20.glUniform1f(hybridLoc,(useHybridProgram&&hybridMapsUploaded)?1f:0f);
         if(useHybridProgram&&hybridMapsUploaded&&currentHybrid!=null)
