@@ -83,6 +83,8 @@ public final class MainActivity extends Activity {
     private GestureDetector gestureDetector;
     private float touchX,touchY;
     private boolean active, opening;
+    private boolean cameraRequested=false;
+    private boolean cameraMaxQuality=true;
     private boolean enhanced = true;
     private boolean liveMaxMode = true;
     private TextView maxModeButton;
@@ -377,7 +379,8 @@ public final class MainActivity extends Activity {
         list.addView(maxModeButton,maxParams);
 
         menuTitle(list,"ДЖЕРЕЛО");
-        menuItem(list,"◉  Камера",this::useCamera);
+        menuItem(list,"◉  Камера MAX",()->useCameraMode(true));
+        menuItem(list,"◉  Камера SAFE",()->useCameraMode(false));
         menuItem(list,"▣  Відкрити відео",this::pickVideo);
         menuItem(list,"↻  Калібрування камери (+90°)",this::calibrateCamera);
 
@@ -793,6 +796,7 @@ public final class MainActivity extends Activity {
             clearFreeze();
             fileUri=data.getData();
             usingFile=true;
+            cameraRequested=false;
             closeCamera();
             startVideoFile();
         }
@@ -844,9 +848,17 @@ public final class MainActivity extends Activity {
     }
 
     private void useCamera(){
+        useCameraMode(true);
+    }
+
+    private void useCameraMode(boolean maxQuality){
         clearFreeze();
         stopMedia();usingFile=false;fileUri=null;
-        setDrawer(false);maybeOpenCamera();
+        cameraRequested=true;
+        cameraMaxQuality=maxQuality;
+        setDrawer(false);
+        setState(maxQuality?"Камера MAX • запуск":"Камера SAFE • запуск");
+        maybeOpenCamera();
     }
 
     private void takeSnapshot(){
@@ -937,7 +949,9 @@ public final class MainActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();showImmersive();active=true;glView.onResume();
-        if(usingFile)startVideoFile();else maybeOpenCamera();
+        if(usingFile)startVideoFile();
+        else if(cameraRequested)maybeOpenCamera();
+        else setState("Готово • обери Камера MAX / Камера SAFE або Відкрити відео");
     }
 
     @Override protected void onPause() {
@@ -957,7 +971,9 @@ public final class MainActivity extends Activity {
     @Override public void onRequestPermissionsResult(int code,String[] perms,int[] grants){
         super.onRequestPermissionsResult(code,perms,grants);
         if(code==CAMERA_PERMISSION){
-            if(grants.length>0&&grants[0]==PackageManager.PERMISSION_GRANTED)maybeOpenCamera();
+            if(grants.length>0&&grants[0]==PackageManager.PERMISSION_GRANTED){
+                cameraRequested=true;maybeOpenCamera();
+            }
             else setState("Немає доступу до камери. Дозволь доступ у налаштуваннях Android.");
         }
     }
@@ -986,7 +1002,9 @@ public final class MainActivity extends Activity {
             // front = sensor+display. The screen itself remains landscape.
             boolean front=facing!=null&&facing==CameraCharacteristics.LENS_FACING_FRONT;
             int rotation=((sensorDeg+(front?displayDeg:-displayDeg))%360+360)%360;
-            Size size=pickSize(map.getOutputSizes(SurfaceTexture.class),rotation+cameraCorrectionDegrees);
+            Size size=cameraMaxQuality
+                ?pickSize(map.getOutputSizes(SurfaceTexture.class),rotation+cameraCorrectionDegrees)
+                :pickSafeSize(map.getOutputSizes(SurfaceTexture.class),rotation+cameraCorrectionDegrees);
             if(size==null)throw new IllegalStateException("Немає SurfaceTexture preview для цієї камери");
             renderer.setCameraInfo(size.getWidth(),size.getHeight(),rotation,
                 stamp!=null&&stamp==CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE_REALTIME);
@@ -1045,6 +1063,26 @@ public final class MainActivity extends Activity {
             if(pixels<chosenPixels){chosen=size;chosenPixels=pixels;}
         }
         return chosen;
+    }
+
+    private static Size pickSafeSize(Size[] choices,int correctedRotation){
+        if(choices==null||choices.length==0)return null;
+        final boolean quarterTurn=((correctedRotation%180)+180)%180==90;
+        final double targetAspect=16d/9d;
+        Size chosen=null;double best=Double.POSITIVE_INFINITY;
+        for(Size size:choices){
+            int rw=quarterTurn?size.getHeight():size.getWidth();
+            int rh=quarterTurn?size.getWidth():size.getHeight();
+            if(rw<=0||rh<=0)continue;
+            long pixels=(long)size.getWidth()*size.getHeight();
+            if(pixels>(long)1920*1080)continue;
+            double aspectError=Math.abs(((double)rw/rh)-targetAspect);
+            double sizeError=Math.abs(Math.log(Math.max(1d,pixels)/(1920d*1080d)));
+            double score=aspectError*5.0+sizeError*.15;
+            if(score<best){best=score;chosen=size;}
+        }
+        if(chosen!=null)return chosen;
+        return choices[0];
     }
 
     private static boolean hasMode(int[] modes,int wanted){
@@ -1108,14 +1146,19 @@ public final class MainActivity extends Activity {
             cameraSurface=new Surface(cameraTexture);
             CaptureRequest.Builder builder=cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
             builder.addTarget(cameraSurface);
-            applyMaxQuality(builder);
+            if(cameraMaxQuality)applyMaxQuality(builder);
+            else{
+                builder.set(CaptureRequest.CONTROL_AF_MODE,CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO);
+                builder.set(CaptureRequest.CONTROL_AE_MODE,CaptureRequest.CONTROL_AE_MODE_ON);
+                builder.set(CaptureRequest.CONTROL_AWB_MODE,CaptureRequest.CONTROL_AWB_MODE_AUTO);
+            }
             cameraDevice.createCaptureSession(Arrays.asList(cameraSurface),new CameraCaptureSession.StateCallback(){
                 @Override public void onConfigured(CameraCaptureSession cs){
                     if(!active||cameraDevice==null){cs.close();return;}
                     session=cs;
                     try{session.setRepeatingRequest(builder.build(),null,cameraHandler);
-                        opening=false;setState("Камера MAX QUALITY • "+cameraWidthText()+
-                            " • корекція "+cameraCorrectionDegrees+"° • GPU • офлайн");
+                        opening=false;setState((cameraMaxQuality?"Камера MAX QUALITY • ":"Камера SAFE • ")+
+                            cameraWidthText()+" • корекція "+cameraCorrectionDegrees+"° • GPU • офлайн");
                     }catch(CameraAccessException e){opening=false;setState("Помилка відеопотоку: "+e.getMessage());}
                 }
                 @Override public void onConfigureFailed(CameraCaptureSession cs){
