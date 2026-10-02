@@ -103,6 +103,13 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         " if(uMono>0.5)result=mono(result);\n" +
         " gl_FragColor=vec4(result,1.0);\n" +
         "}";
+    private static final String MINIMAL_FRAGMENT =
+        "#extension GL_OES_EGL_image_external : require\n" +
+        "precision mediump float;\n" +
+        "varying vec2 vUV;\n" +
+        "uniform samplerExternalOES uCamera;\n" +
+        "uniform mat4 uMatrix;\n" +
+        "void main(){vec2 p=(uMatrix*vec4(vUV,0.0,1.0)).xy;gl_FragColor=texture2D(uCamera,p);}";
     private static final String FAST_FRAGMENT =
         "#extension GL_OES_EGL_image_external : require\n" +
         "precision mediump float;\n" +
@@ -281,16 +288,22 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     }
 
     private int createProgram(){
-        // Always create the proven FAST program. It displays the original view
-        // independently, even when the hybrid program compiles but draws black.
-        fastProgram=buildProgram(FAST_FRAGMENT);
+        try{
+            fastProgram=buildProgram(FAST_FRAGMENT);
+        }catch(Throwable fastError){
+            android.util.Log.e("MetiVideoMax","FAST shader failed; using minimal passthrough",fastError);
+            hybridShaderAvailable=false;
+            fastProgram=buildProgram(MINIMAL_FRAGMENT);
+            activity.onRendererStatus("GPU MINIMAL • стабільний режим");
+            return fastProgram;
+        }
         try{
             hybridShaderAvailable=true;
             return buildProgram(FRAGMENT);
-        }catch(RuntimeException error){
+        }catch(Throwable error){
             android.util.Log.w("MetiVideoMax","Hybrid shader failed; independent FAST program active",error);
             hybridShaderAvailable=false;
-            activity.onRendererStatus("GPU: резервний режим • оригінал камери активний");
+            activity.onRendererStatus("GPU FAST • резервний режим");
             return fastProgram;
         }
     }
@@ -333,6 +346,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     }
 
     @Override public void onSurfaceCreated(GL10 unused,EGLConfig config) {
+        try{
         GLES20.glClearColor(.025f,.046f,.085f,1f);
         program=createProgram();
         activeProgram=0;
@@ -376,6 +390,13 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         framePending.set(false);textureHasFrame=false;lastStatsNanos=0;
         lastAnalysisNs=0;initAnalysisTarget();initHybridTargets();
         activity.runOnUiThread(()->textureCallback.onReady(surfaceTexture));
+    
+        }catch(Throwable fatal){
+            android.util.Log.e("MetiVideoMax","GPU initialization failed",fatal);
+            hybridShaderAvailable=false;
+            analysisReady=false;
+            activity.onRendererStatus("GPU init error • "+fatal.getClass().getSimpleName());
+        }
     }
 
 
