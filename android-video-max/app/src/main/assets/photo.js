@@ -6,7 +6,7 @@ const original=$('before'),result=$('after');
 const originalContext=original.getContext('2d',{willReadFrequently:true}),
       resultContext=result.getContext('2d',{willReadFrequently:true});
 let picture=null,imageUrl=null,processed=false,busy=false,variant='max',auto=85;
-const inputs=['strength','sky','detail','noise'];
+const inputs=['strength','detail','noise'];
 function setStatus(msg){$('status').textContent=msg;}
 function placeholder(canvas,context,msg){
  canvas.width=640;canvas.height=360;
@@ -202,7 +202,7 @@ async function process(){
  busy=true;$('panel').classList.add('busy');
  $('process').disabled=true;$('quickProcess').disabled=true;
  $('save').disabled=true;$('saveTop').disabled=true;
- setStatus('Обробка MAX • оцінювання туману → DCP → guided filter → локальний контраст…');
+ setStatus('Digital Dehazing • оцінювання туману → DCP → guided filter → локальний контраст…');
  await new Promise(resolve=>setTimeout(resolve,70));
  const started=performance.now();
  try{
@@ -213,7 +213,7 @@ async function process(){
    const frame=ctx.getImageData(0,0,w,h);
    const source=new Uint8ClampedArray(frame.data);
    const strength=Number($('manual').checked?$('strength').value:auto);
-   const sky=Number($('sky').value),detail=Number($('detail').value),
+   const sky=0,detail=Number($('detail').value),
          noise=Number($('noise').value);
    let output;
    if(strength===0){
@@ -244,7 +244,7 @@ async function process(){
      ' с. Результат збережи в Галерею.');
  }catch(e){
    setStatus('Помилка обробки: '+e.message);
-   console.error('Photo MAX:',e);
+   console.error('Digital Dehazing Photo:',e);
  }finally{
    busy=false;$('panel').classList.remove('busy');
    $('process').disabled=false;$('quickProcess').disabled=false;
@@ -260,7 +260,7 @@ const save=()=>{
      MetiAndroid.savePng(data);
    }else{
      const link=document.createElement('a');
-     link.href=data;link.download='Meti-Tuman-MAX.png';link.click();
+     link.href=data;link.download='Digital-Dehazing.png';link.click();
      setStatus('PNG готовий до збереження.');
    }
  }catch(e){setStatus('Помилка збереження PNG: '+e.message);}
