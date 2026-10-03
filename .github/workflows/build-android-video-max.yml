@@ -1,4 +1,4 @@
-name: Build Меті Туман VIDEO MAX (third APK)
+name: Build Digital Dehazing APK
 on:
   push:
     branches: [main]
@@ -37,10 +37,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
-      - name: Compile independent VIDEO MAX APK
+      - name: Compile Digital Dehazing APK
         id: compile
         run: gradle -p android-video-max --no-daemon --stacktrace assembleDebug
-      - name: Verify separate package and APK
+      - name: Verify Digital Dehazing APK
         id: verify
         run: |
           set -euo pipefail
@@ -48,33 +48,34 @@ jobs:
           test -s "$apk"
           "${ANDROID_HOME}/build-tools/35.0.0/aapt" dump badging "$apk" | grep '^package:' | tee package.txt
           grep "name='ua.meti.tuman.videomax'" package.txt
-          cp "$apk" Meti-Tuman-VIDEO-MAX-CAMERA-FIX.apk
-          sha256sum Meti-Tuman-VIDEO-MAX-CAMERA-FIX.apk > Meti-Tuman-VIDEO-MAX-CAMERA-FIX.apk.sha256
-          ls -lh Meti-Tuman-VIDEO-MAX-CAMERA-FIX.apk
-      - name: Upload MAX APK
+          cp "$apk" Digital-Dehazing.apk
+          sha256sum Digital-Dehazing.apk > Digital-Dehazing.apk.sha256
+          ls -lh Digital-Dehazing.apk
+      - name: Upload Digital Dehazing APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Meti-Tuman-VIDEO-MAX-CAMERA-FIX
+          name: Digital-Dehazing
           path: |
-            Meti-Tuman-VIDEO-MAX-CAMERA-FIX.apk
-            Meti-Tuman-VIDEO-MAX-CAMERA-FIX.apk.sha256
+            Digital-Dehazing.apk
+            Digital-Dehazing.apk.sha256
+            DIGITAL_DEHAZING_INSTRUCTION.md
           if-no-files-found: error
           retention-days: 90
-      - name: Publish separate MAX release (never overwrite original)
+      - name: Publish Digital Dehazing release
         id: publish
         if: success()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag=meti-tuman-video-max-camera-fix
+          tag=digital-dehazing-latest
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --title "Меті Туман VIDEO MAX · Camera fix 1.0.3" --notes "Camera preview fix: separate original FAST GPU program; GPU SAFE rescue switch; always-visible camera status; distinct OES and 2D samplers. Installs separately from the two original applications. Uninstall only prior VIDEO MAX test APK if debug signatures differ." --prerelease
+            gh release create "$tag" --title "Digital Dehazing" --notes "Android APK + web-compatible Digital Dehazing build. 50/50 comparison, AUTO/LOW/MEDIUM/HIGH, AUTO/DAY/NIGHT, COLOR/BW, camera/video player, no protected zones. Includes instruction file." --prerelease
           fi
-          gh release upload "$tag" Meti-Tuman-VIDEO-MAX-CAMERA-FIX.apk Meti-Tuman-VIDEO-MAX-CAMERA-FIX.apk.sha256 --clobber
+          gh release upload "$tag" Digital-Dehazing.apk Digital-Dehazing.apk.sha256 DIGITAL_DEHAZING_INSTRUCTION.md --clobber
           gh release view "$tag" --json url,assets
-      - name: Record MAX build status
+      - name: Record Digital Dehazing build status
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
@@ -95,18 +96,18 @@ jobs:
             --arg publish "$PUBLISH" \
             --arg commit "$GITHUB_SHA" \
             --arg url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-            --arg apk "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/meti-tuman-video-max-camera-fix/Meti-Tuman-VIDEO-MAX-CAMERA-FIX.apk" \
+            --arg apk "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/digital-dehazing-latest/Digital-Dehazing.apk" \
             --arg time "$(date -u +%FT%TZ)" \
             '{state:$state,compile:$compile,verify:$verify,publish:$publish,commit:$commit,workflow_url:$url,apk_url:(if $state=="success" then $apk else null end),updated_utc:$time}' > video-max-build-status.json
           old_sha=$(gh api "repos/$GITHUB_REPOSITORY/contents/video-max-build-status.json" --jq .sha 2>/dev/null || true)
           if [ -n "$old_sha" ]; then
             gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/video-max-build-status.json" \
-              -f message="Record third independent VIDEO MAX APK build" \
+              -f message="Record Digital Dehazing APK build" \
               -f content="$(base64 -w0 < video-max-build-status.json)" \
               -f sha="$old_sha" -f branch=main >/dev/null
           else
             gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/video-max-build-status.json" \
-              -f message="Record independent MAX APK build" \
+              -f message="Record Digital Dehazing APK build" \
               -f content="$(base64 -w0 < video-max-build-status.json)" \
               -f branch=main >/dev/null
           fi
