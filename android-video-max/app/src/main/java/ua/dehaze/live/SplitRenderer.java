@@ -38,7 +38,6 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         "uniform vec2 uPixel;\n" +
         "uniform float uEnhanced;\n" +
         "uniform float uStrength;\n" +
-        "uniform float uZoneProtect;\n" +
         "uniform float uMono;\n" +
         "uniform float uMax;\n" +
         "uniform float uHybrid;\n" +
@@ -59,12 +58,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         " vec3 color=grab(vUV);\n" +
         " vec2 aligned=clamp((vUV-.5)*uCrop+.5+uPan,vec2(0.001),vec2(0.999));\n" +
         " if(uEnhanced<0.5||uStrength<0.001){gl_FragColor=vec4(uMono>0.5?mono(color):color,1.0);return;}\n" +
-        " if(uZoneProtect>0.5){\n" +
-        "  float topBar=step(.927,vUV.y);\n" +
-        "  float navHud=step(.780,vUV.x)*step(.755,vUV.y);\n" +
-        "  float telemetry=(1.0-step(.195,vUV.y))*step(.300,vUV.x)*(1.0-step(.700,vUV.x));\n" +
-        "  if(max(topBar,max(navHud,telemetry))>0.5){gl_FragColor=vec4(uMono>0.5?mono(color):color,1.0);return;}\n" +
-        " }\n" +
+
         " vec3 local=(grab(vUV+vec2(uPixel.x*2.0,0.0))+grab(vUV-vec2(uPixel.x*2.0,0.0))+\n" +
         "             grab(vUV+vec2(0.0,uPixel.y*2.0))+grab(vUV-vec2(0.0,uPixel.y*2.0)))*0.25;\n" +
         " float luminance=dot(color,vec3(.299,.587,.114));\n" +
@@ -120,7 +114,6 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         "uniform vec2 uPixel;\n" +
         "uniform float uEnhanced;\n" +
         "uniform float uStrength;\n" +
-        "uniform float uZoneProtect;\n" +
         "uniform float uMono;\n" +
         "uniform float uMax;\n" +
         "uniform vec2 uCrop;\n" +
@@ -136,12 +129,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         "void main(){\n" +
         " vec3 color=grab(vUV);\n" +
         " if(uEnhanced<0.5||uStrength<0.001){gl_FragColor=vec4(uMono>0.5?mono(color):color,1.0);return;}\n" +
-        " if(uZoneProtect>0.5){\n" +
-        "  float topBar=step(.927,vUV.y);\n" +
-        "  float navHud=step(.780,vUV.x)*step(.755,vUV.y);\n" +
-        "  float telemetry=(1.0-step(.195,vUV.y))*step(.300,vUV.x)*(1.0-step(.700,vUV.x));\n" +
-        "  if(max(topBar,max(navHud,telemetry))>0.5){gl_FragColor=vec4(uMono>0.5?mono(color):color,1.0);return;}\n" +
-        " }\n" +
+
         " vec3 local=(grab(vUV+vec2(uPixel.x*2.0,0.0))+grab(vUV-vec2(uPixel.x*2.0,0.0))+\n" +
         "             grab(vUV+vec2(0.0,uPixel.y*2.0))+grab(vUV-vec2(0.0,uPixel.y*2.0)))*0.25;\n" +
         " float luminance=dot(color,vec3(.299,.587,.114));\n" +
@@ -169,10 +157,9 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     private volatile int viewMode=0;
     private volatile float zoom=1f,panX=0f,panY=0f;
     private volatile int userRotation=0;
-    private int cropLoc,panLoc,maxLoc,hybridLoc,airLoc,mapSamplerLoc,lutSamplerLoc,zoneProtectLoc,monoLoc;
+    private int cropLoc,panLoc,maxLoc,hybridLoc,airLoc,mapSamplerLoc,lutSamplerLoc,monoLoc;
     private volatile float strength=.60f;
     private volatile boolean manualMode=false;
-    private volatile boolean zoneProtect=true;
     private volatile boolean monochrome=false;
     private volatile int sceneMode=0; // 0 AUTO, 1 DAY, 2 NIGHT
     private int analysisTexture=0,analysisFbo=0;
@@ -240,7 +227,6 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     void setStrength(float value){strength=Math.max(0f,Math.min(1f,value));}
     void setManualMode(boolean value){manualMode=value;lastAnalysisNs=0;}
     void setSceneMode(int value){sceneMode=Math.max(0,Math.min(2,value));lastAnalysisNs=0;}
-    void setZoneProtect(boolean value){zoneProtect=value;view.requestRender();}
     void setMonochrome(boolean value){monochrome=value;view.requestRender();}
     boolean isManualMode(){return manualMode;}
     private float effectiveStrength(){
@@ -327,7 +313,6 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
             lutSamplerLoc=GLES20.glGetUniformLocation(next,"uClahe");
             cropLoc=GLES20.glGetUniformLocation(next,"uCrop");
             panLoc=GLES20.glGetUniformLocation(next,"uPan");
-            zoneProtectLoc=GLES20.glGetUniformLocation(next,"uZoneProtect");
             monoLoc=GLES20.glGetUniformLocation(next,"uMono");
             GLES20.glUniform1i(GLES20.glGetUniformLocation(next,"uCamera"),0);
             if(next==program&&hybridShaderAvailable){
@@ -364,7 +349,6 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         lutSamplerLoc=GLES20.glGetUniformLocation(program,"uClahe");
         cropLoc=GLES20.glGetUniformLocation(program,"uCrop");
         panLoc=GLES20.glGetUniformLocation(program,"uPan");
-        zoneProtectLoc=GLES20.glGetUniformLocation(program,"uZoneProtect");
         monoLoc=GLES20.glGetUniformLocation(program,"uMono");
         // Distinct sampler units are mandatory even if the hybrid branch is disabled.
         // Previously all sampler uniforms initially pointed at GL_TEXTURE0,
@@ -632,7 +616,6 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         GLES20.glUniform1f(strengthLoc,effectiveStrength());
         GLES20.glUniform1f(maxLoc,maxMode?1f:0f);
         GLES20.glUniform1f(hybridLoc,(useHybridProgram&&hybridMapsUploaded)?1f:0f);
-        if(zoneProtectLoc>=0)GLES20.glUniform1f(zoneProtectLoc,(useFilter&&zoneProtect)?1f:0f);
         if(monoLoc>=0)GLES20.glUniform1f(monoLoc,monochrome?1f:0f);
         if(useHybridProgram&&hybridMapsUploaded&&currentHybrid!=null)
             GLES20.glUniform3f(airLoc,currentHybrid.ar,currentHybrid.ag,currentHybrid.ab);
