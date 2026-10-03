@@ -11,13 +11,13 @@
 <link rel="apple-touch-icon" href="./digital-dehazing-icon.svg">
 <style>
 :root{font:16px system-ui,-apple-system,Segoe UI,sans-serif;color:#f4f6f7;background:#171a1d}
-*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#171a1d}body{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);padding-bottom:env(safe-area-inset-bottom);touch-action:manipulation}header{min-height:58px;display:flex;align-items:center;gap:10px;padding:8px max(12px,env(safe-area-inset-right)) 8px max(12px,env(safe-area-inset-left));background:#272b2f;position:sticky;top:0;z-index:5}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#171a1d}body{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);padding-bottom:env(safe-area-inset-bottom);touch-action:manipulation}header{min-height:58px;display:flex;align-items:center;gap:10px;padding:max(8px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) 8px max(12px,env(safe-area-inset-left));background:#272b2f;position:sticky;top:0;z-index:5}
 h1{font-size:18px;margin:0;white-space:nowrap}.grow{flex:1}button,.fileBtn{border:1px solid #596169;background:#343a40;color:#fff;border-radius:9px;padding:10px 12px;font:inherit;font-weight:650;cursor:pointer}
 button.active{background:#2e8b57;border-color:#55b47f}.fileBtn input{display:none}
 main{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,320px);gap:12px;padding:12px;min-height:calc(100dvh - 58px)}
 .stage{background:#050607;border:1px solid #3b4146;border-radius:12px;min-height:62dvh;display:grid;place-items:center;position:relative;overflow:hidden}
 video,canvas{display:block;max-width:100%;max-height:78vh;width:100%;height:auto;background:#000}
-canvas{display:none}.badge{position:absolute;left:10px;top:10px;background:#111c;padding:6px 9px;border-radius:8px;font-weight:700}
+canvas{display:none}.badge{position:absolute;left:10px;top:10px;background:#111c;padding:6px 9px;border-radius:8px;font-weight:700}.splitLine{position:absolute;top:0;bottom:0;left:50%;width:2px;background:#ffffffb8;pointer-events:none;z-index:3}
 .panel{background:#272b2f;border:1px solid #3d4348;border-radius:12px;padding:12px;align-self:start}
 h2{font-size:13px;color:#c3c8cc;margin:5px 0 8px}.grid5{display:grid;grid-template-columns:repeat(2,1fr);gap:7px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.grid5 button:first-child{grid-column:1/-1}
 .row{display:flex;align-items:center;gap:8px;margin:12px 0}.row input[type=range]{flex:1}.small{font-size:12px;color:#aeb5bb;line-height:1.45}.status{font-size:12px;color:#b8d7c5;min-height:38px}
@@ -35,7 +35,7 @@ h2{font-size:13px;color:#c3c8cc;margin:5px 0 8px}.grid5{display:grid;grid-templa
 <button id="camera">Камера</button></header>
 <main>
 <section>
-<div class="stage"><video id="src" playsinline muted></video><canvas id="out"></canvas><div id="badge" class="badge">OFF</div><div id="latency" class="badge" style="top:auto;bottom:10px">ЗАТРИМКА ОБРОБКИ —</div></div>
+<div class="stage"><video id="src" playsinline muted></video><canvas id="out"></canvas><div id="splitLine" class="splitLine"></div><div id="badge" class="badge">OFF</div><div id="latency" class="badge" style="top:auto;bottom:10px">ЗАТРИМКА ОБРОБКИ —</div></div>
 <div class="transport" id="transport"><button id="back">« 10с</button><button id="stop">■ Стоп</button><button id="play">▶</button><button id="forward">10с »</button><input id="seek" type="range" min="0" max="1000" value="0"><span id="time" class="small">00:00 / 00:00</span></div>
 <div class="transport" id="photoTools" style="display:none"><button id="savePhoto">Зберегти оброблене фото PNG</button><span class="small">50/50 — перегляд; при збереженні експортується весь оброблений кадр.</span></div>
 </section>
@@ -74,6 +74,7 @@ function fmt(s){if(!isFinite(s))return'00:00';s=Math.max(0,Math.round(s));return
 function setStatus(t){statusEl.textContent=t}
 function modeStrength(){return mode==='low'?.35:mode==='medium'?.60:mode==='high'?.85:strength}
 function effectiveStrength(){
+ if(mode==='off')return 0;
  let v=modeStrength();
  if(scene==='day')v*=1.08;
  if(scene==='night')v*=.78;
@@ -88,10 +89,14 @@ function updateUI(){
  strengthEl.disabled=mode!=='auto';strengthEl.value=Math.round(strength*100);strengthVal.textContent=Math.round(effectiveStrength()*100)+'%';
  if(mediaKind==='photo'){
    stopRender();
-   src.style.display='none';out.style.display='block';renderPhoto(true);
+   src.style.display='none';out.style.display='block';
+   document.getElementById('splitLine').style.display='block';
+   renderPhoto(true);
  }else if(mode==='off'){
+   document.getElementById('splitLine').style.display='none';
    out.style.display='none';src.style.display='block';stopRender();
  }else{
+   document.getElementById('splitLine').style.display='block';
    src.style.display='none';out.style.display='block';startRender();
  }
 }
@@ -149,7 +154,8 @@ function drawGL(source,w,h,compare=true){
  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,source);
  gl.uniform1i(gl.getUniformLocation(program,'t'),0);
  gl.uniform2f(gl.getUniformLocation(program,'px'),1/cw,1/ch);
- gl.uniform1f(gl.getUniformLocation(program,'s'),effectiveStrength());
+ const photoBoost=mediaKind==='photo'?1.18:1.0;
+ gl.uniform1f(gl.getUniformLocation(program,'s'),Math.min(1,effectiveStrength()*photoBoost));
  gl.uniform1f(gl.getUniformLocation(program,'m'),mono?1:0);
  gl.uniform1f(gl.getUniformLocation(program,'q'),compare?1:0);
  gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
@@ -158,7 +164,7 @@ function renderPhoto(compare=true){
  if(mediaKind!=='photo'||!photoImg)return;
  const started=performance.now();
  try{
-  analyzeSource(photoImg,started,true);
+  if(mode==='auto')analyzeSource(photoImg,started,true);
   drawGL(photoImg,photoImg.naturalWidth||photoImg.width,photoImg.naturalHeight||photoImg.height,compare);
   document.getElementById('latency').textContent='ОБРОБКА ФОТО '+(performance.now()-started).toFixed(1)+' мс';
   out.style.display='block';src.style.display='none';
@@ -223,7 +229,7 @@ async function openPhoto(f){
   mediaKind='photo';photoImg=img;photoName=(f.name||'photo').replace(/\.[^.]+$/,'');
   document.getElementById('transport').style.display='none';
   document.getElementById('photoTools').style.display='flex';
-  setStatus('Фото: '+f.name+' • '+img.naturalWidth+'×'+img.naturalHeight);
+  setStatus('Фото: '+f.name+' • '+img.naturalWidth+'×'+img.naturalHeight+' • 50/50: ліворуч оригінал, праворуч обробка');
   renderPhoto(true);updateUI();
  };
  img.onerror=()=>setStatus('Не вдалося відкрити фото. Для HEIC/HEIF використай Safari/iPhone або конвертуй у JPG/PNG.');
@@ -259,6 +265,7 @@ play.onclick=()=>src.paused?src.play():src.pause();
 src.onplay=()=>{play.textContent='Ⅱ';if(mode!=='off')startRender()};src.onpause=()=>play.textContent='▶';
 src.ontimeupdate=()=>{if(src.duration){seek.value=Math.round(src.currentTime/src.duration*1000);document.getElementById('time').textContent=fmt(src.currentTime)+' / '+fmt(src.duration)}};
 seek.oninput=()=>{if(src.duration)src.currentTime=src.duration*Number(seek.value)/1000};
+document.getElementById('splitLine').style.display='none';
 updateUI();
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));}
 </script>
