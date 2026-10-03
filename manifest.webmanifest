@@ -1,7 +1,7 @@
 {
   "name": "Digital Dehazing",
   "short_name": "Dehazing",
-  "description": "Digital dehazing for camera and local video. Local processing in the browser.",
+  "description": "Digital dehazing for camera and local video with local processing.",
   "lang": "uk",
   "start_url": "./digital-dehazing.html",
   "scope": "./",
@@ -11,15 +11,9 @@
   "theme_color": "#22272b",
   "icons": [
     {
-      "src": "./digital-dehazing-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "./digital-dehazing-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
+      "src": "./digital-dehazing-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
       "purpose": "any maskable"
     }
   ]
