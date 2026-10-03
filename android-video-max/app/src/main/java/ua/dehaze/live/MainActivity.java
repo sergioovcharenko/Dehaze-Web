@@ -211,7 +211,7 @@ public final class MainActivity extends Activity {
         statsView=text("Очікування камери",11,MUTED);
         statsView.setSingleLine(true);
         bar.addView(statsView);
-        TextView photoTop=button("Фото MAX",this::openPhotoMax);
+        TextView photoTop=button("Фото",this::openPhotoMax);
         photoTop.setBackgroundColor(Color.rgb(70,103,91));
         LinearLayout.LayoutParams photoTopParams=new LinearLayout.LayoutParams(dp(109),dp(37));
         photoTopParams.leftMargin=dp(8);
@@ -372,8 +372,8 @@ public final class MainActivity extends Activity {
         scroll.addView(list);
         drawer.addView(scroll);
 
-        menuTitle(list,"VIDEO MAX  •  ОФЛАЙН");
-        menuItem(list,"▣  ФОТО MAX — вибрати зображення",this::openPhotoMax);
+        menuTitle(list,"DIGITAL DEHAZING  •  ОФЛАЙН");
+        menuItem(list,"▣  Відкрити фото",this::openPhotoMax);
         menuItem(list,"✕  Сховати",()->setDrawer(false));
         toggle=button("Антитуман: ON",()->{
             enhanced=!enhanced;if(renderer!=null)renderer.setEnhanced(enhanced);
@@ -705,10 +705,12 @@ public final class MainActivity extends Activity {
 
         TextView max=button("КАМЕРА MAX",()->useCameraMode(true));
         TextView safe=button("КАМЕРА SAFE",()->useCameraMode(false));
+        TextView photo=button("ВІДКРИТИ ФОТО",this::openPhotoMax);
         TextView video=button("ВІДКРИТИ ВІДЕО",this::pickVideo);
 
         max.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         safe.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        photo.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         video.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
 
         android.graphics.drawable.GradientDrawable maxBg=new android.graphics.drawable.GradientDrawable();
@@ -719,15 +721,16 @@ public final class MainActivity extends Activity {
         safeBg.setColor(Color.rgb(58,77,82));safeBg.setCornerRadius(dp(10));
         safeBg.setStroke(dp(1),Color.rgb(93,116,122));safe.setBackground(safeBg);
 
-        LinearLayout.LayoutParams buttonLp=new LinearLayout.LayoutParams(dp(190),dp(58));
-        buttonLp.setMargins(dp(8),0,dp(8),0);
+        LinearLayout.LayoutParams buttonLp=new LinearLayout.LayoutParams(dp(165),dp(58));
+        buttonLp.setMargins(dp(6),0,dp(6),0);
         buttons.addView(max,new LinearLayout.LayoutParams(buttonLp));
         buttons.addView(safe,new LinearLayout.LayoutParams(buttonLp));
+        buttons.addView(photo,new LinearLayout.LayoutParams(buttonLp));
         buttons.addView(video,new LinearLayout.LayoutParams(buttonLp));
 
         startButtonsPanel.addView(buttons,new LinearLayout.LayoutParams(-2,-2));
 
-        TextView hint=text("MAX — найвища доступна якість  •  SAFE — стабільний режим  •  відео — локальний файл",11,MUTED);
+        TextView hint=text("MAX — найвища якість  •  SAFE — стабільний режим  •  фото/відео — локальні файли",11,MUTED);
         hint.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams hintLp=new LinearLayout.LayoutParams(-2,-2);
         hintLp.topMargin=dp(16);
