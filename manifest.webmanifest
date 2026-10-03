@@ -1,18 +1,25 @@
 {
-  "name": "Dehaze Web — Антитуман",
-  "short_name": "Антитуман",
-  "description": "Локальна обробка фото й відео з туманом без інтернету після встановлення",
+  "name": "Digital Dehazing",
+  "short_name": "Dehazing",
+  "description": "Digital dehazing for camera and local video. Local processing in the browser.",
   "lang": "uk",
-  "start_url": "./?app=1",
+  "start_url": "./digital-dehazing.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#0a1020",
-  "theme_color": "#0a1020",
+  "orientation": "any",
+  "background_color": "#0b1014",
+  "theme_color": "#22272b",
   "icons": [
     {
-      "src": "./offline-icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "./digital-dehazing-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./digital-dehazing-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ]
