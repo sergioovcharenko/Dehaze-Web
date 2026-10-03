@@ -97,13 +97,13 @@ public final class PhotoActivity extends Activity {
                     if(comma>=0)base64=base64.substring(comma+1);
                     byte[] bytes=Base64.decode(base64,Base64.DEFAULT);
                     if(bytes.length<100)throw new Exception("Порожній результат");
-                    String filename="Meti-Tuman-MAX-"+System.currentTimeMillis()+".png";
+                    String filename="Digital-Dehazing-"+System.currentTimeMillis()+".png";
                     if(Build.VERSION.SDK_INT>=29){
                         ContentValues values=new ContentValues();
                         values.put(MediaStore.Images.Media.DISPLAY_NAME,filename);
                         values.put(MediaStore.Images.Media.MIME_TYPE,"image/png");
                         values.put(MediaStore.Images.Media.RELATIVE_PATH,
-                            "Pictures/MetiTumanMAX");
+                            "Pictures/DigitalDehazing");
                         values.put(MediaStore.Images.Media.IS_PENDING,1);
                         Uri uri=getContentResolver().insert(
                             MediaStore.Images.Media.EXTERNAL_CONTENT_URI,values);
