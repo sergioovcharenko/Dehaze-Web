@@ -642,19 +642,21 @@ public final class MainActivity extends Activity {
             glView.setEGLContextClientVersion(2);
             glView.setPreserveEGLContextOnPause(true);
             renderer=new SplitRenderer(this,glView,this::onCameraTextureReady,this::onFrameStats);
-            if(renderer!=null)renderer.setStrength(strength/100f);
-            renderer.setMonochrome(monochrome);
+            // GLSurfaceView must have a Renderer before any setter that calls requestRender().
+            glView.setRenderer(renderer);
+            glView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
+            renderer.setStrength(strength/100f);
             renderer.setMaxMode(true);
             renderer.setFill(false);
             renderer.setViewMode(viewMode);
-            glView.setRenderer(renderer);
-            glView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
+            renderer.setMonochrome(monochrome);
             videoArea.addView(glView,0,new FrameLayout.LayoutParams(-1,-1));
             if(active)glView.onResume();
             if(scaleDetector!=null&&gestureDetector!=null)attachVideoTouch();
         }catch(Throwable error){
             renderer=null;glView=null;
-            String message="GPU не запущено: "+error.getClass().getSimpleName();
+            String detail=error.getMessage()==null?"":(" • "+error.getMessage());
+            String message="GPU не запущено: "+error.getClass().getSimpleName()+detail;
             setState(message);
             setStartStatus(message);
         }
