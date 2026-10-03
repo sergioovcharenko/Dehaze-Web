@@ -7,8 +7,8 @@ android {
         applicationId 'ua.meti.tuman.videomax'
         minSdk 26
         targetSdk 35
-        versionCode 15
-        versionName '2.5.2-gpu-init-order-fix'
+        versionCode 16
+        versionName '3.0.0-digital-dehazing'
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
