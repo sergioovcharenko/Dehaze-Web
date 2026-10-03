@@ -204,7 +204,7 @@ public final class MainActivity extends Activity {
         logo.setGravity(Gravity.CENTER_VERTICAL);
         logo.setPadding(dp(4),0,dp(10),0);
         bar.addView(logo);
-        TextView title=text("Меті Туман VIDEO MAX",15,INK);
+        TextView title=text("Digital Dehazing",15,INK);
         title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         bar.addView(title);
         bar.addView(new View(this),new LinearLayout.LayoutParams(0,dp(1),1f));
@@ -481,19 +481,6 @@ public final class MainActivity extends Activity {
             @Override public void onStopTrackingTouch(SeekBar b){}
         });
         if(renderer!=null)renderer.setManualMode(false);
-
-        menuTitle(list,"ЗАХИСТ ЗОН");
-        CheckBox zoneProtectCheck=new CheckBox(this);
-        zoneProtectCheck.setText("HUD • верхня панель • навігоризонт/компас • нижня телеметрія");
-        zoneProtectCheck.setTextColor(INK);
-        zoneProtectCheck.setTextSize(12);
-        zoneProtectCheck.setButtonTintList(ColorStateList.valueOf(ACCENT));
-        zoneProtectCheck.setChecked(true);
-        zoneProtectCheck.setOnCheckedChangeListener((box,checked)->{
-            if(renderer!=null)renderer.setZoneProtect(checked);
-            setState(checked?"Захист зон HUD увімкнено":"Захист зон HUD вимкнено");
-        });
-        list.addView(zoneProtectCheck,new LinearLayout.LayoutParams(-1,dp(48)));
 
         menuTitle(list,"ДІЇ");
         menuItem(list,"▣  Знімок",this::takeSnapshot);
