@@ -1,4 +1,4 @@
-name: Build Меті Туман MAX (separate APK)
+name: Build Меті Туман Adaptive MAX (separate APK)
 on:
   push:
     branches: [main]
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: meti-tuman-max-apk
+  group: meti-tuman-adaptive-max-apk
   cancel-in-progress: false
 
 jobs:
@@ -37,44 +37,44 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
-      - name: Compile independent MAX APK
+      - name: Compile independent Adaptive MAX APK
         id: compile
         run: gradle -p android-max --no-daemon --stacktrace assembleDebug
-      - name: Verify separate package and APK
+      - name: Verify Adaptive MAX package and APK
         id: verify
         run: |
           set -euo pipefail
           apk=android-max/app/build/outputs/apk/debug/app-debug.apk
           test -s "$apk"
           "${ANDROID_HOME}/build-tools/35.0.0/aapt" dump badging "$apk" | grep '^package:' | tee package.txt
-          grep "name='ua.meti.tuman.max'" package.txt
-          cp "$apk" Meti-Tuman-MAX.apk
-          sha256sum Meti-Tuman-MAX.apk > Meti-Tuman-MAX.apk.sha256
-          ls -lh Meti-Tuman-MAX.apk
+          grep "name='ua.meti.tuman.adaptivemax'" package.txt
+          cp "$apk" Meti-Tuman-Adaptive-MAX.apk
+          sha256sum Meti-Tuman-Adaptive-MAX.apk > Meti-Tuman-Adaptive-MAX.apk.sha256
+          ls -lh Meti-Tuman-Adaptive-MAX.apk
       - name: Upload MAX APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Meti-Tuman-MAX-debug
+          name: Meti-Tuman-Adaptive-MAX-debug
           path: |
-            Meti-Tuman-MAX.apk
-            Meti-Tuman-MAX.apk.sha256
+            Meti-Tuman-Adaptive-MAX.apk
+            Meti-Tuman-Adaptive-MAX.apk.sha256
           if-no-files-found: error
           retention-days: 90
-      - name: Publish separate MAX release (never overwrite original)
+      - name: Publish separate Adaptive MAX release (never overwrite previous builds)
         id: publish
         if: success()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag=meti-tuman-max-latest
+          tag=meti-tuman-adaptive-max-latest
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --title "Меті Туман MAX — окрема APK (debug)" --notes "Independent Android package ua.meti.tuman.max. Photo AUTO MAX + offline live dehaze. Installs alongside the original ua.meti.tuman. Debug builds are for testing." --prerelease
+            gh release create "$tag" --title "Меті Туман Adaptive MAX — окрема APK (debug)" --notes "Independent Android package ua.meti.tuman.adaptivemax. Adaptive Object Dehaze + offline live dehaze. Installs alongside ua.meti.tuman and ua.meti.tuman.max. Debug builds are for testing." --prerelease
           fi
-          gh release upload "$tag" Meti-Tuman-MAX.apk Meti-Tuman-MAX.apk.sha256 --clobber
+          gh release upload "$tag" Meti-Tuman-Adaptive-MAX.apk Meti-Tuman-Adaptive-MAX.apk.sha256 --clobber
           gh release view "$tag" --json url,assets
-      - name: Record MAX build status
+      - name: Record Adaptive MAX build status
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
@@ -95,18 +95,18 @@ jobs:
             --arg publish "$PUBLISH" \
             --arg commit "$GITHUB_SHA" \
             --arg url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-            --arg apk "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/meti-tuman-max-latest/Meti-Tuman-MAX.apk" \
+            --arg apk "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/meti-tuman-adaptive-max-latest/Meti-Tuman-Adaptive-MAX.apk" \
             --arg time "$(date -u +%FT%TZ)" \
-            '{state:$state,compile:$compile,verify:$verify,publish:$publish,commit:$commit,workflow_url:$url,apk_url:(if $state=="success" then $apk else null end),updated_utc:$time}' > max-build-status.json
-          old_sha=$(gh api "repos/$GITHUB_REPOSITORY/contents/max-build-status.json" --jq .sha 2>/dev/null || true)
+            '{state:$state,compile:$compile,verify:$verify,publish:$publish,commit:$commit,workflow_url:$url,apk_url:(if $state=="success" then $apk else null end),updated_utc:$time}' > adaptive-max-build-status.json
+          old_sha=$(gh api "repos/$GITHUB_REPOSITORY/contents/adaptive-max-build-status.json" --jq .sha 2>/dev/null || true)
           if [ -n "$old_sha" ]; then
-            gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/max-build-status.json" \
-              -f message="Record independent MAX APK build" \
-              -f content="$(base64 -w0 < max-build-status.json)" \
+            gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/adaptive-max-build-status.json" \
+              -f message="Record independent Adaptive MAX APK build" \
+              -f content="$(base64 -w0 < adaptive-max-build-status.json)" \
               -f sha="$old_sha" -f branch=main >/dev/null
           else
-            gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/max-build-status.json" \
-              -f message="Record independent MAX APK build" \
-              -f content="$(base64 -w0 < max-build-status.json)" \
+            gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/adaptive-max-build-status.json" \
+              -f message="Record independent Adaptive MAX APK build" \
+              -f content="$(base64 -w0 < adaptive-max-build-status.json)" \
               -f branch=main >/dev/null
           fi
