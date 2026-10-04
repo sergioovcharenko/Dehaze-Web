@@ -55,7 +55,12 @@ video,canvas{width:100%;height:100%;object-fit:contain;background:#050708}canvas
   <button data-preset="landscape">LANDSCAPE MAX</button>
  </div>
  <label class="switch"><input id="auto" type="checkbox" checked> AUTO аналіз сили</label>
- <label class="switch"><input id="compare" type="checkbox" checked> 50/50 оригінал / обробка</label>
+ <label class="switch"><input id="compare" type="checkbox" checked> Порівняння</label>
+ <div class="preset" style="grid-template-columns:1fr 1fr 1fr">
+  <button data-view="split">50/50</button>
+  <button data-view="double">2 КАДРИ</button>
+  <button data-view="processed">ОБРОБЛЕНЕ</button>
+ </div>
 
  <div class="row"><label>1. Сила dehaze <output id="strengthO">70%</output></label><input id="strength" type="range" min="0" max="100" value="70"></div>
  <div class="row"><label>2. AUTO cap <output id="capO">80%</output></label><input id="cap" type="range" min="20" max="100" value="80"></div>
@@ -70,12 +75,12 @@ video,canvas{width:100%;height:100%;object-fit:contain;background:#050708}canvas
 <script>
 const $=id=>document.getElementById(id), v=$('video'), c=$('canvas');
 let gl,program,tex,buffer,rendering=false,lastAnalyze=0,autoTarget=.70,currentStrength=.70;
-const A=$('auto'),Q=$('compare');
+const A=$('auto'),Q=$('compare');let viewMode='split';
 const ids=['strength','cap','contrast','detail','denoise','temporal','blend'];
 const outMap={strength:'strengthO',cap:'capO',contrast:'contrastO',detail:'detailO',denoise:'denoiseO',temporal:'temporalO',blend:'blendO'};
 function val(id){return Number($(id).value)/100}
-function sync(){ids.forEach(id=>$(outMap[id]).textContent=$(id).value+'%');$('badge').textContent=(Q.checked?'50/50':'FULL')+' • '+(A.checked?'AUTO':'MANUAL')}
-ids.forEach(id=>$(id).oninput=sync);A.onchange=sync;Q.onchange=sync;sync();
+function sync(){ids.forEach(id=>$(outMap[id]).textContent=$(id).value+'%');$('badge').textContent=(Q.checked?(viewMode==='double'?'2 КАДРИ':viewMode==='split'?'50/50':'ОБРОБЛЕНЕ'):'ОБРОБЛЕНЕ')+' • '+(A.checked?'AUTO':'MANUAL')}
+ids.forEach(id=>$(id).oninput=sync);A.onchange=sync;Q.onchange=()=>{if(!Q.checked)viewMode='processed';else if(viewMode==='processed')viewMode='split';sync()};document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{viewMode=b.dataset.view;Q.checked=viewMode!=='processed';sync()});sync();
 const presets={
  balanced:{strength:68,cap:80,contrast:42,detail:30,denoise:25,temporal:75,blend:92},
  dense:{strength:68,cap:72,contrast:30,detail:20,denoise:42,temporal:88,blend:88},
@@ -90,14 +95,17 @@ function init(){
  const vs=shader(gl.VERTEX_SHADER,'attribute vec2 p;varying vec2 uv;void main(){uv=(p+1.0)*.5;gl_Position=vec4(p,0,1);}');
  const fs=shader(gl.FRAGMENT_SHADER,`precision mediump float;
  varying vec2 uv;uniform sampler2D t;uniform vec2 px;
- uniform float uStrength,uContrast,uDetail,uDenoise,uBlend,uCompare;
+ uniform float uStrength,uContrast,uDetail,uDenoise,uBlend,uCompare,uView;
  vec3 g(vec2 q){return texture2D(t,clamp(q,vec2(.001),vec2(.999))).rgb;}
  void main(){
-  vec3 original=g(uv);
-  if(uCompare>.5&&uv.x<.5){gl_FragColor=vec4(original,1.);return;}
-  vec3 n=(g(uv+vec2(px.x,0.))+g(uv-vec2(px.x,0.))+g(uv+vec2(0.,px.y))+g(uv-vec2(0.,px.y)))*.25;
+  vec2 suv=uv;
+  bool doubleView=uView>1.5;
+  if(doubleView)suv=vec2(fract(uv.x*2.0),uv.y);
+  vec3 original=g(suv);
+  if(uCompare>.5&&((uView<1.5&&uv.x<.5)||(doubleView&&uv.x<.5))){gl_FragColor=vec4(original,1.);return;}
+  vec3 n=(g(suv+vec2(px.x,0.))+g(suv-vec2(px.x,0.))+g(suv+vec2(0.,px.y))+g(suv-vec2(0.,px.y)))*.25;
   vec3 base=mix(original,n,uDenoise*.55);
-  vec3 local=(g(uv+vec2(px.x*2.,0.))+g(uv-vec2(px.x*2.,0.))+g(uv+vec2(0.,px.y*2.))+g(uv-vec2(0.,px.y*2.)))*.25;
+  vec3 local=(g(suv+vec2(px.x*2.,0.))+g(suv-vec2(px.x*2.,0.))+g(suv+vec2(0.,px.y*2.))+g(suv-vec2(0.,px.y*2.)))*.25;
   float y=dot(base,vec3(.299,.587,.114));
   float edge=length(base-local);
   float sky=smoothstep(.64,.88,y)*(1.-smoothstep(.012,.07,edge))*smoothstep(.20,.90,uv.y);
@@ -148,8 +156,10 @@ function draw(now){
   gl.uniform1f(gl.getUniformLocation(program,'uDetail'),val('detail'));
   gl.uniform1f(gl.getUniformLocation(program,'uDenoise'),val('denoise'));
   gl.uniform1f(gl.getUniformLocation(program,'uBlend'),val('blend'));
-  gl.uniform1f(gl.getUniformLocation(program,'uCompare'),Q.checked?1:0);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
-  $('split').style.display=Q.checked?'block':'none';$('latency').textContent='обробка '+(performance.now()-start).toFixed(1)+' мс';
+  gl.uniform1f(gl.getUniformLocation(program,'uCompare'),Q.checked?1:0);
+  gl.uniform1f(gl.getUniformLocation(program,'uView'),viewMode==='double'?2:(viewMode==='split'?1:0));
+  gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+  $('split').style.display=(Q.checked&&viewMode!=='processed')?'block':'none';$('latency').textContent='обробка '+(performance.now()-start).toFixed(1)+' мс';
  }catch(e){$('status').textContent='Помилка GPU: '+e.message;rendering=false}
 }
 function start(){if(!rendering){rendering=true;requestAnimationFrame(draw)}}
