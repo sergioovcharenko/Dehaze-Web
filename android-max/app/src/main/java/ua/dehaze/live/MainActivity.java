@@ -64,7 +64,7 @@ public final class MainActivity extends Activity {
     private TextView videoLabelsLeft,videoLabelsRight,zoomBadge,modeBadge;
     private FrameLayout root,drawer,videoArea;
     private boolean fillMode=true,frozen=false,drawerVisible=false;
-    private int viewMode=1;  // 0 = 50/50 wipe, 1 = two identical FILL previews, 2 = processed fullscreen
+    private int viewMode=0;  // 0 = full-frame 50/50 wipe, 1 = two previews, 2 = processed fullscreen
     private View drawerScrim;
     private ImageView freezeOverlay;
     private TextView resumeOverlay;
@@ -560,7 +560,7 @@ public final class MainActivity extends Activity {
         renderer.setStrength(strength/100f);
         renderer.setMaxMode(true);
         renderer.setFill(true);
-        renderer.setViewMode(1);
+        renderer.setViewMode(0);
         glView.setRenderer(renderer);
         glView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
         videoArea.addView(glView,new FrameLayout.LayoutParams(-1,-1));
@@ -787,6 +787,12 @@ public final class MainActivity extends Activity {
         clearFreeze();
         stopMedia();usingFile=false;fileUri=null;
         renderer.setFill(true);fillMode=true;
+        viewMode=0;
+        renderer.setViewMode(0);
+        if(videoLabelsLeft!=null)videoLabelsLeft.setVisibility(View.VISIBLE);
+        if(videoLabelsRight!=null)videoLabelsRight.setText("АНТИТУМАН");
+        renderer.resetZoom();
+        if(zoomBadge!=null)zoomBadge.setText("1.0×");
         setDrawer(false);maybeOpenCamera();
     }
 
