@@ -37,6 +37,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         "uniform float uStrength;\n" +
         "uniform float uMax;\n" +
         "uniform float uNight;\n" +
+        "uniform float uAtmosphere;\n" +
         "uniform vec2 uCrop;\n" +
         "uniform vec2 uPan;\n" +
         "vec2 rotateUV(vec2 uv){if(uRotation<45.0)return uv;if(uRotation<135.0)return vec2(uv.y,1.0-uv.x);if(uRotation<225.0)return vec2(1.0-uv.x,1.0-uv.y);return vec2(1.0-uv.y,uv.x);}\n" +
@@ -46,36 +47,27 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         "float mx(vec3 c){return max(c.r,max(c.g,c.b));}\n" +
         "void main(){\n" +
         " vec3 c=grab(vUV); if(uEnhanced<0.5||uStrength<.001){gl_FragColor=vec4(c,1.0);return;}\n" +
-        " vec2 p2=uPixel*2.0,p5=uPixel*5.0,p9=uPixel*9.0;\n" +
-        " vec3 x1=grab(vUV+vec2(p2.x,0.0)),x2=grab(vUV-vec2(p2.x,0.0)),y1=grab(vUV+vec2(0.0,p2.y)),y2=grab(vUV-vec2(0.0,p2.y));\n" +
-        " vec3 d1=grab(vUV+vec2(p5.x,p5.y)),d2=grab(vUV+vec2(-p5.x,p5.y)),d3=grab(vUV+vec2(p5.x,-p5.y)),d4=grab(vUV-vec2(p5.x,p5.y));\n" +
-        " vec3 w1=grab(vUV+vec2(p9.x,0.0)),w2=grab(vUV-vec2(p9.x,0.0)),w3=grab(vUV+vec2(0.0,p9.y)),w4=grab(vUV-vec2(0.0,p9.y));\n" +
-        " vec3 near=(c+x1+x2+y1+y2)*.20; vec3 mid=(c+d1+d2+d3+d4)*.20; vec3 wide=(c+w1+w2+w3+w4)*.20;\n" +
-        " float yy=lum(c), yn=lum(near), ym=lum(mid), yw=lum(wide);\n" +
-        " float fine=abs(yy-yn)+length(c-near)*.55; float broad=abs(yy-yw)+length(c-wide)*.30;\n" +
-        " float edge=clamp(fine*4.4+broad*2.4,0.0,1.0);\n" +
-        " float dark=min(dc(c),min(min(dc(x1),dc(x2)),min(dc(y1),dc(y2))));\n" +
-        " dark=min(dark,min(min(dc(d1),dc(d2)),min(dc(d3),dc(d4))));\n" +
-        " float sat=(mx(c)-dc(c))/max(mx(c),.06); float lowTex=1.0-smoothstep(.018,.14,edge);\n" +
-        " float grayHaze=(1.0-sat)*smoothstep(.22,.88,yy); float haze=clamp(dark*.58+grayHaze*.24+lowTex*.18,0.0,1.0);\n" +
-        " float s=clamp(uStrength,0.0,1.0); float maxBoost=mix(.94,1.08,uMax);\n" +
-        " float omega=mix(.68,.95,s)*maxBoost; float floorT=mix(.42,.20,s); floorT=mix(floorT,.32,uNight);\n" +
-        " float t=clamp(1.0-omega*haze,floorT,1.0);\n" +
-        " vec3 atmBase=mix(mid,wide,.55); float aLum=clamp(max(lum(atmBase)+.18,.70),.70,.95);\n" +
-        " vec3 tint=mix(vec3(aLum),clamp(atmBase+vec3(.16),vec3(.65),vec3(.96)),.16);\n" +
-        " vec3 rec=(c-tint)/t+tint; rec=clamp(rec,0.0,1.0);\n" +
-        " float structure=smoothstep(.012,.22,edge); float hazeStruct=structure*smoothstep(.18,.82,haze);\n" +
-        " vec3 detailFine=c-near; vec3 detailBroad=c-wide;\n" +
-        " rec+=clamp(detailFine,vec3(-.10),vec3(.10))*(s*(.36+.72*hazeStruct));\n" +
-        " rec+=clamp(detailBroad,vec3(-.075),vec3(.075))*(s*(.14+.40*hazeStruct));\n" +
-        " float localMean=ym; float localGain=1.0+s*(.10+.24*hazeStruct); rec=vec3(localMean)+(rec-vec3(localMean))*localGain;\n" +
-        " float smoothMask=lowTex*smoothstep(.28,.82,haze)*(1.0-structure); rec=mix(rec,near,.055*s*smoothMask+.08*uNight*smoothMask);\n" +
-        " float shadow=1.0-smoothstep(.06,.22,yy); float highlight=smoothstep(.78,.97,yy);\n" +
-        " rec=mix(rec,c,.22*shadow+.28*highlight);\n" +
-        " if(uNight>.5){rec=mix(rec,pow(max(rec,vec3(.0)),vec3(.86)),.24);}\n" +
-        " float amount=clamp((.34+.64*s)*(.72+.42*haze),0.0,.98); vec3 result=mix(c,rec,amount);\n" +
-        " float ry=lum(result); float satKeep=mix(1.0,.86,s*haze); result=mix(vec3(ry),result,satKeep);\n" +
-        " result=pow(clamp(result,0.0,1.0),vec3(.96));\n" +
+        " vec2 p2=uPixel*2.0,p5=uPixel*5.0;\n" +
+        " vec3 a=grab(vUV+vec2(p2.x,0.0)),b=grab(vUV-vec2(p2.x,0.0)),d=grab(vUV+vec2(0.0,p2.y)),e=grab(vUV-vec2(0.0,p2.y));\n" +
+        " vec3 q1=grab(vUV+vec2(p5.x,p5.y)),q2=grab(vUV+vec2(-p5.x,p5.y)),q3=grab(vUV+vec2(p5.x,-p5.y)),q4=grab(vUV-vec2(p5.x,p5.y));\n" +
+        " vec3 near=(c+a+b+d+e)*.20; vec3 wide=(c+q1+q2+q3+q4)*.20;\n" +
+        " float y=lum(c), localY=lum(near), wideY=lum(wide);\n" +
+        " float edge=clamp(abs(y-localY)*5.0+abs(y-wideY)*2.2,0.0,1.0);\n" +
+        " float dark=min(dc(c),min(min(dc(a),dc(b)),min(dc(d),dc(e)))); dark=min(dark,min(min(dc(q1),dc(q2)),min(dc(q3),dc(q4))));\n" +
+        " float A=clamp(uAtmosphere,.72,.92); float haze=clamp(dark/max(A,.1),0.0,1.0);\n" +
+        " float s=clamp(uStrength,0.0,1.0); float omega=mix(.66,.90,s)*mix(.96,1.03,uMax);\n" +
+        " float floorT=mix(.44,.29,s); floorT=mix(floorT,.36,uNight); float t=clamp(1.0-omega*haze,floorT,1.0);\n" +
+        " vec3 raw=(c-vec3(A))/t+vec3(A); raw=clamp(raw,0.0,1.0);\n" +
+        " float jy=lum(raw); float detail=(y-localY); float structure=smoothstep(.018,.16,edge);\n" +
+        " jy+=clamp(detail,-.06,.06)*s*(.25+.28*structure)*smoothstep(.15,.80,haze);\n" +
+        " jy=clamp(jy,0.0,1.0);\n" +
+        " vec3 chroma=c-vec3(y); float chromaKeep=mix(1.0,.90,s*haze); vec3 rec=vec3(jy)+chroma*chromaKeep;\n" +
+        " float shadow=1.0-smoothstep(.07,.22,y); float highlight=smoothstep(.80,.97,y);\n" +
+        " float protect=clamp(.32*shadow+.34*highlight,0.0,.52); rec=mix(rec,c,protect);\n" +
+        " float lowTex=1.0-smoothstep(.02,.11,edge); rec=mix(rec,near,.035*s*lowTex*smoothstep(.28,.82,haze));\n" +
+        " float amount=clamp((.24+.68*s)*(.58+.42*haze),0.0,.90); amount*=mix(1.0,.78,uNight);\n" +
+        " vec3 result=mix(c,rec,amount);\n" +
+        " float gamma=mix(.96,.88,uNight); result=pow(clamp(result,0.0,1.0),vec3(gamma));\n" +
         " gl_FragColor=vec4(clamp(result,0.0,1.0),1.0);\n" +
         "}";
 
@@ -91,8 +83,9 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     private volatile int viewMode=0;
     private volatile float zoom=1f,panX=0f,panY=0f;
     private volatile int userRotation=0;
-    private int cropLoc,panLoc,maxLoc,nightLoc;
+    private int cropLoc,panLoc,maxLoc,nightLoc,atmosphereLoc;
     private volatile float strength=.60f;
+    private volatile float atmosphere=.82f;
     private volatile boolean manualMode=false;
     private int analysisTexture=0,analysisFbo=0;
     private static final int SAMPLE_W=64,SAMPLE_H=36;
@@ -183,6 +176,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         strengthLoc=GLES20.glGetUniformLocation(program,"uStrength");
         maxLoc=GLES20.glGetUniformLocation(program,"uMax");
         nightLoc=GLES20.glGetUniformLocation(program,"uNight");
+        atmosphereLoc=GLES20.glGetUniformLocation(program,"uAtmosphere");
         cropLoc=GLES20.glGetUniformLocation(program,"uCrop");
         panLoc=GLES20.glGetUniformLocation(program,"uPan");
         int[] textures=new int[1];GLES20.glGenTextures(1,textures,0);
@@ -289,12 +283,14 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         float textureScore=clamp01((18f-edgeMean)/18f);
         float saturationMean=saturation/count;
         float grayScore=clamp01((48f-saturationMean)/48f);
-        float hazeProxy=contrastScore*.45f+textureScore*.35f+grayScore*.20f;
-        float target=.42f+.55f*hazeProxy;
+        float hazeProxy=contrastScore*.46f+textureScore*.34f+grayScore*.20f;
+        float target=.36f+.48f*hazeProxy;
         float mean=sum/count;
-        if(mean<65f)target=.38f+(target-.38f)*.78f;
+        if(mean<65f)target=.34f+(target-.34f)*.72f;
+        float nextAtmosphere=Math.max(.74f,Math.min(.90f,(p90+18f)/255f));
+        atmosphere=atmosphere*.82f+nextAtmosphere*.18f;
         // Smooth per-frame changes to avoid pulsing when the camera pans.
-        strength=clamp01(strength*.78f+target*.22f);
+        strength=clamp01(strength*.80f+target*.20f);
         activity.onAutoStrength(strength);
     }
 
@@ -327,8 +323,16 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         GLES20.glUniform1f(strengthLoc,strength);
         GLES20.glUniform1f(maxLoc,maxMode?1f:0f);
         GLES20.glUniform1f(nightLoc,nightMode?1f:0f);
+        GLES20.glUniform1f(atmosphereLoc,atmosphere);
         float z=Math.max(1f,zoom);
-        GLES20.glUniform2f(cropLoc,cropX/z,cropY/z);
+        float uniformCropX=cropX,uniformCropY=cropY;
+        // uCrop is applied BEFORE rotateUV(), so 90/270-degree frames need
+        // the crop axes swapped. Without this a landscape 3072x1728 camera
+        // becomes a narrow portrait strip in the fixed-landscape UI.
+        if(rot==90||rot==270){
+            float temp=uniformCropX;uniformCropX=uniformCropY;uniformCropY=temp;
+        }
+        GLES20.glUniform2f(cropLoc,uniformCropX/z,uniformCropY/z);
         GLES20.glUniform2f(panLoc,panX,panY);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP,0,4);
     }
