@@ -323,9 +323,11 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
             int middle=screenWidth/2;
             GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
             GLES20.glScissor(0,0,middle,screenHeight);
-            drawImage(0,0,screenWidth,screenHeight,false,true);
+            // FIT the complete source frame first, then reveal each half with
+            // scissor. This keeps 50/50 truly full-frame without cropping video.
+            drawImage(0,0,screenWidth,screenHeight,false,false);
             GLES20.glScissor(middle,0,screenWidth-middle,screenHeight);
-            drawImage(0,0,screenWidth,screenHeight,enhanced,true);
+            drawImage(0,0,screenWidth,screenHeight,enhanced,false);
             GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         }else if(mode==1){
             // Independent original and processed previews: FIT by default,
