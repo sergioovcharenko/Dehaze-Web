@@ -319,17 +319,14 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     private void drawViews(){
         final int mode=viewMode;
         if(mode==0){
-            // Both draws use identical full-screen geometry. Scissor only decides
-            // which half of the same undistorted source frame is visible.
+            // 50/50 is always one full-screen COVER frame. Never FIT here:
+            // FIT caused portrait/narrow previews with black side bars.
             int middle=screenWidth/2;
             GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
             GLES20.glScissor(0,0,middle,screenHeight);
-            // Camera uses full-screen COVER so the wipe never becomes a
-            // narrow portrait-like strip. Imported videos may request FIT.
-            boolean cover=!comparisonFit;
-            drawImage(0,0,screenWidth,screenHeight,false,cover);
+            drawImage(0,0,screenWidth,screenHeight,false,true);
             GLES20.glScissor(middle,0,screenWidth-middle,screenHeight);
-            drawImage(0,0,screenWidth,screenHeight,enhanced,cover);
+            drawImage(0,0,screenWidth,screenHeight,enhanced,true);
             GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         }else if(mode==1){
             // Independent original and processed previews: FIT by default,
