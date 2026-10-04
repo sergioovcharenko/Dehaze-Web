@@ -69,7 +69,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     private final FloatBuffer quad;
     private final AtomicBoolean framePending=new AtomicBoolean(false);
     private final float[] stMatrix=new float[16];
-    private volatile boolean enhanced=true,fill=true,frozen=false,maxMode=true,nightMode=false;
+    private volatile boolean enhanced=true,fill=true,frozen=false,maxMode=true,nightMode=false,comparisonFit=false;
     // 0: full-frame 50/50 wipe (no stretching), 1: separate FIT frames, 2: processed fullscreen.
     private volatile int viewMode=0;
     private volatile float zoom=1f,panX=0f,panY=0f;
@@ -103,6 +103,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     void setEnhanced(boolean value){enhanced=value;}
     void setMaxMode(boolean value){maxMode=value;}
     void setNightMode(boolean value){nightMode=value;}
+    void setComparisonFit(boolean value){comparisonFit=value;}
     void setFill(boolean value){fill=value;}
     void setViewMode(int value){viewMode=Math.max(0,Math.min(2,value));}
     int getViewMode(){return viewMode;}
@@ -323,11 +324,12 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
             int middle=screenWidth/2;
             GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
             GLES20.glScissor(0,0,middle,screenHeight);
-            // FIT the complete source frame first, then reveal each half with
-            // scissor. This keeps 50/50 truly full-frame without cropping video.
-            drawImage(0,0,screenWidth,screenHeight,false,false);
+            // Camera uses full-screen COVER so the wipe never becomes a
+            // narrow portrait-like strip. Imported videos may request FIT.
+            boolean cover=!comparisonFit;
+            drawImage(0,0,screenWidth,screenHeight,false,cover);
             GLES20.glScissor(middle,0,screenWidth-middle,screenHeight);
-            drawImage(0,0,screenWidth,screenHeight,enhanced,false);
+            drawImage(0,0,screenWidth,screenHeight,enhanced,cover);
             GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         }else if(mode==1){
             // Independent original and processed previews: FIT by default,
