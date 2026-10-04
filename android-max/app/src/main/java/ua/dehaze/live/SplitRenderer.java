@@ -38,28 +38,27 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         "uniform float uMax;\n" +
         "uniform vec2 uCrop;\n" +
         "uniform vec2 uPan;\n" +
-        "vec2 rotateUV(vec2 uv){\n" +
-        "  if(uRotation<45.0) return uv;\n" +
-        "  if(uRotation<135.0) return vec2(uv.y,1.0-uv.x);\n" +
-        "  if(uRotation<225.0) return vec2(1.0-uv.x,1.0-uv.y);\n" +
-        "  return vec2(1.0-uv.y,uv.x);\n" +
-        "}\n" +
+        "vec2 rotateUV(vec2 uv){if(uRotation<45.0)return uv;if(uRotation<135.0)return vec2(uv.y,1.0-uv.x);if(uRotation<225.0)return vec2(1.0-uv.x,1.0-uv.y);return vec2(1.0-uv.y,uv.x);}\n" +
         "vec3 grab(vec2 uv){vec2 p=clamp((uv-.5)*uCrop+.5+uPan,vec2(.001),vec2(.999));return texture2D(uCamera,(uMatrix*vec4(rotateUV(p),0.0,1.0)).xy).rgb;}\n" +
+        "float lum(vec3 c){return dot(c,vec3(.299,.587,.114));}\n" +
+        "float dc(vec3 c){return min(c.r,min(c.g,c.b));}\n" +
         "void main(){\n" +
-        " vec3 color=grab(vUV);\n" +
-        " if(uEnhanced<0.5||uStrength<0.001){gl_FragColor=vec4(color,1.0);return;}\n" +
-        " vec3 local=(grab(vUV+vec2(uPixel.x*2.0,0.0))+grab(vUV-vec2(uPixel.x*2.0,0.0))+\n" +
-        "             grab(vUV+vec2(0.0,uPixel.y*2.0))+grab(vUV-vec2(0.0,uPixel.y*2.0)))*0.25;\n" +
-        " float luminance=dot(color,vec3(.299,.587,.114));\n" +
-        " float edge=length(color-local);\n" +
-        " float sky=smoothstep(.62,.84,luminance)*(1.0-smoothstep(.01,.065,edge))*smoothstep(.18,.85,vUV.y);\n" +
-        " float protect=1.0-.95*sky;\n" +
-        " float level=mix(uStrength,min(1.0,uStrength*1.16),uMax);\n" +
-        " float t=max(mix(.60,.48,uMax),1.0-level*mix(.24+.13*luminance,.32+.17*luminance,uMax));\n" +
-        " vec3 corrected=clamp((color-vec3(.84))/t+vec3(.84),0.0,1.0);\n" +
-        " vec3 result=mix(color,corrected,level*mix(.76,.90,uMax)*protect);\n" +
-        " result+=clamp(color-local,-.10,.10)*(mix(.34,.46,uMax)*level*protect);\n" +
-        " gl_FragColor=vec4(clamp(result,0.0,1.0),1.0);\n" +
+        " vec3 c=grab(vUV); if(uEnhanced<0.5||uStrength<.001){gl_FragColor=vec4(c,1.0);return;}\n" +
+        " vec2 p2=uPixel*2.0,p4=uPixel*4.0;\n" +
+        " vec3 a=grab(vUV+vec2(p2.x,0.0)),b=grab(vUV-vec2(p2.x,0.0)),d=grab(vUV+vec2(0.0,p2.y)),e=grab(vUV-vec2(0.0,p2.y));\n" +
+        " vec3 q1=grab(vUV+vec2(p4.x,p4.y)),q2=grab(vUV+vec2(-p4.x,p4.y)),q3=grab(vUV+vec2(p4.x,-p4.y)),q4=grab(vUV-vec2(p4.x,p4.y));\n" +
+        " vec3 local2=(a+b+d+e)*.25; vec3 local4=(q1+q2+q3+q4)*.25;\n" +
+        " float y=lum(c); float edge=clamp(length(c-local2)*3.2+abs(y-lum(local4))*2.2,0.0,1.0);\n" +
+        " float dark=min(dc(c),min(min(dc(a),dc(b)),min(dc(d),dc(e)))); dark=min(dark,min(min(dc(q1),dc(q2)),min(dc(q3),dc(q4))));\n" +
+        " float lowTexture=1.0-smoothstep(.025,.16,edge); float haze=clamp(dark*.70+y*.18+lowTexture*.12,0.0,1.0);\n" +
+        " float s=clamp(uStrength,0.0,1.0); float omega=mix(.62,.88,s); float floorT=mix(.38,.22,s); float t=clamp(1.0-omega*haze,floorT,1.0);\n" +
+        " vec3 A=mix(vec3(.82),vec3(.94),clamp(haze*.9+.08,0.0,1.0)); vec3 rec=clamp((c-A)/t+A,0.0,1.0);\n" +
+        " float structure=smoothstep(.015,.20,edge)*smoothstep(.20,.82,haze); vec3 fine=c-local2; vec3 broad=c-local4;\n" +
+        " rec+=clamp(fine,-.11,.11)*(s*(.30+.85*structure)); rec+=clamp(broad,-.08,.08)*(s*.28*structure);\n" +
+        " float localY=lum(local4); float gain=1.0+s*(.10+.30*structure); rec=vec3(localY)+(rec-vec3(localY))*gain;\n" +
+        " float smoothMask=lowTexture*smoothstep(.35,.85,haze); rec=mix(rec,local2,.07*s*smoothMask);\n" +
+        " float mixD=s*(.38+.58*smoothstep(.10,.78,haze)); vec3 result=mix(c,rec,clamp(mixD,0.0,.97));\n" +
+        " float rl=lum(result); result=mix(vec3(rl),result,1.0+.12*s); gl_FragColor=vec4(clamp(result,0.0,1.0),1.0);\n" +
         "}";
     private final MainActivity activity;
     private final GLSurfaceView view;
@@ -269,9 +268,9 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         float saturationMean=saturation/count;
         float grayScore=clamp01((48f-saturationMean)/48f);
         float hazeProxy=contrastScore*.45f+textureScore*.35f+grayScore*.20f;
-        float target=.22f+.64f*hazeProxy;
+        float target=.28f+.70f*hazeProxy;
         float mean=sum/count;
-        if(mean<65f)target=.22f+(target-.22f)*.65f;
+        if(mean<65f)target=.28f+(target-.28f)*.72f;
         // Smooth per-frame changes to avoid pulsing when the camera pans.
         strength=clamp01(strength*.72f+target*.28f);
         activity.onAutoStrength(strength);
