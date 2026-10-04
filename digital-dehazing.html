@@ -115,14 +115,20 @@ function initGL(){
   if(q>.5&&uv.x<.5){gl_FragColor=vec4(m>.5?bw(c):c,1.);return;}
   vec3 l=(g(uv+vec2(px.x*2.,0.))+g(uv-vec2(px.x*2.,0.))+g(uv+vec2(0.,px.y*2.))+g(uv-vec2(0.,px.y*2.)))*.25;
   float y=dot(c,vec3(.299,.587,.114));float e=length(c-l);
-  float sky=smoothstep(.62,.84,y)*(1.-smoothstep(.01,.065,e))*smoothstep(.18,.88,uv.y);
-  float protect=1.-.93*sky;
-  float trans=max(.45,1.-s*(.27+.17*y));
-  vec3 rec=clamp((c-vec3(.84))/trans+vec3(.84),0.,1.);
-  vec3 r=mix(c,rec,s*.86*protect);
-  r+=clamp(c-l,-.10,.10)*(.40*s*protect);
+  vec3 c1=g(uv+vec2(px.x*3.,0.)),c2=g(uv-vec2(px.x*3.,0.));
+  vec3 c3=g(uv+vec2(0.,px.y*3.)),c4=g(uv-vec2(0.,px.y*3.));
+  float dark=min(c.r,min(c.g,c.b));
+  dark=min(dark,min(min(c1.r,min(c1.g,c1.b)),min(c2.r,min(c2.g,c2.b))));
+  dark=min(dark,min(min(c3.r,min(c3.g,c3.b)),min(c4.r,min(c4.g,c4.b))));
+  float haze=clamp(dark*.82+y*.18,0.,1.);
+  float trans=clamp(1.-(.50+.32*s)*haze,.28,1.);
+  vec3 A=mix(vec3(.80),vec3(.94),clamp(haze*.85+.10,0.,1.));
+  vec3 rec=clamp((c-A)/trans+A,0.,1.);
+  float mixD=s*(.28+.72*smoothstep(.10,.78,haze));
+  vec3 r=mix(c,rec,clamp(mixD,0.,.96));
+  r+=clamp(c-l,-.10,.10)*(.34*s);
   float lum=dot(r,vec3(.299,.587,.114));
-  r=mix(vec3(lum),r,1.+.14*s*protect);
+  r=mix(vec3(lum),r,1.+.16*s);
   r=clamp(r,0.,1.);if(m>.5)r=bw(r);gl_FragColor=vec4(r,1.);
  }`);
  program=gl.createProgram();gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);
@@ -141,7 +147,7 @@ function analyzeSource(source,now,force=false){
   for(let y=0;y<36;y++){let left=0;for(let x=0;x<64;x++){let i=(y*64+x)*4,r=d[i],g=d[i+1],b=d[i+2],lum=Math.min(255,Math.round(.299*r+.587*g+.114*b));hist[lum]++;sum+=lum;sat+=Math.max(r,g,b)-Math.min(r,g,b);if(x){edge+=Math.abs(lum-left);edges++}if(y){edge+=Math.abs(lum-prev[x]);edges++}left=lum;prev[x]=lum}}
   let acc=0,p10=0,p90=255,n=64*36;for(let i=0;i<256;i++){acc+=hist[i];if(acc>=n*.1){p10=i;break}}acc=0;for(let i=0;i<256;i++){acc+=hist[i];if(acc>=n*.9){p90=i;break}}
   const clamp=v=>Math.max(0,Math.min(1,v)),contrast=clamp((105-(p90-p10))/100),texture=clamp((18-edge/Math.max(1,edges))/18),gray=clamp((48-sat/n)/48);
-  let target=.22+.64*(contrast*.45+texture*.35+gray*.20),mean=sum/n;if(mean<65)target=.22+(target-.22)*.65;
+  let target=.28+.70*(contrast*.44+texture*.34+gray*.22),mean=sum/n;if(mean<65)target=.28+(target-.28)*.72;
   strength=force?target:clamp(strength*.72+target*.28);
  }catch(e){}
 }
