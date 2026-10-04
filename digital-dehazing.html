@@ -32,7 +32,7 @@ h2{font-size:13px;color:#c3c8cc;margin:5px 0 8px}.grid5{display:grid;grid-templa
 <header><h1>Digital Dehazing</h1><div class="grow"></div>
 <label class="fileBtn">Відкрити фото<input id="photoFile" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*"></label>
 <label class="fileBtn">Відкрити відео<input id="file" type="file" accept="video/*"></label>
-<button id="camera">Камера</button></header>
+<button id="camera">Камера MAX</button></header>
 <main>
 <section>
 <div class="stage"><video id="src" playsinline muted></video><canvas id="out"></canvas><div id="splitLine" class="splitLine"></div><div id="badge" class="badge">OFF</div><div id="latency" class="badge" style="top:auto;bottom:10px">ЗАТРИМКА ОБРОБКИ —</div></div>
@@ -209,8 +209,10 @@ async function openCamera(){
   if(url){URL.revokeObjectURL(url);url=null;src.removeAttribute('src')}
   if(stream)stream.getTracks().forEach(t=>t.stop());
   const attempts=[
-   {video:{facingMode:{ideal:'environment'},width:{ideal:3840},height:{ideal:2160}},audio:false},
-   {video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false},
+   {video:{facingMode:{ideal:'environment'},width:{ideal:4096},height:{ideal:2160},frameRate:{ideal:30,max:30}},audio:false},
+   {video:{facingMode:{ideal:'environment'},width:{ideal:3840},height:{ideal:2160},frameRate:{ideal:30,max:30}},audio:false},
+   {video:{facingMode:{ideal:'environment'},width:{ideal:2560},height:{ideal:1440},frameRate:{ideal:30,max:30}},audio:false},
+   {video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30,max:30}},audio:false},
    {video:{facingMode:{ideal:'environment'}},audio:false}
   ];
   let lastError=null;
@@ -220,8 +222,18 @@ async function openCamera(){
   if(!stream)throw lastError||new Error('camera unavailable');
   src.srcObject=stream;src.muted=true;src.setAttribute('playsinline','');await src.play();
   const track=stream.getVideoTracks()[0],settings=track&&track.getSettings?track.getSettings():{};
-  const dims=settings.width&&settings.height?(' • '+settings.width+'×'+settings.height):'';
-  setStatus('Камера увімкнена'+dims+' • локальна обробка');
+  try{
+   const caps=track&&track.getCapabilities?track.getCapabilities():{};
+   const advanced={};
+   if(caps.focusMode&&caps.focusMode.includes('continuous'))advanced.focusMode='continuous';
+   if(caps.exposureMode&&caps.exposureMode.includes('continuous'))advanced.exposureMode='continuous';
+   if(caps.whiteBalanceMode&&caps.whiteBalanceMode.includes('continuous'))advanced.whiteBalanceMode='continuous';
+   if(Object.keys(advanced).length)await track.applyConstraints({advanced:[advanced]});
+  }catch(_){}
+  const finalSettings=track&&track.getSettings?track.getSettings():settings;
+  const dims=finalSettings.width&&finalSettings.height?(' • '+finalSettings.width+'×'+finalSettings.height):'';
+  const fps=finalSettings.frameRate?(' • '+Math.round(finalSettings.frameRate)+' FPS'):'';
+  setStatus('Камера MAX'+dims+fps+' • максимальна доступна якість • локальна обробка');
   updateUI();
  }catch(e){setStatus('Камера недоступна: '+(e&&e.message?e.message:e))}
 }
