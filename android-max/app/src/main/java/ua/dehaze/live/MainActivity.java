@@ -731,9 +731,9 @@ public final class MainActivity extends Activity {
 
             renderer.setCameraInfo(width,height,rotation,false);
             renderer.setUserRotation(0);
-            renderer.setFill(false);
-            renderer.setComparisonFit(true);
-            fillMode=false;
+            renderer.setFill(true);
+            renderer.setComparisonFit(false);
+            fillMode=true;
             viewMode=0;
             renderer.setViewMode(0);
             renderer.resetZoom();
@@ -755,7 +755,7 @@ public final class MainActivity extends Activity {
                 if(playerPlayPause!=null)playerPlayPause.setText("Ⅱ");
                 playerUiHandler.removeCallbacks(playerProgressTick);
                 playerUiHandler.post(playerProgressTick);
-                setState("Відео • повний кадр FIT • 50/50 Original / Processed");
+                setState("Відео • FILL на весь екран • 50/50 Original / Processed");
                 renderer.refresh();
             });
             mediaPlayer.setOnCompletionListener(mp->{
