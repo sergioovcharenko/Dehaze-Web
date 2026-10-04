@@ -31,6 +31,9 @@ video,canvas{width:100%;height:100%;object-fit:contain;background:#050708}canvas
 <body>
 <header>
 <strong>Digital Dehazing LAB 7</strong><span class="small">окремий тестер відео</span><span class="sp"></span>
+<button class="btn" id="cameraMax">Камера MAX</button>
+<button class="btn" id="cameraSafe">Камера SAFE</button>
+<button class="btn" id="flipCamera">↻ Камера</button>
 <label class="file">Відкрити відео<input id="file" type="file" accept="video/*"></label>
 </header>
 <main>
@@ -163,7 +166,29 @@ function draw(now){
  }catch(e){$('status').textContent='Помилка GPU: '+e.message;rendering=false}
 }
 function start(){if(!rendering){rendering=true;requestAnimationFrame(draw)}}
-$('file').onchange=e=>{const f=e.target.files[0];if(!f)return;v.src=URL.createObjectURL(f);v.play().catch(()=>{});$('status').textContent='Відео: '+f.name;start()};
+let mediaStream=null,facing='environment';
+async function stopCamera(){if(mediaStream){mediaStream.getTracks().forEach(t=>t.stop());mediaStream=null}}
+async function openCamera(mode){
+ try{
+  await stopCamera();
+  const max=mode==='max';
+  const constraints={audio:false,video:{
+   facingMode:{ideal:facing},
+   width:max?{ideal:3840}:{ideal:1920},
+   height:max?{ideal:2160}:{ideal:1080},
+   frameRate:max?{ideal:30,max:60}:{ideal:30,max:30}
+  }};
+  mediaStream=await navigator.mediaDevices.getUserMedia(constraints);
+  v.srcObject=mediaStream;v.removeAttribute('src');v.muted=true;v.playsInline=true;
+  await v.play();start();
+  const tr=mediaStream.getVideoTracks()[0],st=tr.getSettings?tr.getSettings():{};
+  $('status').textContent='Камера '+mode.toUpperCase()+': '+(st.width||'?')+'×'+(st.height||'?')+' • '+(st.frameRate||'?')+' FPS';
+ }catch(e){$('status').textContent='Камера не відкрилась: '+e.message+' Перевір дозвіл браузера на камеру.'}
+}
+$('cameraMax').onclick=()=>openCamera('max');
+$('cameraSafe').onclick=()=>openCamera('safe');
+$('flipCamera').onclick=async()=>{facing=facing==='environment'?'user':'environment';await openCamera('max')};
+$('file').onchange=async e=>{const f=e.target.files[0];if(!f)return;await stopCamera();v.srcObject=null;v.src=URL.createObjectURL(f);v.play().catch(()=>{});$('status').textContent='Відео: '+f.name;start()};
 $('play').onclick=()=>v.paused?v.play():v.pause();$('back').onclick=()=>v.currentTime=Math.max(0,v.currentTime-10);$('forward').onclick=()=>v.currentTime=Math.min(v.duration||Infinity,v.currentTime+10);
 function tm(s){if(!Number.isFinite(s))return'00:00';s=Math.max(0,Math.floor(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
 v.ontimeupdate=()=>{$('time').textContent=tm(v.currentTime)+' / '+tm(v.duration);if(Number.isFinite(v.duration)&&v.duration>0)$('seek').value=Math.round(v.currentTime/v.duration*1000)};
