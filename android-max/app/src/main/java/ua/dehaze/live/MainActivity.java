@@ -357,7 +357,7 @@ public final class MainActivity extends Activity {
         LinearLayout presetRow=new LinearLayout(this);
         presetRow.setOrientation(LinearLayout.HORIZONTAL);
         String[] presetNames={"AUTO","LOW","MEDIUM","HIGH","NIGHT"};
-        int[] presetValues={0,38,58,78,52};
+        int[] presetValues={0,42,66,88,58};
         for(int i=0;i<presetNames.length;i++){
             final String preset=presetNames[i];
             final int presetValue=presetValues[i];
@@ -456,29 +456,29 @@ public final class MainActivity extends Activity {
         playerControls=new LinearLayout(this);
         playerControls.setOrientation(LinearLayout.HORIZONTAL);
         playerControls.setGravity(Gravity.CENTER_VERTICAL);
-        playerControls.setPadding(dp(10),dp(6),dp(10),dp(6));
-        playerControls.setBackgroundColor(Color.argb(222,28,30,34));
+        playerControls.setPadding(dp(7),dp(2),dp(7),dp(2));
+        playerControls.setBackgroundColor(Color.argb(190,28,30,34));
 
         TextView stop=button("■",this::stopFilePlayback);
         stop.setTextSize(16);
-        playerControls.addView(stop,new LinearLayout.LayoutParams(dp(48),dp(42)));
+        playerControls.addView(stop,new LinearLayout.LayoutParams(dp(42),dp(36)));
 
         playerPlayPause=button("Ⅱ",this::toggleFilePlayback);
         playerPlayPause.setTextSize(17);
-        LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(dp(52),dp(42));
+        LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(dp(46),dp(36));
         pp.leftMargin=dp(6);
         playerControls.addView(playerPlayPause,pp);
 
         playerSeek=new SeekBar(this);
         playerSeek.setMax(1000);
         playerSeek.setProgressTintList(ColorStateList.valueOf(ACCENT));
-        LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(0,dp(42),1f);
+        LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(0,dp(36),1f);
         sp.leftMargin=dp(8);sp.rightMargin=dp(8);
         playerControls.addView(playerSeek,sp);
 
         playerTime=text("00:00 / 00:00",12,INK);
         playerTime.setGravity(Gravity.CENTER_VERTICAL|Gravity.RIGHT);
-        playerControls.addView(playerTime,new LinearLayout.LayoutParams(dp(118),dp(42)));
+        playerControls.addView(playerTime,new LinearLayout.LayoutParams(dp(108),dp(36)));
 
         playerSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
             @Override public void onStartTrackingTouch(SeekBar bar){playerSeeking=true;}
@@ -501,8 +501,8 @@ public final class MainActivity extends Activity {
             }
         });
 
-        FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(-1,dp(56),Gravity.BOTTOM);
-        lp.leftMargin=dp(10);lp.rightMargin=dp(10);lp.bottomMargin=dp(8);
+        FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(-1,dp(44),Gravity.BOTTOM);
+        lp.leftMargin=dp(8);lp.rightMargin=dp(8);lp.bottomMargin=dp(4);
         playerControls.setVisibility(View.GONE);
         videoArea.addView(playerControls,lp);
     }
@@ -511,7 +511,7 @@ public final class MainActivity extends Activity {
         if(playerControls!=null)playerControls.setVisibility(show?View.VISIBLE:View.GONE);
         if(zoomBadge!=null){
             FrameLayout.LayoutParams zp=(FrameLayout.LayoutParams)zoomBadge.getLayoutParams();
-            if(zp!=null){zp.bottomMargin=dp(show?72:12);zoomBadge.setLayoutParams(zp);}
+            if(zp!=null){zp.bottomMargin=dp(show?56:12);zoomBadge.setLayoutParams(zp);}
         }
     }
 
