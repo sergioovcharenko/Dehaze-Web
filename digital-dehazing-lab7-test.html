@@ -13,7 +13,7 @@ header strong{font-size:18px}.sp{flex:1}.btn,label.file{border:1px solid #596168
 label.file input{display:none}
 main{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:12px;padding:12px;min-height:calc(100dvh - 64px)}
 .stage{background:#050708;border:1px solid #3c444a;border-radius:12px;position:relative;overflow:hidden;display:grid;place-items:center;min-height:62dvh}
-video,canvas{width:100%;height:100%;object-fit:contain;background:#050708}video{position:relative;z-index:1}canvas{position:absolute;inset:0;z-index:2;display:none}
+video,canvas{width:100%;height:100%;object-fit:contain;background:#050708}video{position:absolute;inset:0;z-index:1;display:block}canvas{position:absolute;inset:0;z-index:2;display:none}
 .badge{position:absolute;top:12px;left:12px;background:#111d;padding:7px 10px;border-radius:8px;font-weight:700;z-index:3}
 .lat{position:absolute;bottom:12px;left:12px;background:#111d;padding:7px 10px;border-radius:8px;font-weight:700;z-index:3}
 .split{position:absolute;top:0;bottom:0;left:50%;width:2px;background:#fff9;z-index:3;pointer-events:none}
@@ -211,6 +211,7 @@ $('play').onclick=()=>v.paused?v.play():v.pause();$('back').onclick=()=>v.curren
 function tm(s){if(!Number.isFinite(s))return'00:00';s=Math.max(0,Math.floor(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
 v.ontimeupdate=()=>{$('time').textContent=tm(v.currentTime)+' / '+tm(v.duration);if(Number.isFinite(v.duration)&&v.duration>0)$('seek').value=Math.round(v.currentTime/v.duration*1000)};
 $('seek').oninput=()=>{if(Number.isFinite(v.duration))v.currentTime=v.duration*Number($('seek').value)/1000};
+v.onloadedmetadata=()=>{if(v.videoWidth&&v.videoHeight){document.querySelector('.stage').style.aspectRatio=v.videoWidth+' / '+v.videoHeight}};
 v.onloadeddata=()=>{c.style.display='none';$('status').textContent='Відео декодовано: '+v.videoWidth+'×'+v.videoHeight};
 v.oncanplay=()=>{c.style.display='none';};
 v.onplay=()=>{$('play').textContent='Ⅱ';c.style.display='none';start()};v.onpause=()=>{$('play').textContent='▶'};
