@@ -43,25 +43,42 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         "vec3 grab(vec2 uv){vec2 p=clamp((uv-.5)*uCrop+.5+uPan,vec2(.001),vec2(.999));return texture2D(uCamera,(uMatrix*vec4(rotateUV(p),0.0,1.0)).xy).rgb;}\n" +
         "float lum(vec3 c){return dot(c,vec3(.299,.587,.114));}\n" +
         "float dc(vec3 c){return min(c.r,min(c.g,c.b));}\n" +
+        "float mx(vec3 c){return max(c.r,max(c.g,c.b));}\n" +
         "void main(){\n" +
         " vec3 c=grab(vUV); if(uEnhanced<0.5||uStrength<.001){gl_FragColor=vec4(c,1.0);return;}\n" +
-        " vec2 p2=uPixel*2.0,p4=uPixel*4.0;\n" +
-        " vec3 a=grab(vUV+vec2(p2.x,0.0)),b=grab(vUV-vec2(p2.x,0.0)),d=grab(vUV+vec2(0.0,p2.y)),e=grab(vUV-vec2(0.0,p2.y));\n" +
-        " vec3 q1=grab(vUV+vec2(p4.x,p4.y)),q2=grab(vUV+vec2(-p4.x,p4.y)),q3=grab(vUV+vec2(p4.x,-p4.y)),q4=grab(vUV-vec2(p4.x,p4.y));\n" +
-        " vec3 local2=(a+b+d+e)*.25; vec3 local4=(q1+q2+q3+q4)*.25;\n" +
-        " float y=lum(c); float edge=clamp(length(c-local2)*3.2+abs(y-lum(local4))*2.2,0.0,1.0);\n" +
-        " float dark=min(dc(c),min(min(dc(a),dc(b)),min(dc(d),dc(e)))); dark=min(dark,min(min(dc(q1),dc(q2)),min(dc(q3),dc(q4))));\n" +
-        " float lowTexture=1.0-smoothstep(.025,.16,edge); float haze=clamp(dark*.70+y*.18+lowTexture*.12,0.0,1.0);\n" +
-        " float s=clamp(uStrength,0.0,1.0); float omega=mix(.62,.88,s); float floorT=mix(.38,.22,s); floorT=mix(floorT,max(floorT,.34),uNight); float t=clamp(1.0-omega*haze,floorT,1.0);\n" +
-        " vec3 A=mix(vec3(.82),vec3(.94),clamp(haze*.9+.08,0.0,1.0)); vec3 rec=clamp((c-A)/t+A,0.0,1.0);\n" +
-        " float structure=smoothstep(.015,.20,edge)*smoothstep(.20,.82,haze); vec3 fine=c-local2; vec3 broad=c-local4;\n" +
-        " rec+=clamp(fine,-.11,.11)*(s*(.30+.85*structure)); rec+=clamp(broad,-.08,.08)*(s*.28*structure);\n" +
-        " float localY=lum(local4); float gain=1.0+s*(.10+.30*structure); rec=vec3(localY)+(rec-vec3(localY))*gain;\n" +
-        " float smoothMask=lowTexture*smoothstep(.35,.85,haze); rec=mix(rec,local2,.07*s*smoothMask+.05*uNight*lowTexture);\n" +
-        " rec=mix(rec,pow(max(rec,vec3(.0)),vec3(.84)),.30*uNight);\n" +
-        " float mixD=s*(.38+.58*smoothstep(.10,.78,haze)); mixD*=mix(1.0,.78,uNight); vec3 result=mix(c,rec,clamp(mixD,0.0,.97));\n" +
-        " float rl=lum(result); result=mix(vec3(rl),result,1.0+.12*s); gl_FragColor=vec4(clamp(result,0.0,1.0),1.0);\n" +
+        " vec2 p2=uPixel*2.0,p5=uPixel*5.0,p9=uPixel*9.0;\n" +
+        " vec3 x1=grab(vUV+vec2(p2.x,0.0)),x2=grab(vUV-vec2(p2.x,0.0)),y1=grab(vUV+vec2(0.0,p2.y)),y2=grab(vUV-vec2(0.0,p2.y));\n" +
+        " vec3 d1=grab(vUV+vec2(p5.x,p5.y)),d2=grab(vUV+vec2(-p5.x,p5.y)),d3=grab(vUV+vec2(p5.x,-p5.y)),d4=grab(vUV-vec2(p5.x,p5.y));\n" +
+        " vec3 w1=grab(vUV+vec2(p9.x,0.0)),w2=grab(vUV-vec2(p9.x,0.0)),w3=grab(vUV+vec2(0.0,p9.y)),w4=grab(vUV-vec2(0.0,p9.y));\n" +
+        " vec3 near=(c+x1+x2+y1+y2)*.20; vec3 mid=(c+d1+d2+d3+d4)*.20; vec3 wide=(c+w1+w2+w3+w4)*.20;\n" +
+        " float yy=lum(c), yn=lum(near), ym=lum(mid), yw=lum(wide);\n" +
+        " float fine=abs(yy-yn)+length(c-near)*.55; float broad=abs(yy-yw)+length(c-wide)*.30;\n" +
+        " float edge=clamp(fine*4.4+broad*2.4,0.0,1.0);\n" +
+        " float dark=min(dc(c),min(min(dc(x1),dc(x2)),min(dc(y1),dc(y2))));\n" +
+        " dark=min(dark,min(min(dc(d1),dc(d2)),min(dc(d3),dc(d4))));\n" +
+        " float sat=(mx(c)-dc(c))/max(mx(c),.06); float lowTex=1.0-smoothstep(.018,.14,edge);\n" +
+        " float grayHaze=(1.0-sat)*smoothstep(.22,.88,yy); float haze=clamp(dark*.58+grayHaze*.24+lowTex*.18,0.0,1.0);\n" +
+        " float s=clamp(uStrength,0.0,1.0); float maxBoost=mix(.94,1.08,uMax);\n" +
+        " float omega=mix(.68,.95,s)*maxBoost; float floorT=mix(.42,.20,s); floorT=mix(floorT,.32,uNight);\n" +
+        " float t=clamp(1.0-omega*haze,floorT,1.0);\n" +
+        " vec3 atmBase=mix(mid,wide,.55); float aLum=clamp(max(lum(atmBase)+.18,.70),.70,.95);\n" +
+        " vec3 tint=mix(vec3(aLum),clamp(atmBase+vec3(.16),vec3(.65),vec3(.96)),.16);\n" +
+        " vec3 rec=(c-tint)/t+tint; rec=clamp(rec,0.0,1.0);\n" +
+        " float structure=smoothstep(.012,.22,edge); float hazeStruct=structure*smoothstep(.18,.82,haze);\n" +
+        " vec3 detailFine=c-near; vec3 detailBroad=c-wide;\n" +
+        " rec+=clamp(detailFine,vec3(-.10),vec3(.10))*(s*(.36+.72*hazeStruct));\n" +
+        " rec+=clamp(detailBroad,vec3(-.075),vec3(.075))*(s*(.14+.40*hazeStruct));\n" +
+        " float localMean=ym; float localGain=1.0+s*(.10+.24*hazeStruct); rec=vec3(localMean)+(rec-vec3(localMean))*localGain;\n" +
+        " float smoothMask=lowTex*smoothstep(.28,.82,haze)*(1.0-structure); rec=mix(rec,near,.055*s*smoothMask+.08*uNight*smoothMask);\n" +
+        " float shadow=1.0-smoothstep(.06,.22,yy); float highlight=smoothstep(.78,.97,yy);\n" +
+        " rec=mix(rec,c,.22*shadow+.28*highlight);\n" +
+        " if(uNight>.5){rec=mix(rec,pow(max(rec,vec3(.0)),vec3(.86)),.24);}\n" +
+        " float amount=clamp((.34+.64*s)*(.72+.42*haze),0.0,.98); vec3 result=mix(c,rec,amount);\n" +
+        " float ry=lum(result); float satKeep=mix(1.0,.86,s*haze); result=mix(vec3(ry),result,satKeep);\n" +
+        " result=pow(clamp(result,0.0,1.0),vec3(.96));\n" +
+        " gl_FragColor=vec4(clamp(result,0.0,1.0),1.0);\n" +
         "}";
+
     private final MainActivity activity;
     private final GLSurfaceView view;
     private final MainActivity.TextureCallback textureCallback;
@@ -273,11 +290,11 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         float saturationMean=saturation/count;
         float grayScore=clamp01((48f-saturationMean)/48f);
         float hazeProxy=contrastScore*.45f+textureScore*.35f+grayScore*.20f;
-        float target=.28f+.70f*hazeProxy;
+        float target=.42f+.55f*hazeProxy;
         float mean=sum/count;
-        if(mean<65f)target=.28f+(target-.28f)*.72f;
+        if(mean<65f)target=.38f+(target-.38f)*.78f;
         // Smooth per-frame changes to avoid pulsing when the camera pans.
-        strength=clamp01(strength*.72f+target*.28f);
+        strength=clamp01(strength*.78f+target*.22f);
         activity.onAutoStrength(strength);
     }
 
