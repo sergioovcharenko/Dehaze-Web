@@ -1,3 +1,4 @@
+# Adaptive MAX build trigger: camera + player v1.4
 name: Build Меті Туман Adaptive MAX (separate APK)
 on:
   push:
