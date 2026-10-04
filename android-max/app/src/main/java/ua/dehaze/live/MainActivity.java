@@ -357,7 +357,7 @@ public final class MainActivity extends Activity {
         LinearLayout presetRow=new LinearLayout(this);
         presetRow.setOrientation(LinearLayout.HORIZONTAL);
         String[] presetNames={"AUTO","LOW","MEDIUM","HIGH","NIGHT"};
-        int[] presetValues={0,42,66,88,58};
+        int[] presetValues={0,36,56,76,50};
         for(int i=0;i<presetNames.length;i++){
             final String preset=presetNames[i];
             final int presetValue=presetValues[i];
