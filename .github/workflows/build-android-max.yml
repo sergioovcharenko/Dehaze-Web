@@ -13,7 +13,7 @@ permissions:
 
 concurrency:
   group: meti-tuman-adaptive-max-apk
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
