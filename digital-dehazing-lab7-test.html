@@ -13,7 +13,7 @@ header strong{font-size:18px}.sp{flex:1}.btn,label.file{border:1px solid #596168
 label.file input{display:none}
 main{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:12px;padding:12px;min-height:calc(100dvh - 64px)}
 .stage{background:#050708;border:1px solid #3c444a;border-radius:12px;position:relative;overflow:hidden;display:grid;place-items:center;min-height:62dvh}
-video,canvas{width:100%;height:100%;object-fit:contain;background:#050708}canvas{position:absolute;inset:0}
+video,canvas{width:100%;height:100%;object-fit:contain;background:#050708}video{position:relative;z-index:1}canvas{position:absolute;inset:0;z-index:2;display:none}
 .badge{position:absolute;top:12px;left:12px;background:#111d;padding:7px 10px;border-radius:8px;font-weight:700;z-index:3}
 .lat{position:absolute;bottom:12px;left:12px;background:#111d;padding:7px 10px;border-radius:8px;font-weight:700;z-index:3}
 .split{position:absolute;top:0;bottom:0;left:50%;width:2px;background:#fff9;z-index:3;pointer-events:none}
@@ -93,7 +93,7 @@ document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>{const p=pre
 function shader(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s));return s}
 function init(){
  if(gl)return;
- gl=c.getContext('webgl',{alpha:false,antialias:false,preserveDrawingBuffer:false});
+ gl=c.getContext('webgl',{alpha:true,antialias:false,preserveDrawingBuffer:false});
  if(!gl)throw Error('WebGL недоступний');
  const vs=shader(gl.VERTEX_SHADER,'attribute vec2 p;varying vec2 uv;void main(){uv=(p+1.0)*.5;gl_Position=vec4(p,0,1);}');
  const fs=shader(gl.FRAGMENT_SHADER,`precision mediump float;
@@ -174,8 +174,9 @@ function draw(now){
   gl.uniform1f(gl.getUniformLocation(program,'uCompare'),Q.checked?1:0);
   gl.uniform1f(gl.getUniformLocation(program,'uView'),viewMode==='double'?2:(viewMode==='split'?1:0));
   gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+  c.style.display='block';
   $('split').style.display=(Q.checked&&viewMode!=='processed')?'block':'none';$('latency').textContent='обробка '+(performance.now()-start).toFixed(1)+' мс';
- }catch(e){$('status').textContent='Помилка GPU: '+e.message;rendering=false}
+ }catch(e){c.style.display='none';$('status').textContent='Помилка GPU: '+e.message+' • показано оригінальне відео';rendering=false}
 }
 function start(){if(!rendering){rendering=true;requestAnimationFrame(draw)}}
 let mediaStream=null,facing='environment';
@@ -200,7 +201,7 @@ async function openCamera(mode){
 $('cameraMax').onclick=()=>openCamera('max');
 $('cameraSafe').onclick=()=>openCamera('safe');
 $('flipCamera').onclick=async()=>{facing=facing==='environment'?'user':'environment';await openCamera('max')};
-$('file').onchange=async e=>{const f=e.target.files[0];if(!f)return;await stopCamera();v.srcObject=null;v.src=URL.createObjectURL(f);v.play().catch(()=>{});$('status').textContent='Відео: '+f.name;start()};
+$('file').onchange=async e=>{const f=e.target.files[0];if(!f)return;await stopCamera();c.style.display='none';v.srcObject=null;v.src=URL.createObjectURL(f);v.load();$('status').textContent='Завантаження відео: '+f.name;try{await v.play();$('status').textContent='Відео: '+f.name;start()}catch(err){$('status').textContent='Натисни ▶ для запуску: '+f.name;start()}};
 $('play').onclick=()=>v.paused?v.play():v.pause();$('back').onclick=()=>v.currentTime=Math.max(0,v.currentTime-10);$('forward').onclick=()=>v.currentTime=Math.min(v.duration||Infinity,v.currentTime+10);
 function tm(s){if(!Number.isFinite(s))return'00:00';s=Math.max(0,Math.floor(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
 v.ontimeupdate=()=>{$('time').textContent=tm(v.currentTime)+' / '+tm(v.duration);if(Number.isFinite(v.duration)&&v.duration>0)$('seek').value=Math.round(v.currentTime/v.duration*1000)};
