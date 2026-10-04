@@ -344,7 +344,7 @@ public final class MainActivity extends Activity {
         menuTitle(list,"СИЛА АНТИТУМАНУ");
         LinearLayout presetRow=new LinearLayout(this);
         presetRow.setOrientation(LinearLayout.HORIZONTAL);
-        String[] presetNames={"AUTO","LOW","MED","HIGH","NIGHT"};
+        String[] presetNames={"AUTO","LOW","MEDIUM","HIGH","NIGHT"};
         int[] presetValues={0,38,58,78,52};
         for(int i=0;i<presetNames.length;i++){
             final String preset=presetNames[i];
@@ -782,24 +782,33 @@ public final class MainActivity extends Activity {
 
     private static Size pickSize(Size[] choices,int correctedRotation){
         if(choices==null||choices.length==0)return null;
-        // Prefer a camera buffer that becomes landscape AFTER the sensor's
-        // orientation correction. On some tablets the available buffers are
-        // all landscape and become portrait when rotated; in that case we
-        // crop the upright picture (FILL), rather than stretch it sideways.
+        // Keep the native Camera2 preview as sharp as practical. Prefer the
+        // largest landscape 16:9 stream up to UHD; this avoids the previous
+        // forced 1280x720 target while keeping GPU latency bounded on tablets.
         final boolean quarterTurn=((correctedRotation%180)+180)%180==90;
-        Size chosen=choices[0];
-        double best=Double.POSITIVE_INFINITY;
+        final double targetAspect=16d/9d;
+        final long maxPixels=3840L*2160L;
+        Size chosen=null;
+        double bestScore=-Double.MAX_VALUE;
         for(Size size:choices){
             int w=quarterTurn?size.getHeight():size.getWidth();
             int h=quarterTurn?size.getWidth():size.getHeight();
             if(w<=0||h<=0)continue;
+            long nativePixels=(long)size.getWidth()*size.getHeight();
+            if(nativePixels>maxPixels)continue;
             double ratio=(double)w/h;
-            double pixels=(double)size.getWidth()*size.getHeight();
-            double targetAspect=16d/9d;
-            double cost=Math.abs(Math.log(ratio/targetAspect))*3.0
-                +Math.abs(Math.log(pixels/(1280d*720d)))*.30
-                +(pixels>1920d*1080d?1.5:0.0);
-            if(cost<best){best=cost;chosen=size;}
+            double aspectPenalty=Math.abs(Math.log(ratio/targetAspect));
+            double score=Math.log(Math.max(1L,nativePixels))-aspectPenalty*4.5;
+            if(score>bestScore){bestScore=score;chosen=size;}
+        }
+        if(chosen!=null)return chosen;
+        // If a device exposes only streams above UHD, use the smallest one
+        // rather than failing camera startup.
+        chosen=choices[0];
+        long bestPixels=(long)chosen.getWidth()*chosen.getHeight();
+        for(Size size:choices){
+            long pixels=(long)size.getWidth()*size.getHeight();
+            if(pixels<bestPixels){chosen=size;bestPixels=pixels;}
         }
         return chosen;
     }
