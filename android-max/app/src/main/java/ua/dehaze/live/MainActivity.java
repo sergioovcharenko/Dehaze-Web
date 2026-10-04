@@ -560,6 +560,7 @@ public final class MainActivity extends Activity {
         renderer.setStrength(strength/100f);
         renderer.setMaxMode(true);
         renderer.setFill(true);
+        renderer.setComparisonFit(false);
         renderer.setViewMode(0);
         glView.setRenderer(renderer);
         glView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
@@ -731,6 +732,7 @@ public final class MainActivity extends Activity {
             renderer.setCameraInfo(width,height,rotation,false);
             renderer.setUserRotation(0);
             renderer.setFill(false);
+            renderer.setComparisonFit(true);
             fillMode=false;
             viewMode=0;
             renderer.setViewMode(0);
@@ -787,6 +789,7 @@ public final class MainActivity extends Activity {
         clearFreeze();
         stopMedia();usingFile=false;fileUri=null;
         renderer.setFill(true);fillMode=true;
+        renderer.setComparisonFit(false);
         viewMode=0;
         renderer.setViewMode(0);
         if(videoLabelsLeft!=null)videoLabelsLeft.setVisibility(View.VISIBLE);
