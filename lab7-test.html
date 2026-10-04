@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#202428">
+<title>Digital Dehazing LAB 7</title>
+<style>
+:root{font-family:Roboto,Arial,sans-serif;color:#f4f6f7;background:#111518;color-scheme:dark}
+*{box-sizing:border-box}body{margin:0;background:#111518;color:#f4f6f7}
+header{position:sticky;top:0;z-index:10;background:#272b2f;border-bottom:1px solid #43494e;padding:max(10px,env(safe-area-inset-top)) 14px 10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+header strong{font-size:18px}.sp{flex:1}.btn,label.file{border:1px solid #596168;background:#343a3f;color:#fff;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}
+label.file input{display:none}
+main{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:12px;padding:12px;min-height:calc(100dvh - 64px)}
+.stage{background:#050708;border:1px solid #3c444a;border-radius:12px;position:relative;overflow:hidden;display:grid;place-items:center;min-height:62dvh}
+video,canvas{width:100%;height:100%;object-fit:contain;background:#050708}canvas{position:absolute;inset:0}
+.badge{position:absolute;top:12px;left:12px;background:#111d;padding:7px 10px;border-radius:8px;font-weight:700;z-index:3}
+.lat{position:absolute;bottom:12px;left:12px;background:#111d;padding:7px 10px;border-radius:8px;font-weight:700;z-index:3}
+.split{position:absolute;top:0;bottom:0;left:50%;width:2px;background:#fff9;z-index:3;pointer-events:none}
+.panel{background:#272b2f;border:1px solid #43494e;border-radius:12px;padding:12px;max-height:calc(100dvh - 90px);overflow:auto}
+.panel h2{font-size:15px;margin:4px 0 10px}.preset{display:grid;grid-template-columns:1fr;gap:7px;margin-bottom:12px}
+.preset button,.transport button{border:1px solid #596168;background:#353b40;color:#fff;border-radius:8px;padding:9px;font-weight:700}
+.row{padding:10px 0;border-top:1px solid #3e454a}.row label{display:flex;justify-content:space-between;gap:10px;font-size:13px}.row output{color:#bde4d3;font-weight:700}input[type=range]{width:100%;accent-color:#5cc68d}
+.switch{display:flex;gap:8px;align-items:center;font-size:13px;margin:7px 0}.switch input{width:20px;height:20px}
+.transport{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}.transport input{flex:1;min-width:160px}.small{font-size:12px;color:#aeb6bc}
+#status{margin-top:10px;font-size:12px;color:#c9d3d8;line-height:1.45}
+@media(max-width:900px){main{grid-template-columns:1fr}.panel{max-height:none}.stage{min-height:50dvh}}
+@media(max-width:600px){header strong{font-size:16px}.stage{min-height:44dvh}main{padding:8px}.panel{padding:10px}.transport button{flex:1}}
+</style>
+</head>
+<body>
+<header>
+<strong>Digital Dehazing LAB 7</strong><span class="small">окремий тестер відео</span><span class="sp"></span>
+<button class="btn" id="cameraMax">Камера MAX</button>
+<button class="btn" id="cameraSafe">Камера SAFE</button>
+<button class="btn" id="flipCamera">↻ Камера</button>
+<label class="file">Відкрити відео<input id="file" type="file" accept="video/*"></label>
+</header>
+<main>
+<section>
+ <div class="stage">
+  <video id="video" playsinline muted></video>
+  <canvas id="canvas"></canvas>
+  <div class="split" id="split"></div>
+  <div class="badge" id="badge">50/50 • AUTO</div>
+  <div class="lat" id="latency">—</div>
+ </div>
+ <div class="transport">
+  <button id="back">« 10с</button><button id="play">▶</button><button id="forward">10с »</button>
+  <input id="seek" type="range" min="0" max="1000" value="0"><span id="time" class="small">00:00 / 00:00</span>
+ </div>
+</section>
+<aside class="panel">
+ <h2>7 параметрів</h2>
+ <div class="preset">
+  <button data-preset="balanced">BALANCED</button>
+  <button data-preset="dense">DENSE FOG SAFE</button>
+  <button data-preset="landscape">LANDSCAPE MAX</button>
+ </div>
+ <label class="switch"><input id="auto" type="checkbox" checked> AUTO аналіз сили</label>
+ <label class="switch"><input id="compare" type="checkbox" checked> Порівняння</label>
+ <div class="preset" style="grid-template-columns:1fr 1fr 1fr">
+  <button data-view="split">50/50</button>
+  <button data-view="double">2 КАДРИ</button>
+  <button data-view="processed">ОБРОБЛЕНЕ</button>
+ </div>
+
+ <div class="row"><label>1. Сила dehaze <output id="strengthO">70%</output></label><input id="strength" type="range" min="0" max="100" value="70"></div>
+ <div class="row"><label>2. AUTO cap <output id="capO">80%</output></label><input id="cap" type="range" min="20" max="100" value="80"></div>
+ <div class="row"><label>3. Локальний контраст <output id="contrastO">45%</output></label><input id="contrast" type="range" min="0" max="100" value="45"></div>
+ <div class="row"><label>4. Деталізація <output id="detailO">35%</output></label><input id="detail" type="range" min="0" max="100" value="35"></div>
+ <div class="row"><label>5. Denoise <output id="denoiseO">20%</output></label><input id="denoise" type="range" min="0" max="100" value="20"></div>
+ <div class="row"><label>6. Temporal smoothing <output id="temporalO">70%</output></label><input id="temporal" type="range" min="0" max="100" value="70"></div>
+ <div class="row"><label>7. Blend обробки <output id="blendO">100%</output></label><input id="blend" type="range" min="0" max="100" value="100"></div>
+ <div id="status">Відкрий одне відео. Ліва половина — оригінал, права — обробка.</div>
+</aside>
+</main>
+<script>
+const $=id=>document.getElementById(id), v=$('video'), c=$('canvas');
+let gl,program,tex,buffer,rendering=false,lastAnalyze=0,autoTarget=.70,currentStrength=.70;
+const A=$('auto'),Q=$('compare');let viewMode='split';
+const ids=['strength','cap','contrast','detail','denoise','temporal','blend'];
+const outMap={strength:'strengthO',cap:'capO',contrast:'contrastO',detail:'detailO',denoise:'denoiseO',temporal:'temporalO',blend:'blendO'};
+function val(id){return Number($(id).value)/100}
+function sync(){ids.forEach(id=>$(outMap[id]).textContent=$(id).value+'%');$('badge').textContent=(Q.checked?(viewMode==='double'?'2 КАДРИ':viewMode==='split'?'50/50':'ОБРОБЛЕНЕ'):'ОБРОБЛЕНЕ')+' • '+(A.checked?'AUTO':'MANUAL')}
+ids.forEach(id=>$(id).oninput=sync);A.onchange=sync;Q.onchange=()=>{if(!Q.checked)viewMode='processed';else if(viewMode==='processed')viewMode='split';sync()};document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{viewMode=b.dataset.view;Q.checked=viewMode!=='processed';sync()});sync();
+const presets={
+ balanced:{strength:68,cap:80,contrast:42,detail:30,denoise:25,temporal:75,blend:92},
+ dense:{strength:68,cap:72,contrast:30,detail:20,denoise:42,temporal:88,blend:88},
+ landscape:{strength:82,cap:88,contrast:55,detail:45,denoise:18,temporal:72,blend:100}
+};
+document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>{const p=presets[b.dataset.preset];for(const k in p)$(k).value=p[k];sync()});
+function shader(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s));return s}
+function init(){
+ if(gl)return;
+ gl=c.getContext('webgl',{alpha:false,antialias:false,preserveDrawingBuffer:false});
+ if(!gl)throw Error('WebGL недоступний');
+ const vs=shader(gl.VERTEX_SHADER,'attribute vec2 p;varying vec2 uv;void main(){uv=(p+1.0)*.5;gl_Position=vec4(p,0,1);}');
+ const fs=shader(gl.FRAGMENT_SHADER,`precision mediump float;
+ varying vec2 uv;uniform sampler2D t;uniform vec2 px;
+ uniform float uStrength,uContrast,uDetail,uDenoise,uBlend,uCompare,uView;
+ vec3 g(vec2 q){return texture2D(t,clamp(q,vec2(.001),vec2(.999))).rgb;}
+ void main(){
+  vec2 suv=uv;
+  bool doubleView=uView>1.5;
+  if(doubleView)suv=vec2(fract(uv.x*2.0),uv.y);
+  vec3 original=g(suv);
+  if(uCompare>.5&&((uView<1.5&&uv.x<.5)||(doubleView&&uv.x<.5))){gl_FragColor=vec4(original,1.);return;}
+  vec3 n=(g(suv+vec2(px.x,0.))+g(suv-vec2(px.x,0.))+g(suv+vec2(0.,px.y))+g(suv-vec2(0.,px.y)))*.25;
+  vec3 base=mix(original,n,uDenoise*.55);
+  vec3 local=(g(suv+vec2(px.x*2.,0.))+g(suv-vec2(px.x*2.,0.))+g(suv+vec2(0.,px.y*2.))+g(suv-vec2(0.,px.y*2.)))*.25;
+  float y=dot(base,vec3(.299,.587,.114));
+  float edge=length(base-local);
+  // Fast DCP-like veil estimate: minimum RGB + local minimum from 5 taps.
+  float d0=min(base.r,min(base.g,base.b));
+  vec3 c1=g(suv+vec2(px.x*3.,0.)),c2=g(suv-vec2(px.x*3.,0.));
+  vec3 c3=g(suv+vec2(0.,px.y*3.)),c4=g(suv-vec2(0.,px.y*3.));
+  float dark=min(d0,min(min(c1.r,min(c1.g,c1.b)),min(c2.r,min(c2.g,c2.b))));
+  dark=min(dark,min(min(c3.r,min(c3.g,c3.b)),min(c4.r,min(c4.g,c4.b))));
+  float flat=1.-smoothstep(.010,.065,edge);
+  float bright=smoothstep(.55,.90,y);
+  float sky=bright*flat*smoothstep(.18,.88,suv.y);
+  float safe=1.-.72*sky;
+  // Atmospheric light follows bright haze instead of a fixed strength-only curve.
+  float haze=clamp(dark*.82+y*.18,0.,1.);
+  float trans=clamp(1.-(.50+.32*uStrength)*haze,.28,1.);
+  vec3 A=mix(vec3(.80),vec3(.94),clamp(haze*.85+.10,0.,1.));
+  vec3 rec=clamp((base-A)/trans+A,0.,1.);
+  float dehazeMix=uStrength*(.28+.72*smoothstep(.10,.78,haze))*safe;
+  vec3 r=mix(base,rec,clamp(dehazeMix,0.,.96));
+  float lum=dot(r,vec3(.299,.587,.114));
+  r += (r-vec3(lum))*(uContrast*.22*safe);
+  r += clamp(base-local,-.12,.12)*(uDetail*.54*safe);
+  r=clamp(r,0.,1.);
+  r=mix(original,r,uBlend);
+  gl_FragColor=vec4(r,1.);
+ }`);
+ program=gl.createProgram();gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);
+ if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(program));
+ gl.useProgram(program);buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+ const p=gl.getAttribLocation(program,'p');gl.enableVertexAttribArray(p);gl.vertexAttribPointer(p,2,gl.FLOAT,false,0,0);
+ tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+}
+const ac=document.createElement('canvas');ac.width=64;ac.height=36;const ax=ac.getContext('2d',{willReadFrequently:true});
+function analyze(now){
+ if(!A.checked||now-lastAnalyze<900||v.readyState<2)return;
+ lastAnalyze=now;
+ try{
+  ax.drawImage(v,0,0,64,36);const d=ax.getImageData(0,0,64,36).data,h=new Uint32Array(256),prev=new Int16Array(64);
+  let edge=0,edges=0,sat=0,sum=0;
+  for(let y=0;y<36;y++){let left=0;for(let x=0;x<64;x++){const i=(y*64+x)*4,r=d[i],g=d[i+1],b=d[i+2],L=Math.min(255,Math.round(.299*r+.587*g+.114*b));h[L]++;sum+=L;sat+=Math.max(r,g,b)-Math.min(r,g,b);if(x){edge+=Math.abs(L-left);edges++}if(y){edge+=Math.abs(L-prev[x]);edges++}left=L;prev[x]=L}}
+  let acc=0,p10=0,p90=255,n=2304;for(let i=0;i<256;i++){acc+=h[i];if(acc>=n*.1){p10=i;break}}acc=0;for(let i=0;i<256;i++){acc+=h[i];if(acc>=n*.9){p90=i;break}}
+  const cl=x=>Math.max(0,Math.min(1,x)),lc=cl((108-(p90-p10))/104),lt=cl((18-edge/Math.max(1,edges))/18),lg=cl((46-sat/n)/46);
+  autoTarget=.28+.72*(lc*.44+lt*.34+lg*.22);if(sum/n<65)autoTarget=.28+(autoTarget-.28)*.72;autoTarget=Math.min(autoTarget,val('cap'));
+ }catch(e){}
+}
+function draw(now){
+ if(!rendering)return;requestAnimationFrame(draw);
+ if(v.readyState<2||v.paused)return;
+ const start=performance.now();analyze(now);
+ const target=A.checked?autoTarget:val('strength'),smooth=val('temporal');
+ currentStrength=currentStrength*(.35+.64*smooth)+target*(.65-.64*smooth);
+ $('strengthO').textContent=Math.round(currentStrength*100)+'%'+(A.checked?' AUTO':'');
+ try{
+  init();const max=1600,k=Math.min(1,max/Math.max(v.videoWidth,v.videoHeight)),w=Math.max(2,Math.round(v.videoWidth*k)),h=Math.max(2,Math.round(v.videoHeight*k));
+  if(c.width!==w||c.height!==h){c.width=w;c.height=h;gl.viewport(0,0,w,h)}
+  gl.useProgram(program);gl.bindTexture(gl.TEXTURE_2D,tex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,v);
+  gl.uniform1i(gl.getUniformLocation(program,'t'),0);gl.uniform2f(gl.getUniformLocation(program,'px'),1/w,1/h);
+  gl.uniform1f(gl.getUniformLocation(program,'uStrength'),currentStrength);
+  gl.uniform1f(gl.getUniformLocation(program,'uContrast'),val('contrast'));
+  gl.uniform1f(gl.getUniformLocation(program,'uDetail'),val('detail'));
+  gl.uniform1f(gl.getUniformLocation(program,'uDenoise'),val('denoise'));
+  gl.uniform1f(gl.getUniformLocation(program,'uBlend'),val('blend'));
+  gl.uniform1f(gl.getUniformLocation(program,'uCompare'),Q.checked?1:0);
+  gl.uniform1f(gl.getUniformLocation(program,'uView'),viewMode==='double'?2:(viewMode==='split'?1:0));
+  gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+  $('split').style.display=(Q.checked&&viewMode!=='processed')?'block':'none';$('latency').textContent='обробка '+(performance.now()-start).toFixed(1)+' мс';
+ }catch(e){$('status').textContent='Помилка GPU: '+e.message;rendering=false}
+}
+function start(){if(!rendering){rendering=true;requestAnimationFrame(draw)}}
+let mediaStream=null,facing='environment';
+async function stopCamera(){if(mediaStream){mediaStream.getTracks().forEach(t=>t.stop());mediaStream=null}}
+async function openCamera(mode){
+ try{
+  await stopCamera();
+  const max=mode==='max';
+  const constraints={audio:false,video:{
+   facingMode:{ideal:facing},
+   width:max?{ideal:3840}:{ideal:1920},
+   height:max?{ideal:2160}:{ideal:1080},
+   frameRate:max?{ideal:30,max:60}:{ideal:30,max:30}
+  }};
+  mediaStream=await navigator.mediaDevices.getUserMedia(constraints);
+  v.srcObject=mediaStream;v.removeAttribute('src');v.muted=true;v.playsInline=true;
+  await v.play();start();
+  const tr=mediaStream.getVideoTracks()[0],st=tr.getSettings?tr.getSettings():{};
+  $('status').textContent='Камера '+mode.toUpperCase()+': '+(st.width||'?')+'×'+(st.height||'?')+' • '+(st.frameRate||'?')+' FPS';
+ }catch(e){$('status').textContent='Камера не відкрилась: '+e.message+' Перевір дозвіл браузера на камеру.'}
+}
+$('cameraMax').onclick=()=>openCamera('max');
+$('cameraSafe').onclick=()=>openCamera('safe');
+$('flipCamera').onclick=async()=>{facing=facing==='environment'?'user':'environment';await openCamera('max')};
+$('file').onchange=async e=>{const f=e.target.files[0];if(!f)return;await stopCamera();v.srcObject=null;v.src=URL.createObjectURL(f);v.play().catch(()=>{});$('status').textContent='Відео: '+f.name;start()};
+$('play').onclick=()=>v.paused?v.play():v.pause();$('back').onclick=()=>v.currentTime=Math.max(0,v.currentTime-10);$('forward').onclick=()=>v.currentTime=Math.min(v.duration||Infinity,v.currentTime+10);
+function tm(s){if(!Number.isFinite(s))return'00:00';s=Math.max(0,Math.floor(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
+v.ontimeupdate=()=>{$('time').textContent=tm(v.currentTime)+' / '+tm(v.duration);if(Number.isFinite(v.duration)&&v.duration>0)$('seek').value=Math.round(v.currentTime/v.duration*1000)};
+$('seek').oninput=()=>{if(Number.isFinite(v.duration))v.currentTime=v.duration*Number($('seek').value)/1000};
+v.onplay=()=>{$('play').textContent='Ⅱ';start()};v.onpause=()=>{$('play').textContent='▶'};
+</script>
+</body></html>
