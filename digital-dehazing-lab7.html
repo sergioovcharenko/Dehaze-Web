@@ -111,14 +111,26 @@ function init(){
   vec3 local=(g(suv+vec2(px.x*2.,0.))+g(suv-vec2(px.x*2.,0.))+g(suv+vec2(0.,px.y*2.))+g(suv-vec2(0.,px.y*2.)))*.25;
   float y=dot(base,vec3(.299,.587,.114));
   float edge=length(base-local);
-  float sky=smoothstep(.64,.88,y)*(1.-smoothstep(.012,.07,edge))*smoothstep(.20,.90,uv.y);
-  float safe=1.-.82*sky;
-  float trans=max(.40,1.-uStrength*(.27+.18*y));
-  vec3 rec=clamp((base-vec3(.84))/trans+vec3(.84),0.,1.);
-  vec3 r=mix(base,rec,uStrength*.88*safe);
+  // Fast DCP-like veil estimate: minimum RGB + local minimum from 5 taps.
+  float d0=min(base.r,min(base.g,base.b));
+  vec3 c1=g(suv+vec2(px.x*3.,0.)),c2=g(suv-vec2(px.x*3.,0.));
+  vec3 c3=g(suv+vec2(0.,px.y*3.)),c4=g(suv-vec2(0.,px.y*3.));
+  float dark=min(d0,min(min(c1.r,min(c1.g,c1.b)),min(c2.r,min(c2.g,c2.b))));
+  dark=min(dark,min(min(c3.r,min(c3.g,c3.b)),min(c4.r,min(c4.g,c4.b))));
+  float flat=1.-smoothstep(.010,.065,edge);
+  float bright=smoothstep(.55,.90,y);
+  float sky=bright*flat*smoothstep(.18,.88,suv.y);
+  float safe=1.-.72*sky;
+  // Atmospheric light follows bright haze instead of a fixed strength-only curve.
+  float haze=clamp(dark*.82+y*.18,0.,1.);
+  float trans=clamp(1.-(.50+.32*uStrength)*haze,.28,1.);
+  vec3 A=mix(vec3(.80),vec3(.94),clamp(haze*.85+.10,0.,1.));
+  vec3 rec=clamp((base-A)/trans+A,0.,1.);
+  float dehazeMix=uStrength*(.28+.72*smoothstep(.10,.78,haze))*safe;
+  vec3 r=mix(base,rec,clamp(dehazeMix,0.,.96));
   float lum=dot(r,vec3(.299,.587,.114));
-  r += (r-vec3(lum))*(uContrast*.18*safe);
-  r += clamp(base-local,-.12,.12)*(uDetail*.62*safe);
+  r += (r-vec3(lum))*(uContrast*.22*safe);
+  r += clamp(base-local,-.12,.12)*(uDetail*.54*safe);
   r=clamp(r,0.,1.);
   r=mix(original,r,uBlend);
   gl_FragColor=vec4(r,1.);
@@ -139,7 +151,7 @@ function analyze(now){
   for(let y=0;y<36;y++){let left=0;for(let x=0;x<64;x++){const i=(y*64+x)*4,r=d[i],g=d[i+1],b=d[i+2],L=Math.min(255,Math.round(.299*r+.587*g+.114*b));h[L]++;sum+=L;sat+=Math.max(r,g,b)-Math.min(r,g,b);if(x){edge+=Math.abs(L-left);edges++}if(y){edge+=Math.abs(L-prev[x]);edges++}left=L;prev[x]=L}}
   let acc=0,p10=0,p90=255,n=2304;for(let i=0;i<256;i++){acc+=h[i];if(acc>=n*.1){p10=i;break}}acc=0;for(let i=0;i<256;i++){acc+=h[i];if(acc>=n*.9){p90=i;break}}
   const cl=x=>Math.max(0,Math.min(1,x)),lc=cl((108-(p90-p10))/104),lt=cl((18-edge/Math.max(1,edges))/18),lg=cl((46-sat/n)/46);
-  autoTarget=.22+.67*(lc*.46+lt*.36+lg*.18);if(sum/n<65)autoTarget=.22+(autoTarget-.22)*.65;autoTarget=Math.min(autoTarget,val('cap'));
+  autoTarget=.28+.72*(lc*.44+lt*.34+lg*.22);if(sum/n<65)autoTarget=.28+(autoTarget-.28)*.72;autoTarget=Math.min(autoTarget,val('cap'));
  }catch(e){}
 }
 function draw(now){
@@ -150,7 +162,7 @@ function draw(now){
  currentStrength=currentStrength*(.35+.64*smooth)+target*(.65-.64*smooth);
  $('strengthO').textContent=Math.round(currentStrength*100)+'%'+(A.checked?' AUTO':'');
  try{
-  init();const max=1920,k=Math.min(1,max/Math.max(v.videoWidth,v.videoHeight)),w=Math.max(2,Math.round(v.videoWidth*k)),h=Math.max(2,Math.round(v.videoHeight*k));
+  init();const max=1600,k=Math.min(1,max/Math.max(v.videoWidth,v.videoHeight)),w=Math.max(2,Math.round(v.videoWidth*k)),h=Math.max(2,Math.round(v.videoHeight*k));
   if(c.width!==w||c.height!==h){c.width=w;c.height=h;gl.viewport(0,0,w,h)}
   gl.useProgram(program);gl.bindTexture(gl.TEXTURE_2D,tex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,v);
   gl.uniform1i(gl.getUniformLocation(program,'t'),0);gl.uniform2f(gl.getUniformLocation(program,'px'),1/w,1/h);
