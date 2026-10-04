@@ -36,6 +36,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         "uniform float uEnhanced;\n" +
         "uniform float uStrength;\n" +
         "uniform float uMax;\n" +
+        "uniform float uNight;\n" +
         "uniform vec2 uCrop;\n" +
         "uniform vec2 uPan;\n" +
         "vec2 rotateUV(vec2 uv){if(uRotation<45.0)return uv;if(uRotation<135.0)return vec2(uv.y,1.0-uv.x);if(uRotation<225.0)return vec2(1.0-uv.x,1.0-uv.y);return vec2(1.0-uv.y,uv.x);}\n" +
@@ -51,13 +52,14 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         " float y=lum(c); float edge=clamp(length(c-local2)*3.2+abs(y-lum(local4))*2.2,0.0,1.0);\n" +
         " float dark=min(dc(c),min(min(dc(a),dc(b)),min(dc(d),dc(e)))); dark=min(dark,min(min(dc(q1),dc(q2)),min(dc(q3),dc(q4))));\n" +
         " float lowTexture=1.0-smoothstep(.025,.16,edge); float haze=clamp(dark*.70+y*.18+lowTexture*.12,0.0,1.0);\n" +
-        " float s=clamp(uStrength,0.0,1.0); float omega=mix(.62,.88,s); float floorT=mix(.38,.22,s); float t=clamp(1.0-omega*haze,floorT,1.0);\n" +
+        " float s=clamp(uStrength,0.0,1.0); float omega=mix(.62,.88,s); float floorT=mix(.38,.22,s); floorT=mix(floorT,max(floorT,.34),uNight); float t=clamp(1.0-omega*haze,floorT,1.0);\n" +
         " vec3 A=mix(vec3(.82),vec3(.94),clamp(haze*.9+.08,0.0,1.0)); vec3 rec=clamp((c-A)/t+A,0.0,1.0);\n" +
         " float structure=smoothstep(.015,.20,edge)*smoothstep(.20,.82,haze); vec3 fine=c-local2; vec3 broad=c-local4;\n" +
         " rec+=clamp(fine,-.11,.11)*(s*(.30+.85*structure)); rec+=clamp(broad,-.08,.08)*(s*.28*structure);\n" +
         " float localY=lum(local4); float gain=1.0+s*(.10+.30*structure); rec=vec3(localY)+(rec-vec3(localY))*gain;\n" +
-        " float smoothMask=lowTexture*smoothstep(.35,.85,haze); rec=mix(rec,local2,.07*s*smoothMask);\n" +
-        " float mixD=s*(.38+.58*smoothstep(.10,.78,haze)); vec3 result=mix(c,rec,clamp(mixD,0.0,.97));\n" +
+        " float smoothMask=lowTexture*smoothstep(.35,.85,haze); rec=mix(rec,local2,.07*s*smoothMask+.05*uNight*lowTexture);\n" +
+        " rec=mix(rec,pow(max(rec,vec3(.0)),vec3(.84)),.30*uNight);\n" +
+        " float mixD=s*(.38+.58*smoothstep(.10,.78,haze)); mixD*=mix(1.0,.78,uNight); vec3 result=mix(c,rec,clamp(mixD,0.0,.97));\n" +
         " float rl=lum(result); result=mix(vec3(rl),result,1.0+.12*s); gl_FragColor=vec4(clamp(result,0.0,1.0),1.0);\n" +
         "}";
     private final MainActivity activity;
@@ -67,12 +69,12 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     private final FloatBuffer quad;
     private final AtomicBoolean framePending=new AtomicBoolean(false);
     private final float[] stMatrix=new float[16];
-    private volatile boolean enhanced=true,fill=true,frozen=false,maxMode=true;
+    private volatile boolean enhanced=true,fill=true,frozen=false,maxMode=true,nightMode=false;
     // 0: full-frame 50/50 wipe (no stretching), 1: separate FIT frames, 2: processed fullscreen.
     private volatile int viewMode=0;
     private volatile float zoom=1f,panX=0f,panY=0f;
     private volatile int userRotation=0;
-    private int cropLoc,panLoc,maxLoc;
+    private int cropLoc,panLoc,maxLoc,nightLoc;
     private volatile float strength=.60f;
     private volatile boolean manualMode=false;
     private int analysisTexture=0,analysisFbo=0;
@@ -100,6 +102,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
 
     void setEnhanced(boolean value){enhanced=value;}
     void setMaxMode(boolean value){maxMode=value;}
+    void setNightMode(boolean value){nightMode=value;}
     void setFill(boolean value){fill=value;}
     void setViewMode(int value){viewMode=Math.max(0,Math.min(2,value));}
     int getViewMode(){return viewMode;}
@@ -161,6 +164,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         enhancedLoc=GLES20.glGetUniformLocation(program,"uEnhanced");
         strengthLoc=GLES20.glGetUniformLocation(program,"uStrength");
         maxLoc=GLES20.glGetUniformLocation(program,"uMax");
+        nightLoc=GLES20.glGetUniformLocation(program,"uNight");
         cropLoc=GLES20.glGetUniformLocation(program,"uCrop");
         panLoc=GLES20.glGetUniformLocation(program,"uPan");
         int[] textures=new int[1];GLES20.glGenTextures(1,textures,0);
@@ -304,6 +308,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         GLES20.glUniform1f(enhancedLoc,useFilter?1f:0f);
         GLES20.glUniform1f(strengthLoc,strength);
         GLES20.glUniform1f(maxLoc,maxMode?1f:0f);
+        GLES20.glUniform1f(nightLoc,nightMode?1f:0f);
         float z=Math.max(1f,zoom);
         GLES20.glUniform2f(cropLoc,cropX/z,cropY/z);
         GLES20.glUniform2f(panLoc,panX,panY);
