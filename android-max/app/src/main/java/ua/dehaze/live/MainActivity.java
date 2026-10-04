@@ -75,6 +75,18 @@ public final class MainActivity extends Activity {
     private boolean usingFile=false;
     private Uri fileUri;
     private MediaPlayer mediaPlayer;
+    private LinearLayout playerControls;
+    private TextView playerPlayPause;
+    private TextView playerTime;
+    private SeekBar playerSeek;
+    private boolean playerSeeking=false;
+    private final Handler playerUiHandler=new Handler(android.os.Looper.getMainLooper());
+    private final Runnable playerProgressTick=new Runnable(){
+        @Override public void run(){
+            updatePlayerProgress();
+            if(usingFile&&mediaPlayer!=null)playerUiHandler.postDelayed(this,250);
+        }
+    };
     private static final int FILE_REQUEST=20;
     private ScaleGestureDetector scaleDetector;
     private GestureDetector gestureDetector;
@@ -435,6 +447,108 @@ public final class MainActivity extends Activity {
         drawerScrim.setVisibility(show?View.VISIBLE:View.GONE);
     }
 
+    private static String formatMediaTime(int ms){
+        int total=Math.max(0,ms)/1000;
+        return String.format(Locale.US,"%02d:%02d",total/60,total%60);
+    }
+
+    private void buildPlayerControls(){
+        playerControls=new LinearLayout(this);
+        playerControls.setOrientation(LinearLayout.HORIZONTAL);
+        playerControls.setGravity(Gravity.CENTER_VERTICAL);
+        playerControls.setPadding(dp(10),dp(6),dp(10),dp(6));
+        playerControls.setBackgroundColor(Color.argb(222,28,30,34));
+
+        TextView stop=button("■",this::stopFilePlayback);
+        stop.setTextSize(16);
+        playerControls.addView(stop,new LinearLayout.LayoutParams(dp(48),dp(42)));
+
+        playerPlayPause=button("Ⅱ",this::toggleFilePlayback);
+        playerPlayPause.setTextSize(17);
+        LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(dp(52),dp(42));
+        pp.leftMargin=dp(6);
+        playerControls.addView(playerPlayPause,pp);
+
+        playerSeek=new SeekBar(this);
+        playerSeek.setMax(1000);
+        playerSeek.setProgressTintList(ColorStateList.valueOf(ACCENT));
+        LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(0,dp(42),1f);
+        sp.leftMargin=dp(8);sp.rightMargin=dp(8);
+        playerControls.addView(playerSeek,sp);
+
+        playerTime=text("00:00 / 00:00",12,INK);
+        playerTime.setGravity(Gravity.CENTER_VERTICAL|Gravity.RIGHT);
+        playerControls.addView(playerTime,new LinearLayout.LayoutParams(dp(118),dp(42)));
+
+        playerSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
+            @Override public void onStartTrackingTouch(SeekBar bar){playerSeeking=true;}
+            @Override public void onProgressChanged(SeekBar bar,int progress,boolean fromUser){
+                if(!fromUser||mediaPlayer==null)return;
+                try{
+                    int duration=mediaPlayer.getDuration();
+                    int target=(int)((long)duration*progress/1000L);
+                    playerTime.setText(formatMediaTime(target)+" / "+formatMediaTime(duration));
+                }catch(IllegalStateException ignored){}
+            }
+            @Override public void onStopTrackingTouch(SeekBar bar){
+                if(mediaPlayer!=null){
+                    try{
+                        int duration=mediaPlayer.getDuration();
+                        mediaPlayer.seekTo((int)((long)duration*bar.getProgress()/1000L));
+                    }catch(IllegalStateException ignored){}
+                }
+                playerSeeking=false;
+            }
+        });
+
+        FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(-1,dp(56),Gravity.BOTTOM);
+        lp.leftMargin=dp(10);lp.rightMargin=dp(10);lp.bottomMargin=dp(8);
+        playerControls.setVisibility(View.GONE);
+        videoArea.addView(playerControls,lp);
+    }
+
+    private void showPlayerControls(boolean show){
+        if(playerControls!=null)playerControls.setVisibility(show?View.VISIBLE:View.GONE);
+        if(zoomBadge!=null){
+            FrameLayout.LayoutParams zp=(FrameLayout.LayoutParams)zoomBadge.getLayoutParams();
+            if(zp!=null){zp.bottomMargin=dp(show?72:12);zoomBadge.setLayoutParams(zp);}
+        }
+    }
+
+    private void updatePlayerProgress(){
+        if(!usingFile||mediaPlayer==null||playerSeek==null)return;
+        try{
+            int duration=Math.max(0,mediaPlayer.getDuration());
+            int position=Math.max(0,mediaPlayer.getCurrentPosition());
+            if(!playerSeeking&&duration>0)
+                playerSeek.setProgress((int)Math.min(1000L,(long)position*1000L/duration));
+            if(playerTime!=null)
+                playerTime.setText(formatMediaTime(position)+" / "+formatMediaTime(duration));
+            if(playerPlayPause!=null)
+                playerPlayPause.setText(mediaPlayer.isPlaying()?"Ⅱ":"▶");
+        }catch(IllegalStateException ignored){}
+    }
+
+    private void toggleFilePlayback(){
+        if(!usingFile||mediaPlayer==null)return;
+        try{
+            if(mediaPlayer.isPlaying())mediaPlayer.pause();
+            else mediaPlayer.start();
+            updatePlayerProgress();
+        }catch(IllegalStateException ignored){}
+    }
+
+    private void stopFilePlayback(){
+        if(!usingFile||mediaPlayer==null)return;
+        try{
+            mediaPlayer.pause();
+            mediaPlayer.seekTo(0);
+            if(playerSeek!=null)playerSeek.setProgress(0);
+            updatePlayerProgress();
+            setState("Відео зупинено • 00:00");
+        }catch(IllegalStateException ignored){}
+    }
+
     private void makeUi(){
         root=new FrameLayout(this);
         root.setBackgroundColor(BG);
@@ -460,6 +574,7 @@ public final class MainActivity extends Activity {
         freezeOverlay.setOnClickListener(v->resumeFreeze());
         videoArea.addView(freezeOverlay,new FrameLayout.LayoutParams(-1,-1));
         drawLabels();
+        buildPlayerControls();
         resumeOverlay=button("▶  ПРОДОВЖИТИ",this::resumeFreeze);
         resumeOverlay.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         resumeOverlay.setVisibility(View.GONE);
@@ -612,36 +727,66 @@ public final class MainActivity extends Activity {
             String rawRotation=meta.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION);
             int rotation=rawRotation==null?0:Integer.parseInt(rawRotation);
             meta.release();
+
             renderer.setCameraInfo(width,height,rotation,false);
-            // Media files carry their own orientation metadata; a camera-device
-            // calibration must NEVER rotate an imported movie.
             renderer.setUserRotation(0);
+            renderer.setFill(false);
+            fillMode=false;
+            viewMode=0;
+            renderer.setViewMode(0);
+            renderer.resetZoom();
+            if(zoomBadge!=null)zoomBadge.setText("1.0×");
+            if(videoLabelsLeft!=null)videoLabelsLeft.setVisibility(View.VISIBLE);
+            if(videoLabelsRight!=null)videoLabelsRight.setText("АНТИТУМАН");
             cameraTexture.setDefaultBufferSize(width,height);
+
             mediaPlayer=new MediaPlayer();
             mediaPlayer.setDataSource(this,fileUri);
             cameraSurface=new Surface(cameraTexture);
             mediaPlayer.setSurface(cameraSurface);
-            mediaPlayer.setLooping(true);
-            mediaPlayer.setOnPreparedListener(mp->{mp.start();setState("Локальне відео • працює без інтернету");});
+            mediaPlayer.setLooping(false);
+            mediaPlayer.setOnPreparedListener(mp->{
+                showPlayerControls(true);
+                if(playerSeek!=null)playerSeek.setProgress(0);
+                if(playerTime!=null)playerTime.setText("00:00 / "+formatMediaTime(mp.getDuration()));
+                mp.start();
+                if(playerPlayPause!=null)playerPlayPause.setText("Ⅱ");
+                playerUiHandler.removeCallbacks(playerProgressTick);
+                playerUiHandler.post(playerProgressTick);
+                setState("Відео • повний кадр FIT • 50/50 Original / Processed");
+                renderer.refresh();
+            });
+            mediaPlayer.setOnCompletionListener(mp->{
+                if(playerPlayPause!=null)playerPlayPause.setText("▶");
+                if(playerSeek!=null)playerSeek.setProgress(1000);
+                updatePlayerProgress();
+            });
             mediaPlayer.setOnErrorListener((mp,what,extra)->{
+                showPlayerControls(false);
                 setState("Не вдалося відкрити відео: "+what);
                 return false;
             });
             mediaPlayer.prepareAsync();
-        }catch(Exception e){setState("Помилка відкриття відео: "+e.getMessage());}
+        }catch(Exception e){
+            showPlayerControls(false);
+            setState("Помилка відкриття відео: "+e.getMessage());
+        }
     }
 
     private void stopMedia(){
+        playerUiHandler.removeCallbacks(playerProgressTick);
         if(mediaPlayer!=null){
             try{mediaPlayer.stop();}catch(Exception ignored){}
             mediaPlayer.release();mediaPlayer=null;
         }
-        if(usingFile&&cameraSurface!=null){cameraSurface.release();cameraSurface=null;}
+        if(cameraSurface!=null){cameraSurface.release();cameraSurface=null;}
+        showPlayerControls(false);
     }
 
     private void useCamera(){
         clearFreeze();
         stopMedia();usingFile=false;fileUri=null;
+        renderer.setFill(true);fillMode=true;
         setDrawer(false);maybeOpenCamera();
     }
 
@@ -738,11 +883,31 @@ public final class MainActivity extends Activity {
         if(opening||!active||usingFile||cameraTexture==null)return;
         try{
             String chosen=null;
+            long chosenScore=-1L;
+            String fallback=null;
             for(String id:cameraManager.getCameraIdList()){
-                Integer facing=cameraManager.getCameraCharacteristics(id).get(CameraCharacteristics.LENS_FACING);
-                if(facing!=null&&facing==CameraCharacteristics.LENS_FACING_BACK){chosen=id;break;}
-                if(chosen==null)chosen=id;
+                CameraCharacteristics candidate=cameraManager.getCameraCharacteristics(id);
+                if(fallback==null)fallback=id;
+                Integer facingCandidate=candidate.get(CameraCharacteristics.LENS_FACING);
+                if(facingCandidate==null||facingCandidate!=CameraCharacteristics.LENS_FACING_BACK)continue;
+                StreamConfigurationMap candidateMap=candidate.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+                if(candidateMap==null)continue;
+                Size[] candidateSizes=candidateMap.getOutputSizes(SurfaceTexture.class);
+                if(candidateSizes==null)continue;
+                long best16x9=0L;
+                long bestWide=0L;
+                for(Size s:candidateSizes){
+                    long pixels=(long)s.getWidth()*s.getHeight();
+                    if(pixels>3840L*2160L)continue;
+                    double ratio=(double)Math.max(s.getWidth(),s.getHeight())/
+                        Math.max(1,Math.min(s.getWidth(),s.getHeight()));
+                    if(Math.abs(ratio-(16d/9d))<0.035)best16x9=Math.max(best16x9,pixels);
+                    if(ratio>1.45)bestWide=Math.max(bestWide,pixels);
+                }
+                long score=best16x9>0?best16x9*10L:bestWide;
+                if(score>chosenScore){chosen=id;chosenScore=score;}
             }
+            if(chosen==null)chosen=fallback;
             if(chosen==null){setState("На пристрої немає доступної камери.");return;}
             CameraCharacteristics c=cameraManager.getCameraCharacteristics(chosen);
             StreamConfigurationMap map=c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
@@ -763,6 +928,7 @@ public final class MainActivity extends Activity {
                 stamp!=null&&stamp==CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE_REALTIME);
             renderer.setUserRotation(cameraCorrectionDegrees);
             cameraTexture.setDefaultBufferSize(size.getWidth(),size.getHeight());
+            setState("Камера "+size.getWidth()+"×"+size.getHeight()+" • підготовка...");
             opening=true;
             cameraManager.openCamera(chosen,new CameraDevice.StateCallback(){
                 @Override public void onOpened(CameraDevice camera){
@@ -782,35 +948,52 @@ public final class MainActivity extends Activity {
 
     private static Size pickSize(Size[] choices,int correctedRotation){
         if(choices==null||choices.length==0)return null;
-        // Keep the native Camera2 preview as sharp as practical. Prefer the
-        // largest landscape 16:9 stream up to UHD; this avoids the previous
-        // forced 1280x720 target while keeping GPU latency bounded on tablets.
         final boolean quarterTurn=((correctedRotation%180)+180)%180==90;
-        final double targetAspect=16d/9d;
+        final double target=16d/9d;
         final long maxPixels=3840L*2160L;
-        Size chosen=null;
-        double bestScore=-Double.MAX_VALUE;
+
+        // Pass 1: exact/near 16:9 after orientation correction. Among those,
+        // take the largest SurfaceTexture stream available up to UHD.
+        Size best=null;
+        long bestPixels=-1L;
         for(Size size:choices){
             int w=quarterTurn?size.getHeight():size.getWidth();
             int h=quarterTurn?size.getWidth():size.getHeight();
             if(w<=0||h<=0)continue;
-            long nativePixels=(long)size.getWidth()*size.getHeight();
-            if(nativePixels>maxPixels)continue;
-            double ratio=(double)w/h;
-            double aspectPenalty=Math.abs(Math.log(ratio/targetAspect));
-            double score=Math.log(Math.max(1L,nativePixels))-aspectPenalty*4.5;
-            if(score>bestScore){bestScore=score;chosen=size;}
+            long pixels=(long)size.getWidth()*size.getHeight();
+            if(pixels>maxPixels)continue;
+            double ratio=(double)Math.max(w,h)/Math.max(1,Math.min(w,h));
+            if(Math.abs(ratio-target)<=0.035&&pixels>bestPixels){
+                best=size;bestPixels=pixels;
+            }
         }
-        if(chosen!=null)return chosen;
-        // If a device exposes only streams above UHD, use the smallest one
-        // rather than failing camera startup.
-        chosen=choices[0];
-        long bestPixels=(long)chosen.getWidth()*chosen.getHeight();
+        if(best!=null)return best;
+
+        // Pass 2: no exact 16:9 mode. Reject square streams and choose the
+        // widest, closest high-resolution preview instead.
+        double bestAspectError=Double.MAX_VALUE;
+        bestPixels=-1L;
+        for(Size size:choices){
+            int w=quarterTurn?size.getHeight():size.getWidth();
+            int h=quarterTurn?size.getWidth():size.getHeight();
+            if(w<=0||h<=0)continue;
+            long pixels=(long)size.getWidth()*size.getHeight();
+            if(pixels>maxPixels)continue;
+            double ratio=(double)Math.max(w,h)/Math.max(1,Math.min(w,h));
+            if(ratio<1.30)continue;
+            double error=Math.abs(ratio-target);
+            if(error<bestAspectError-.01||(Math.abs(error-bestAspectError)<=.01&&pixels>bestPixels)){
+                best=size;bestAspectError=error;bestPixels=pixels;
+            }
+        }
+        if(best!=null)return best;
+
+        // Last resort only: highest available stream up to UHD.
         for(Size size:choices){
             long pixels=(long)size.getWidth()*size.getHeight();
-            if(pixels<bestPixels){chosen=size;bestPixels=pixels;}
+            if(pixels<=maxPixels&&pixels>bestPixels){best=size;bestPixels=pixels;}
         }
-        return chosen;
+        return best!=null?best:choices[0];
     }
 
     private void startPreview(){
