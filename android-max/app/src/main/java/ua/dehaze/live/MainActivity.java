@@ -173,7 +173,7 @@ public final class MainActivity extends Activity {
         logo.setGravity(Gravity.CENTER_VERTICAL);
         logo.setPadding(dp(4),0,dp(10),0);
         bar.addView(logo);
-        TextView title=text("Меті Туман MAX",16,INK);
+        TextView title=text("Меті Туман Adaptive MAX",16,INK);
         title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         bar.addView(title);
         bar.addView(new View(this),new LinearLayout.LayoutParams(0,dp(1),1f));
@@ -263,6 +263,27 @@ public final class MainActivity extends Activity {
         startActivity(new Intent(this,PhotoActivity.class));
     }
 
+    private void applyDehazePreset(String mode,int value){
+        if(renderer==null)return;
+        boolean auto="AUTO".equals(mode);
+        boolean night="NIGHT".equals(mode);
+        renderer.setNightMode(night);
+        if(auto){
+            if(manualCheck!=null)manualCheck.setChecked(false);
+            renderer.setManualMode(false);
+            if(strengthLabel!=null)strengthLabel.setText("AUTO • "+autoStrength+"%");
+            if(strengthSeek!=null)strengthSeek.setProgress(autoStrength);
+        }else{
+            strength=value;
+            if(manualCheck!=null&&!manualCheck.isChecked())manualCheck.setChecked(true);
+            renderer.setManualMode(true);
+            renderer.setStrength(value/100f);
+            if(strengthSeek!=null)strengthSeek.setProgress(value);
+            if(strengthLabel!=null)strengthLabel.setText(mode+" • "+value+"%");
+        }
+        renderer.refresh();
+    }
+
     private void makeDrawer(){
         drawerScrim=new View(this);
         drawerScrim.setBackgroundColor(Color.argb(78,0,0,0));
@@ -281,7 +302,7 @@ public final class MainActivity extends Activity {
         scroll.addView(list);
         drawer.addView(scroll);
 
-        menuTitle(list,"МЕТІ ТУМАН MAX  •  ОФЛАЙН");
+        menuTitle(list,"МЕТІ ТУМАН ADAPTIVE MAX  •  ОФЛАЙН");
         menuItem(list,"▣  ФОТО MAX — вибрати зображення",this::openPhotoMax);
         menuItem(list,"✕  Сховати",()->setDrawer(false));
         toggle=button("Антитуман: ON",()->{
@@ -321,6 +342,22 @@ public final class MainActivity extends Activity {
         });
 
         menuTitle(list,"СИЛА АНТИТУМАНУ");
+        LinearLayout presetRow=new LinearLayout(this);
+        presetRow.setOrientation(LinearLayout.HORIZONTAL);
+        String[] presetNames={"AUTO","LOW","MED","HIGH","NIGHT"};
+        int[] presetValues={0,38,58,78,52};
+        for(int i=0;i<presetNames.length;i++){
+            final String preset=presetNames[i];
+            final int presetValue=presetValues[i];
+            TextView b=button(preset,()->applyDehazePreset(preset,presetValue));
+            b.setTextSize(10);
+            LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(0,dp(36),1f);
+            if(i>0)bp.leftMargin=dp(3);
+            presetRow.addView(b,bp);
+        }
+        LinearLayout.LayoutParams presetLp=new LinearLayout.LayoutParams(-1,dp(38));
+        presetLp.bottomMargin=dp(5);
+        list.addView(presetRow,presetLp);
         LinearLayout strengthRow=new LinearLayout(this);
         strengthRow.setOrientation(LinearLayout.HORIZONTAL);
         strengthRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -348,6 +385,7 @@ public final class MainActivity extends Activity {
         manualCheck.setOnCheckedChangeListener((box,checked)->{
             manualMode=checked;
             renderer.setManualMode(checked);
+            if(!checked)renderer.setNightMode(false);
             strengthSeek.setEnabled(checked);
             strengthSeek.setAlpha(checked?1f:.40f);
             autoName.setTextColor(checked?MUTED:ACCENT);
