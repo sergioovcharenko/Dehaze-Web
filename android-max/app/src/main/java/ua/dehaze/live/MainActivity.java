@@ -109,7 +109,7 @@ public final class MainActivity extends Activity {
         setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
         showImmersive();
         cameraCorrectionDegrees=getPreferences(MODE_PRIVATE).getInt(
-            "camera_alignment_degrees",defaultCameraCorrection());
+            "camera_alignment_degrees_v3",defaultCameraCorrection());
         cameraManager = (CameraManager)getSystemService(Context.CAMERA_SERVICE);
         cameraThread = new HandlerThread("camera2-preview");
         cameraThread.start();
@@ -118,12 +118,11 @@ public final class MainActivity extends Activity {
     }
 
     private static int defaultCameraCorrection(){
-        // The Active 10 Pro's rear-camera buffer is sideways with Android's
-        // generic preview calculation in this fixed-landscape UI. It previously
-        // required a manual quarter-turn. Make that correction automatic.
-        String model=Build.MODEL==null?"":Build.MODEL.toLowerCase(Locale.ROOT)
-            .replace(" ","").replace("-","");
-        return model.contains("active10pro")?90:0;
+        // Camera2 + SurfaceTexture already provide the correct sensor transform.
+        // Do not force Active 10 Pro to +90 degrees: doing so turns a 16:9
+        // 3072x1728 stream into a portrait 1728x3072 layout and creates the
+        // narrow centered preview seen in previous builds.
+        return 0;
     }
 
     private void calibrateCamera(){
@@ -134,7 +133,7 @@ public final class MainActivity extends Activity {
         }
         cameraCorrectionDegrees=(cameraCorrectionDegrees+90)%360;
         getPreferences(MODE_PRIVATE).edit()
-            .putInt("camera_alignment_degrees",cameraCorrectionDegrees).apply();
+            .putInt("camera_alignment_degrees_v3",cameraCorrectionDegrees).apply();
         renderer.setUserRotation(cameraCorrectionDegrees);
         renderer.resetZoom();
         zoomBadge.setText("1.0×");
