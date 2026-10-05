@@ -48,6 +48,7 @@ import java.util.Arrays;
 import java.util.Locale;
 
 public final class MainActivity extends Activity {
+    // Camera geometry revision 2.2.2
     private static final int CAMERA_PERMISSION = 12;
     private GLSurfaceView glView;
     private SplitRenderer renderer;
