@@ -848,6 +848,14 @@ public final class MainActivity extends Activity {
         });
     }
 
+    public void onGpuCompatibilityMode(){
+        runOnUiThread(()->{
+            liveMaxMode=false;
+            if(maxModeButton!=null)maxModeButton.setText("GPU COMPATIBILITY MODE");
+            setState("GPU compatibility mode • стабільний GLES2 renderer");
+        });
+    }
+
     private void onFrameStats(final String stats) {
         runOnUiThread(()->{if(active)statsView.setText(stats+" • "+(manualMode?"РУЧНИЙ "+strength:"AUTO "+autoStrength)+"%");});
     }
