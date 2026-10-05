@@ -30,39 +30,10 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     private static final String FRAGMENT =
         "#extension GL_OES_EGL_image_external : require\n" +
         "precision mediump float;\n" +
-        "varying vec2 vUV;\n" +
-        "uniform samplerExternalOES uCamera;\n" +
-        "uniform mat4 uMatrix;\n" +
-        "uniform float uRotation;\n" +
-        "uniform vec2 uPixel;\n" +
-        "uniform float uEnhanced;\n" +
-        "uniform float uStrength;\n" +
-        "uniform float uMax;\n" +
-        "uniform vec2 uCrop;\n" +
-        "uniform vec2 uPan;\n" +
+        "varying vec2 vUV; uniform samplerExternalOES uCamera; uniform mat4 uMatrix; uniform float uRotation; uniform vec2 uPixel; uniform float uEnhanced; uniform float uStrength; uniform float uMax; uniform vec2 uCrop; uniform vec2 uPan;\n" +
         "vec2 rotateUV(vec2 uv){if(uRotation<45.0)return uv;if(uRotation<135.0)return vec2(uv.y,1.0-uv.x);if(uRotation<225.0)return vec2(1.0-uv.x,1.0-uv.y);return vec2(1.0-uv.y,uv.x);}\n" +
-        "vec3 grab(vec2 uv){vec2 p=clamp((uv-.5)*uCrop+.5+uPan,vec2(.001),vec2(.999));return texture2D(uCamera,(uMatrix*vec4(rotateUV(p),0.0,1.0)).xy).rgb;}\n" +
-        "float lum(vec3 c){return dot(c,vec3(.299,.587,.114));}\n" +
-        "float dc(vec3 c){return min(c.r,min(c.g,c.b));}\n" +
-        "void main(){\n" +
-        " vec3 c=grab(vUV); if(uEnhanced<0.5||uStrength<.001){gl_FragColor=vec4(c,1.0);return;}\n" +
-        " vec2 p2=uPixel*2.0,p4=uPixel*4.0;\n" +
-        " vec3 a=grab(vUV+vec2(p2.x,0.0)),b=grab(vUV-vec2(p2.x,0.0)),d=grab(vUV+vec2(0.0,p2.y)),e=grab(vUV-vec2(0.0,p2.y));\n" +
-        " vec3 q1=grab(vUV+vec2(p4.x,p4.y)),q2=grab(vUV+vec2(-p4.x,p4.y)),q3=grab(vUV+vec2(p4.x,-p4.y)),q4=grab(vUV-vec2(p4.x,p4.y));\n" +
-        " vec3 l2=(a+b+d+e)*.25,l4=(q1+q2+q3+q4)*.25; float y=lum(c);\n" +
-        " float edge=clamp(length(c-l2)*3.2+abs(y-lum(l4))*2.2,0.0,1.0);\n" +
-        " float dark=min(dc(c),min(min(dc(a),dc(b)),min(dc(d),dc(e)))); dark=min(dark,min(min(dc(q1),dc(q2)),min(dc(q3),dc(q4))));\n" +
-        " float low=1.0-smoothstep(.025,.16,edge); float haze=clamp(dark*.70+y*.18+low*.12,0.0,1.0);\n" +
-        " float top=smoothstep(.28,.78,vUV.y); float bright=smoothstep(.58,.90,y); float smoothSky=1.0-smoothstep(.025,.13,edge);\n" +
-        " float sky=clamp(top*bright*smoothSky,0.0,1.0); float highlight=smoothstep(.72,.96,y); float protect=clamp(max(sky*.92,highlight*.62),0.0,.94); float ground=1.0-protect;\n" +
-        " float s=clamp(uStrength,0.0,1.0),effectiveS=s*mix(.24,1.0,ground),omega=mix(.60,.86,effectiveS),t=clamp(1.0-omega*haze,mix(.48,.24,effectiveS),1.0);\n" +
-        " vec3 A=mix(vec3(.82),vec3(.93),clamp(haze*.84+.08,0.0,1.0)); vec3 rec=clamp((c-A)/t+A,0.0,1.0);\n" +
-        " float structure=smoothstep(.015,.20,edge)*smoothstep(.20,.82,haze)*ground; rec+=clamp(c-l2,-.09,.09)*(effectiveS*(.26+.64*structure)); rec+=clamp(c-l4,-.06,.06)*(effectiveS*.20*structure);\n" +
-        " float ly=lum(l4); rec=vec3(ly)+(rec-vec3(ly))*(1.0+effectiveS*(.06+.18*structure)); rec=mix(rec,l2,.06*effectiveS*low*smoothstep(.35,.85,haze));\n" +
-        " float blend=clamp(effectiveS*(.30+.50*smoothstep(.10,.78,haze)),0.0,.90); vec3 result=mix(c,rec,blend); float rl=lum(result); result=mix(vec3(rl),result,1.0+.07*effectiveS*ground);\n" +
-        " result=mix(result,c,protect*.58);\n" +
-        " gl_FragColor=vec4(clamp(result,0.0,1.0),1.0);\n" +
-        "}";
+        "vec3 grab(vec2 uv){vec2 p=clamp((uv-.5)*uCrop+.5+uPan,vec2(.001),vec2(.999));return texture2D(uCamera,(uMatrix*vec4(rotateUV(p),0.0,1.0)).xy).rgb;} float lum(vec3 c){return dot(c,vec3(.299,.587,.114));} float dc(vec3 c){return min(c.r,min(c.g,c.b));}\n" +
+        "void main(){vec3 c=grab(vUV);if(uEnhanced<.5||uStrength<.001){gl_FragColor=vec4(c,1.);return;} vec2 p2=uPixel*2.,p4=uPixel*4.; vec3 a=grab(vUV+vec2(p2.x,0.)),b=grab(vUV-vec2(p2.x,0.)),d=grab(vUV+vec2(0.,p2.y)),e=grab(vUV-vec2(0.,p2.y)); vec3 q1=grab(vUV+p4),q2=grab(vUV+vec2(-p4.x,p4.y)),q3=grab(vUV+vec2(p4.x,-p4.y)),q4=grab(vUV-p4); vec3 l2=(a+b+d+e)*.25,l4=(q1+q2+q3+q4)*.25; float y=lum(c),edge=clamp(length(c-l2)*3.2+abs(y-lum(l4))*2.2,0.,1.); float dark=min(dc(c),min(min(dc(a),dc(b)),min(dc(d),dc(e)))); dark=min(dark,min(min(dc(q1),dc(q2)),min(dc(q3),dc(q4)))); float low=1.-smoothstep(.025,.16,edge),haze=clamp(dark*.70+y*.18+low*.12,0.,1.); float s=clamp(uStrength,0.,1.),t=clamp(1.-mix(.62,.88,s)*haze,mix(.38,.22,s),1.); vec3 A=mix(vec3(.82),vec3(.94),clamp(haze*.9+.08,0.,1.)); vec3 rec=clamp((c-A)/t+A,0.,1.); float structure=smoothstep(.015,.20,edge)*smoothstep(.20,.82,haze); rec+=clamp(c-l2,-.11,.11)*(s*(.30+.85*structure)); rec+=clamp(c-l4,-.08,.08)*(s*.28*structure); float ly=lum(l4); rec=vec3(ly)+(rec-vec3(ly))*(1.+s*(.10+.30*structure)); rec=mix(rec,l2,.07*s*low*smoothstep(.35,.85,haze)); vec3 r=mix(c,rec,clamp(s*(.38+.58*smoothstep(.10,.78,haze)),0.,.97)); float rl=lum(r); r=mix(vec3(rl),r,1.+.12*s); gl_FragColor=vec4(clamp(r,0.,1.),1.);}\n";
     private final MainActivity activity;
     private final GLSurfaceView view;
     private final MainActivity.TextureCallback textureCallback;
