@@ -56,7 +56,7 @@
   viewer.classList.toggle('original-only',!active);
   viewer.classList.toggle('two-frames',active&&viewMode==='two');
   output.hidden=!active;
-  $('videoOriginalFig').style.display=active&&viewMode==='two'?'block':'none';
+  $('videoOriginalFig').style.display='block';
   $('viewSplit').classList.toggle('selected',viewMode==='split');
   $('viewFull').classList.toggle('selected',viewMode==='full');
   $('viewTwo').classList.toggle('selected',viewMode==='two');
