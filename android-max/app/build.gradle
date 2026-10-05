@@ -1,5 +1,6 @@
 plugins { id 'com.android.application' }
 // Build trigger: 2.2.3 camera + Adaptive5
+// merge-trigger 2.2.4
 android {
     namespace 'ua.dehaze.live'
     compileSdk 35
