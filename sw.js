@@ -1,8 +1,8 @@
 'use strict';
-const CACHE='digital-dehazing-v5';
+const CACHE='dehaze-restored-previous-v1';
 const ASSETS=[
   './index.html',
-  './video-dehaze.js?v=6',
+  './video-dehaze.js?v=2',
   './dehaze-dcp.js?v=4',
   './manifest.webmanifest',
   './offline-icon.svg'
