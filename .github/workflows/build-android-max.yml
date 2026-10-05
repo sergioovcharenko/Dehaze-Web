@@ -1,4 +1,4 @@
-# Digital Dehazing Adaptive Object MAX v2.2.2
+# Digital Dehazing Adaptive Object MAX v2.2.3
 name: Build Digital Dehazing / Меті Туман Adaptive Object MAX
 on:
   push:
@@ -49,17 +49,17 @@ jobs:
           test -s "$apk"
           "${ANDROID_HOME}/build-tools/35.0.0/aapt" dump badging "$apk" | grep '^package:' | tee package.txt
           grep "name='ua.digitaldehazing.metituman.adaptiveobjectmax'" package.txt
-          cp "$apk" Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX-2.2.2.apk
-          sha256sum Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX-2.2.2.apk > Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX-2.2.2.apk.sha256
-          ls -lh Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX-2.2.2.apk
+          cp "$apk" Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX-2.2.3.apk
+          sha256sum Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX-2.2.3.apk > Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX-2.2.3.apk.sha256
+          ls -lh Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX-2.2.3.apk
       - name: Upload Digital Dehazing MAX APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Digital-Dehazing-Adaptive-Object-MAX-debug
           path: |
-            Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX-2.2.2.apk
-            Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX-2.2.2.apk.sha256
+            Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX-2.2.3.apk
+            Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX-2.2.3.apk.sha256
           if-no-files-found: error
           retention-days: 90
       - name: Publish separate Digital Dehazing Adaptive Object MAX release
@@ -69,11 +69,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag=digital-dehazing-adaptive-object-max-v2.2.2
+          tag=digital-dehazing-adaptive-object-max-v2.2.3
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --title "Digital Dehazing / Меті Туман Adaptive Object MAX v2.2.2 — окрема APK" --notes "Independent Android package ua.digitaldehazing.metituman.adaptiveobjectmax, version 2.2.2. Adaptive Object Dehaze uses only real image structure: DCP, transmission map, atmospheric light, guided edge refinement, weak-structure recovery, local contrast, detail recovery, adaptive denoise and temporally stabilized AUTO parameters. No sky protection mask. Installs alongside all previous Меті Туман / Digital Dehazing APKs." --prerelease
+            gh release create "$tag" --title "Digital Dehazing / Меті Туман Adaptive Object MAX v2.2.3 — окрема APK" --notes "Independent Android package ua.digitaldehazing.metituman.adaptiveobjectmax, version 2.2.3. Adaptive Object Dehaze uses only real image structure: DCP, transmission map, atmospheric light, guided edge refinement, weak-structure recovery, local contrast, detail recovery, adaptive denoise and temporally stabilized AUTO parameters. No sky protection mask. Installs alongside all previous Меті Туман / Digital Dehazing APKs." --prerelease
           fi
-          gh release upload "$tag" Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX-2.2.2.apk Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX-2.2.2.apk.sha256 --clobber
+          gh release upload "$tag" Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX-2.2.3.apk Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX-2.2.3.apk.sha256 --clobber
           gh release view "$tag" --json url,assets
       - name: Record Adaptive MAX build status
         if: always()
@@ -96,7 +96,7 @@ jobs:
             --arg publish "$PUBLISH" \
             --arg commit "$GITHUB_SHA" \
             --arg url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-            --arg apk "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/digital-dehazing-adaptive-object-max-v2.2.2/Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX-2.2.2.apk" \
+            --arg apk "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/digital-dehazing-adaptive-object-max-v2.2.3/Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX-2.2.3.apk" \
             --arg time "$(date -u +%FT%TZ)" \
             '{state:$state,compile:$compile,verify:$verify,publish:$publish,commit:$commit,workflow_url:$url,apk_url:(if $state=="success" then $apk else null end),updated_utc:$time}' > digital-dehazing-adaptive-object-max-build-status.json
           old_sha=$(gh api "repos/$GITHUB_REPOSITORY/contents/digital-dehazing-adaptive-object-max-build-status.json" --jq .sha 2>/dev/null || true)
