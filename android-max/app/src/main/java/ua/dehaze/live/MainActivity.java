@@ -185,7 +185,7 @@ public final class MainActivity extends Activity {
         logo.setGravity(Gravity.CENTER_VERTICAL);
         logo.setPadding(dp(4),0,dp(10),0);
         bar.addView(logo);
-        TextView title=text("Меті Туман Adaptive MAX",16,INK);
+        TextView title=text("Digital Dehazing • Adaptive MAX",16,INK);
         title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         bar.addView(title);
         bar.addView(new View(this),new LinearLayout.LayoutParams(0,dp(1),1f));
@@ -314,7 +314,7 @@ public final class MainActivity extends Activity {
         scroll.addView(list);
         drawer.addView(scroll);
 
-        menuTitle(list,"МЕТІ ТУМАН ADAPTIVE MAX  •  ОФЛАЙН");
+        menuTitle(list,"DIGITAL DEHAZING • МЕТІ ТУМАН ADAPTIVE MAX • ОФЛАЙН");
         menuItem(list,"▣  ФОТО MAX — вибрати зображення",this::openPhotoMax);
         menuItem(list,"✕  Сховати",()->setDrawer(false));
         toggle=button("Антитуман: ON",()->{
@@ -325,10 +325,10 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams toggleParams=new LinearLayout.LayoutParams(-1,dp(40));
         toggleParams.bottomMargin=dp(4);
         list.addView(toggle,toggleParams);
-        maxModeButton=button("LIVE MAX: УВІМКНЕНО",()->{
+        maxModeButton=button("ADAPTIVE MAX: УВІМКНЕНО",()->{
             liveMaxMode=!liveMaxMode;
             renderer.setMaxMode(liveMaxMode);
-            maxModeButton.setText(liveMaxMode?"LIVE MAX: УВІМКНЕНО":"LIVE FAST: УВІМКНЕНО");
+            maxModeButton.setText(liveMaxMode?"ADAPTIVE MAX: УВІМКНЕНО":"FAST: УВІМКНЕНО");
             renderer.refresh();
         });
         LinearLayout.LayoutParams maxParams=new LinearLayout.LayoutParams(-1,dp(40));
@@ -802,7 +802,7 @@ public final class MainActivity extends Activity {
     private void takeSnapshot(){
         renderer.captureNext(bitmap->new Thread(()->{
             try{
-                String name="Meti-Tuman-MAX-"+System.currentTimeMillis()+".png";
+                String name="Digital-Dehazing-Adaptive-MAX-"+System.currentTimeMillis()+".png";
                 if(Build.VERSION.SDK_INT>=29){
                     ContentValues values=new ContentValues();
                     values.put(MediaStore.Images.Media.DISPLAY_NAME,name);
