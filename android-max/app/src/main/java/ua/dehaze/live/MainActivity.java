@@ -846,6 +846,19 @@ public final class MainActivity extends Activity {
         });
     }
 
+    public void onAutoHybrid(float value,int level,boolean night,float skyRatio){
+        autoStrength=Math.round(value*100f);
+        final String[] names={"CLEAR","LIGHT","MEDIUM","STRONG","ADAPTIVE"};
+        final String band=names[Math.max(0,Math.min(names.length-1,level))];
+        runOnUiThread(()->{
+            if(!active||manualMode||strengthLabel==null)return;
+            strengthLabel.setText("AUTO "+band+" • "+autoStrength+"%"+(night?" • NIGHT":""));
+            if(strengthSeek!=null)strengthSeek.setProgress(autoStrength);
+            if(stateView!=null && skyRatio>.45f)
+                stateView.setText("AUTO "+band+" • SKY PROTECT "+Math.round(skyRatio*100f)+"%");
+        });
+    }
+
     public void onAutoUnavailable(){
         runOnUiThread(()->{
             if(strengthLabel!=null&&!manualMode)
