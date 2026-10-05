@@ -1,8 +1,8 @@
 'use strict';
-const CACHE='dehaze-adaptive-object-v17';
+const CACHE='dehaze-adaptive-object-v18';
 const ASSETS=[
   './index.html',
-  './video-dehaze-adaptive-v17.js',
+  './video-dehaze-adaptive-v18.js',
   './dehaze-dcp-adaptive-v6.js',
   './manifest.webmanifest',
   './offline-icon.svg'
