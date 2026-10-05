@@ -114,6 +114,8 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     private volatile float strength=.60f;
     private volatile float atmosphere=.82f;
     private volatile boolean manualMode=false;
+    private volatile int autoLevel=1;
+    private int pendingAutoLevel=1,pendingAutoCount=0;
     private int analysisTexture=0,analysisFbo=0;
     private static final int SAMPLE_W=64,SAMPLE_H=36;
     private final java.nio.ByteBuffer analysisPixels=java.nio.ByteBuffer.allocateDirect(SAMPLE_W*SAMPLE_H*4);
