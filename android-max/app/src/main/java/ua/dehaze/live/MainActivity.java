@@ -277,18 +277,34 @@ public final class MainActivity extends Activity {
 
     private void applyDehazePreset(String mode,int value){
         if(renderer==null)return;
+        boolean off="OFF".equals(mode);
         boolean auto="AUTO".equals(mode);
-        boolean night="NIGHT".equals(mode);
-        renderer.setNightMode(night);
+        boolean nightMax="NIGHT/MAX".equals(mode);
+        if(off){
+            enhanced=false;
+            renderer.setEnhanced(false);
+            renderer.setNightMode(false);
+            renderer.setMaxMode(false);
+            if(toggle!=null)toggle.setText("Антитуман: OFF");
+            if(strengthLabel!=null)strengthLabel.setText("OFF");
+            renderer.refresh();
+            return;
+        }
+        enhanced=true;
+        renderer.setEnhanced(true);
+        if(toggle!=null)toggle.setText("Антитуман: ON");
+        renderer.setNightMode(nightMax);
         if(auto){
             if(manualCheck!=null)manualCheck.setChecked(false);
             renderer.setManualMode(false);
+            renderer.setMaxMode(false);
             if(strengthLabel!=null)strengthLabel.setText("AUTO • "+autoStrength+"%");
             if(strengthSeek!=null)strengthSeek.setProgress(autoStrength);
         }else{
             strength=value;
             if(manualCheck!=null&&!manualCheck.isChecked())manualCheck.setChecked(true);
             renderer.setManualMode(true);
+            renderer.setMaxMode(nightMax);
             renderer.setStrength(value/100f);
             if(strengthSeek!=null)strengthSeek.setProgress(value);
             if(strengthLabel!=null)strengthLabel.setText(mode+" • "+value+"%");
@@ -356,13 +372,13 @@ public final class MainActivity extends Activity {
         menuTitle(list,"СИЛА АНТИТУМАНУ");
         LinearLayout presetRow=new LinearLayout(this);
         presetRow.setOrientation(LinearLayout.HORIZONTAL);
-        String[] presetNames={"AUTO","LOW","MEDIUM","HIGH","NIGHT"};
-        int[] presetValues={0,36,56,76,50};
+        String[] presetNames={"OFF","AUTO","LOW","MEDIUM","HIGH","NIGHT/MAX"};
+        int[] presetValues={0,0,34,52,70,82};
         for(int i=0;i<presetNames.length;i++){
             final String preset=presetNames[i];
             final int presetValue=presetValues[i];
             TextView b=button(preset,()->applyDehazePreset(preset,presetValue));
-            b.setTextSize(10);
+            b.setTextSize(presetNames.length>5?9:10);
             LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(0,dp(36),1f);
             if(i>0)bp.leftMargin=dp(3);
             presetRow.addView(b,bp);
@@ -846,7 +862,7 @@ public final class MainActivity extends Activity {
         });
     }
 
-    public void onAutoHybrid(float value,int level,boolean night,float skyRatio){
+    public void onAutoHybrid(float value,int level,boolean night){
         autoStrength=Math.round(value*100f);
         final String[] names={"CLEAR","LIGHT","MEDIUM","STRONG","ADAPTIVE"};
         final String band=names[Math.max(0,Math.min(names.length-1,level))];
@@ -854,8 +870,6 @@ public final class MainActivity extends Activity {
             if(!active||manualMode||strengthLabel==null)return;
             strengthLabel.setText("AUTO "+band+" • "+autoStrength+"%"+(night?" • NIGHT":""));
             if(strengthSeek!=null)strengthSeek.setProgress(autoStrength);
-            if(stateView!=null && skyRatio>.45f)
-                stateView.setText("AUTO "+band+" • SKY PROTECT "+Math.round(skyRatio*100f)+"%");
         });
     }
 
