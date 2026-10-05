@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#272a2d">
-<title>Меті Туман MAX — Фото</title>
+<title>Digital Dehazing Adaptive Object MAX — Фото</title>
 <style>
 :root{font-family:Roboto,"Segoe UI",Arial,sans-serif;color:#f1f2f3;background:#212428;color-scheme:dark}
 *{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#212428}
@@ -51,7 +51,7 @@ output{color:#bfe4d3;font-weight:700;font-variant-numeric:tabular-nums}
 <body>
 <header>
  <button type="button" id="back" style="padding:9px 10px" aria-label="Назад до камери">← LIVE</button>
- <div><strong>Меті Туман MAX</strong><small>Фотографії • локальна обробка без інтернету</small></div>
+ <div><strong>Adaptive Object MAX</strong><small>Фотографії • локальна обробка без інтернету</small></div>
  <div class="spacer"></div>
  <button class="accent" id="headerOpen">Відкрити фото</button>
 </header>
@@ -67,7 +67,7 @@ output{color:#bfe4d3;font-weight:700;font-variant-numeric:tabular-nums}
    <figure id="beforePanel"><figcaption>ОРИГІНАЛ</figcaption><div class="preview"><canvas id="before" width="640" height="360"></canvas></div></figure>
   </div>
   <p class="help" id="info">Вибери фотографію з туманом, щоб порівняти оригінал і результат.</p>
-  <p class="info">Максимальна обробка не означає відновлення невидимих об’єктів. Сильний антитуман може підсилити шум і змінити кольори — налаштуй захист неба та силу вручну за потреби.</p>
+  <p class="info">Adaptive Object MAX підсилює тільки структури, що реально присутні у вихідному сигналі. Повністю невидимі деталі не домальовуються.</p>
  </section>
  <section class="controls" id="panel">
   <div>
@@ -76,17 +76,13 @@ output{color:#bfe4d3;font-weight:700;font-variant-numeric:tabular-nums}
     <button type="button" id="maxMode" class="active">AUTO MAX</button>
     <button type="button" id="balancedMode">AUTO</button>
    </div>
-   <p class="help">MAX: Dark Channel Prior + guided filter + локальний контраст + деталі. AUTO: делікатніше.</p>
+   <p class="help">MAX: DCP + transmission map + atmospheric light + guided refinement + Adaptive Object + локальний контраст + деталі. AUTO: делікатніше.</p>
    <label class="checkbox"><input type="checkbox" id="manual">Ручне регулювання</label>
   </div>
   <div class="control">
    <label for="strength"><span>Сила антитуману</span><output id="strengthOut">85%</output></label>
    <input id="strength" type="range" min="0" max="100" value="85" disabled>
    <small id="estimate">AUTO оцінить фото після завантаження.</small>
-  </div>
-  <div class="control">
-   <label for="sky"><span>Захист неба</span><output id="skyOut">85%</output></label>
-   <input id="sky" type="range" min="0" max="100" value="85">
   </div>
   <div class="control">
    <label for="detail"><span>Відновлення деталей</span><output id="detailOut">40%</output></label>
