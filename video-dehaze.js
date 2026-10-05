@@ -104,25 +104,32 @@
   float flat=1.0-smoothstep(.018,.10,edge);
   float haze=clamp(l*.42+flat*.34+(1.0-length(c-local))*.12,0.0,1.0);
 
-  // Stronger haze removal than the previous soft version, but keep a safe floor.
-  float t=clamp(1.0-uStrength*(.26+.20*haze),.52,1.0);
+  // Adaptive limiter: 100% remains available in dense haze, but clean/textured
+  // regions automatically receive less processing to avoid an overcooked image.
+  float texture=smoothstep(.018,.16,edge);
+  float clean=clamp((1.0-haze)*(.55+.45*texture),0.0,1.0);
+  float adaptiveS=uStrength*(1.0-.42*clean);
+  adaptiveS*=mix(.34,1.0,skyProtect);
+
+  // Strong haze removal with a safe transmission floor.
+  float t=clamp(1.0-adaptiveS*(.28+.22*haze),.50,1.0);
   vec3 A=vec3(.86);
   vec3 recovered=clamp((c-A)/t+A,0.0,1.0);
 
-  // Blend dehaze mainly where haze is detected; protect bright smooth sky.
-  float dehazeMix=clamp((.42+.42*haze)*uStrength*skyProtect,0.0,.86);
+  // Dense haze can use almost the full requested strength; clean regions are capped.
+  float dehazeMix=clamp((.40+.48*haze)*adaptiveS,0.0,.88);
   vec3 enhanced=mix(c,recovered,dehazeMix);
 
-  // Recover real local detail without sharpening flat fog/sky.
-  float texture=smoothstep(.018,.16,edge);
-  enhanced+=clamp(c-local,-.085,.085)*(.30*uStrength*texture*skyProtect);
+  // Recover real detail only where texture exists.
+  enhanced+=clamp(c-local,-.082,.082)*(.28*adaptiveS*texture);
 
-  // Mild color recovery only on textured ground/objects.
+  // Restrained color recovery; avoid oversaturation in already clear areas.
   float y2=dot(enhanced,vec3(.299,.587,.114));
-  enhanced=mix(vec3(y2),enhanced,1.0+.07*uStrength*texture*skyProtect);
+  enhanced=mix(vec3(y2),enhanced,1.0+.055*adaptiveS*texture);
 
-  // Final safety blend prevents crushed blacks and overprocessed look.
-  enhanced=mix(c,enhanced,.90);
+  // Extra safety in very clean, high-detail regions.
+  float safety=clamp(clean*.30+sky*.45,0.0,.62);
+  enhanced=mix(enhanced,c,safety);
   gl_FragColor=vec4(clamp(enhanced,0.0,1.0),1.0);
  }`);
   program=gl.createProgram();gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);
