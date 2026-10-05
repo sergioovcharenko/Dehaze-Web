@@ -1,5 +1,5 @@
-# Adaptive MAX build trigger: camera + player v1.4
-name: Build Меті Туман Adaptive MAX (separate APK)
+# Digital Dehazing Adaptive Object MAX v2
+name: Build Digital Dehazing / Меті Туман Adaptive Object MAX
 on:
   push:
     branches: [main]
@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: meti-tuman-adaptive-max-apk
+  group: digital-dehazing-adaptive-object-max-apk
   cancel-in-progress: true
 
 jobs:
@@ -38,42 +38,42 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
-      - name: Compile independent Adaptive MAX APK
+      - name: Compile independent Adaptive Object MAX APK
         id: compile
         run: gradle -p android-max --no-daemon --stacktrace assembleDebug
-      - name: Verify Adaptive MAX package and APK
+      - name: Verify unique Adaptive Object MAX package and APK
         id: verify
         run: |
           set -euo pipefail
           apk=android-max/app/build/outputs/apk/debug/app-debug.apk
           test -s "$apk"
           "${ANDROID_HOME}/build-tools/35.0.0/aapt" dump badging "$apk" | grep '^package:' | tee package.txt
-          grep "name='ua.meti.tuman.adaptivemax'" package.txt
-          cp "$apk" Meti-Tuman-Adaptive-MAX.apk
-          sha256sum Meti-Tuman-Adaptive-MAX.apk > Meti-Tuman-Adaptive-MAX.apk.sha256
-          ls -lh Meti-Tuman-Adaptive-MAX.apk
-      - name: Upload MAX APK
+          grep "name='ua.digitaldehazing.metituman.adaptiveobjectmax'" package.txt
+          cp "$apk" Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX.apk
+          sha256sum Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX.apk > Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX.apk.sha256
+          ls -lh Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX.apk
+      - name: Upload Digital Dehazing MAX APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Meti-Tuman-Adaptive-MAX-debug
+          name: Digital-Dehazing-Adaptive-Object-MAX-debug
           path: |
-            Meti-Tuman-Adaptive-MAX.apk
-            Meti-Tuman-Adaptive-MAX.apk.sha256
+            Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX.apk
+            Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX.apk.sha256
           if-no-files-found: error
           retention-days: 90
-      - name: Publish separate Adaptive MAX release (never overwrite previous builds)
+      - name: Publish separate Digital Dehazing Adaptive Object MAX release
         id: publish
         if: success()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag=meti-tuman-adaptive-max-latest
+          tag=digital-dehazing-adaptive-object-max-v2
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --title "Меті Туман Adaptive MAX — окрема APK (debug)" --notes "Independent Android package ua.meti.tuman.adaptivemax. Adaptive Object Dehaze + offline live dehaze. Installs alongside ua.meti.tuman and ua.meti.tuman.max. Debug builds are for testing." --prerelease
+            gh release create "$tag" --title "Digital Dehazing / Меті Туман Adaptive Object MAX v2 — окрема APK" --notes "Independent Android package ua.digitaldehazing.metituman.adaptiveobjectmax. Adaptive Object Dehaze uses real image structure only: DCP, transmission recovery, atmospheric light, edge-guided refinement, local contrast, detail recovery, adaptive denoise and temporally stabilized AUTO parameters. Installs alongside all previous Меті Туман / Digital Dehazing APKs." --prerelease
           fi
-          gh release upload "$tag" Meti-Tuman-Adaptive-MAX.apk Meti-Tuman-Adaptive-MAX.apk.sha256 --clobber
+          gh release upload "$tag" Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX.apk Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX.apk.sha256 --clobber
           gh release view "$tag" --json url,assets
       - name: Record Adaptive MAX build status
         if: always()
@@ -96,18 +96,18 @@ jobs:
             --arg publish "$PUBLISH" \
             --arg commit "$GITHUB_SHA" \
             --arg url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-            --arg apk "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/meti-tuman-adaptive-max-latest/Meti-Tuman-Adaptive-MAX.apk" \
+            --arg apk "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/digital-dehazing-adaptive-object-max-v2/Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX.apk" \
             --arg time "$(date -u +%FT%TZ)" \
-            '{state:$state,compile:$compile,verify:$verify,publish:$publish,commit:$commit,workflow_url:$url,apk_url:(if $state=="success" then $apk else null end),updated_utc:$time}' > adaptive-max-build-status.json
-          old_sha=$(gh api "repos/$GITHUB_REPOSITORY/contents/adaptive-max-build-status.json" --jq .sha 2>/dev/null || true)
+            '{state:$state,compile:$compile,verify:$verify,publish:$publish,commit:$commit,workflow_url:$url,apk_url:(if $state=="success" then $apk else null end),updated_utc:$time}' > digital-dehazing-adaptive-object-max-build-status.json
+          old_sha=$(gh api "repos/$GITHUB_REPOSITORY/contents/digital-dehazing-adaptive-object-max-build-status.json" --jq .sha 2>/dev/null || true)
           if [ -n "$old_sha" ]; then
-            gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/adaptive-max-build-status.json" \
-              -f message="Record independent Adaptive MAX APK build" \
-              -f content="$(base64 -w0 < adaptive-max-build-status.json)" \
+            gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/digital-dehazing-adaptive-object-max-build-status.json" \
+              -f message="Record Digital Dehazing Adaptive Object MAX APK build" \
+              -f content="$(base64 -w0 < digital-dehazing-adaptive-object-max-build-status.json)" \
               -f sha="$old_sha" -f branch=main >/dev/null
           else
-            gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/adaptive-max-build-status.json" \
+            gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/digital-dehazing-adaptive-object-max-build-status.json" \
               -f message="Record independent Adaptive MAX APK build" \
-              -f content="$(base64 -w0 < adaptive-max-build-status.json)" \
+              -f content="$(base64 -w0 < digital-dehazing-adaptive-object-max-build-status.json)" \
               -f branch=main >/dev/null
           fi
