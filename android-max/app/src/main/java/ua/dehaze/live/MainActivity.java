@@ -110,7 +110,7 @@ public final class MainActivity extends Activity {
         setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
         showImmersive();
         cameraCorrectionDegrees=getPreferences(MODE_PRIVATE).getInt(
-            "camera_alignment_degrees_v3",defaultCameraCorrection());
+            "camera_alignment_degrees_v4",defaultCameraCorrection());
         cameraManager = (CameraManager)getSystemService(Context.CAMERA_SERVICE);
         cameraThread = new HandlerThread("camera2-preview");
         cameraThread.start();
@@ -134,7 +134,7 @@ public final class MainActivity extends Activity {
         }
         cameraCorrectionDegrees=(cameraCorrectionDegrees+90)%360;
         getPreferences(MODE_PRIVATE).edit()
-            .putInt("camera_alignment_degrees_v3",cameraCorrectionDegrees).apply();
+            .putInt("camera_alignment_degrees_v4",cameraCorrectionDegrees).apply();
         renderer.setUserRotation(cameraCorrectionDegrees);
         renderer.resetZoom();
         zoomBadge.setText("1.0×");
@@ -967,14 +967,18 @@ public final class MainActivity extends Activity {
             int displayDeg=display==Surface.ROTATION_90?90:display==Surface.ROTATION_180?180:display==Surface.ROTATION_270?270:0;
             Integer facing=c.get(CameraCharacteristics.LENS_FACING);
             int sensorDeg=(sensor==null?0:sensor);
-            // Camera2 relative rotation: back = sensor-display;
-            // front = sensor+display. The screen itself remains landscape.
-            boolean front=facing!=null&&facing==CameraCharacteristics.LENS_FACING_FRONT;
-            int rotation=((sensorDeg+(front?displayDeg:-displayDeg))%360+360)%360;
-            Size size=pickSize(map.getOutputSizes(SurfaceTexture.class),rotation+cameraCorrectionDegrees);
+            // SurfaceTexture already supplies the producer transform in uMatrix.
+            // For a landscape buffer (e.g. 3072x1728) an additional sensor 90°
+            // rotation makes the GL viewport 9:16 and produces the narrow strip.
+            // Choose the stream first, then render by its real buffer geometry.
+            int metadataRotation=((sensorDeg-displayDeg)%360+360)%360;
+            Size size=pickSize(map.getOutputSizes(SurfaceTexture.class),0);
             if(size==null)throw new IllegalStateException("Немає SurfaceTexture preview для цієї камери");
-            renderer.setCameraInfo(size.getWidth(),size.getHeight(),rotation,
+            int renderRotation=size.getWidth()>=size.getHeight()?0:90;
+            renderer.setCameraInfo(size.getWidth(),size.getHeight(),renderRotation,
                 stamp!=null&&stamp==CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE_REALTIME);
+            // New preference key intentionally resets old 90° calibration values
+            // from builds where Active 10 Pro required a manual workaround.
             renderer.setUserRotation(cameraCorrectionDegrees);
             cameraTexture.setDefaultBufferSize(size.getWidth(),size.getHeight());
             setState("Камера "+size.getWidth()+"×"+size.getHeight()+" • підготовка...");
