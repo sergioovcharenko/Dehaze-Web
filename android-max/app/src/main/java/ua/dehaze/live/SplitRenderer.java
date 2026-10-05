@@ -53,11 +53,14 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         " float edge=clamp(length(c-l2)*3.2+abs(y-lum(l4))*2.2,0.0,1.0);\n" +
         " float dark=min(dc(c),min(min(dc(a),dc(b)),min(dc(d),dc(e)))); dark=min(dark,min(min(dc(q1),dc(q2)),min(dc(q3),dc(q4))));\n" +
         " float low=1.0-smoothstep(.025,.16,edge); float haze=clamp(dark*.70+y*.18+low*.12,0.0,1.0);\n" +
-        " float s=clamp(uStrength,0.0,1.0),omega=mix(.62,.88,s),t=clamp(1.0-omega*haze,mix(.38,.22,s),1.0);\n" +
-        " vec3 A=mix(vec3(.82),vec3(.94),clamp(haze*.9+.08,0.0,1.0)); vec3 rec=clamp((c-A)/t+A,0.0,1.0);\n" +
-        " float structure=smoothstep(.015,.20,edge)*smoothstep(.20,.82,haze); rec+=clamp(c-l2,-.11,.11)*(s*(.30+.85*structure)); rec+=clamp(c-l4,-.08,.08)*(s*.28*structure);\n" +
-        " float ly=lum(l4); rec=vec3(ly)+(rec-vec3(ly))*(1.0+s*(.10+.30*structure)); rec=mix(rec,l2,.07*s*low*smoothstep(.35,.85,haze));\n" +
-        " vec3 result=mix(c,rec,clamp(s*(.38+.58*smoothstep(.10,.78,haze)),0.0,.97)); float rl=lum(result); result=mix(vec3(rl),result,1.0+.12*s);\n" +
+        " float top=smoothstep(.28,.78,vUV.y); float bright=smoothstep(.58,.90,y); float smoothSky=1.0-smoothstep(.025,.13,edge);\n" +
+        " float sky=clamp(top*bright*smoothSky,0.0,1.0); float highlight=smoothstep(.72,.96,y); float protect=clamp(max(sky*.92,highlight*.62),0.0,.94); float ground=1.0-protect;\n" +
+        " float s=clamp(uStrength,0.0,1.0),effectiveS=s*mix(.24,1.0,ground),omega=mix(.60,.86,effectiveS),t=clamp(1.0-omega*haze,mix(.48,.24,effectiveS),1.0);\n" +
+        " vec3 A=mix(vec3(.82),vec3(.93),clamp(haze*.84+.08,0.0,1.0)); vec3 rec=clamp((c-A)/t+A,0.0,1.0);\n" +
+        " float structure=smoothstep(.015,.20,edge)*smoothstep(.20,.82,haze)*ground; rec+=clamp(c-l2,-.09,.09)*(effectiveS*(.26+.64*structure)); rec+=clamp(c-l4,-.06,.06)*(effectiveS*.20*structure);\n" +
+        " float ly=lum(l4); rec=vec3(ly)+(rec-vec3(ly))*(1.0+effectiveS*(.06+.18*structure)); rec=mix(rec,l2,.06*effectiveS*low*smoothstep(.35,.85,haze));\n" +
+        " float blend=clamp(effectiveS*(.30+.50*smoothstep(.10,.78,haze)),0.0,.90); vec3 result=mix(c,rec,blend); float rl=lum(result); result=mix(vec3(rl),result,1.0+.07*effectiveS*ground);\n" +
+        " result=mix(result,c,protect*.58);\n" +
         " gl_FragColor=vec4(clamp(result,0.0,1.0),1.0);\n" +
         "}";
     private final MainActivity activity;
@@ -161,16 +164,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         return p;
     }
     private int createProgram(){
-        try{
-            compatibilityShader=false;
-            return linkProgram(FRAGMENT);
-        }catch(RuntimeException primary){
-            // Some Android GLES2 drivers reject larger OES fragment shaders.
-            // Never terminate the Activity: fall back to a compact OES shader.
-            compatibilityShader=true;
-            android.util.Log.e("DigitalDehazing","Adaptive MAX shader unavailable; using compatibility renderer",primary);
-            return linkProgram(FALLBACK_FRAGMENT);
-        }
+        return linkProgram(FRAGMENT);
     }
 
     @Override public void onSurfaceCreated(GL10 unused,EGLConfig config) {
@@ -203,7 +197,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         },new Handler(Looper.getMainLooper()));
         framePending.set(false);textureHasFrame=false;lastStatsNanos=0;
         lastAnalysisNs=0;initAnalysisTarget();
-        activity.runOnUiThread(()->{ textureCallback.onReady(surfaceTexture); if(compatibilityShader) activity.onGpuCompatibilityMode(); });
+        activity.runOnUiThread(()->textureCallback.onReady(surfaceTexture));
     }
 
 
@@ -264,7 +258,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         final int[] hist=new int[256];
         final int[] previousRow=new int[SAMPLE_W];
         float sum=0f,edgeSum=0f,saturation=0f;
-        int edgeCount=0;
+        int edgeCount=0,skyCount=0;
         for(int y=0;y<SAMPLE_H;y++){
             int left=0;
             for(int x=0;x<SAMPLE_W;x++){
@@ -276,6 +270,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
                 int min=Math.min(red,Math.min(green,blue));
                 int max=Math.max(red,Math.max(green,blue));
                 saturation+=max-min;
+                if(y>=SAMPLE_H/2 && luminance>=150 && (max-min)<=42)skyCount++;
                 hist[luminance]++;
                 sum+=luminance;
                 if(x>0){edgeSum+=Math.abs(luminance-left);edgeCount++;}
@@ -292,15 +287,25 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         float textureScore=clamp01((18f-edgeMean)/18f);
         float saturationMean=saturation/count;
         float grayScore=clamp01((48f-saturationMean)/48f);
-        float hazeProxy=contrastScore*.46f+textureScore*.34f+grayScore*.20f;
-        float target=.36f+.48f*hazeProxy;
+        float skyRatio=clamp01(skyCount/(float)Math.max(1,count/2));
+        float hazeProxy=clamp01(contrastScore*.47f+textureScore*.33f+grayScore*.20f);
+        // Large bright smooth sky must not be interpreted as dense fog.
+        hazeProxy=clamp01(hazeProxy*(1f-.42f*skyRatio));
+        int candidate=hazeProxy<.22f?0:hazeProxy<.40f?1:hazeProxy<.57f?2:hazeProxy<.72f?3:4;
+        if(candidate==pendingAutoLevel)pendingAutoCount++;else{pendingAutoLevel=candidate;pendingAutoCount=1;}
+        if(pendingAutoCount>=2||Math.abs(candidate-autoLevel)>=2){autoLevel=candidate;pendingAutoCount=0;}
+        float[] targets={.14f,.30f,.45f,.60f,.75f};
+        float target=targets[autoLevel];
         float mean=sum/count;
-        if(mean<65f)target=.34f+(target-.34f)*.72f;
+        boolean autoNight=mean<58f;
+        if(autoNight)target=Math.max(.24f,target*.78f);
+        if(skyRatio>.55f)target*=.86f;
         float nextAtmosphere=Math.max(.74f,Math.min(.90f,(p90+18f)/255f));
-        atmosphere=atmosphere*.82f+nextAtmosphere*.18f;
-        // Smooth per-frame changes to avoid pulsing when the camera pans.
-        strength=clamp01(strength*.80f+target*.20f);
-        activity.onAutoStrength(strength);
+        atmosphere=atmosphere*.84f+nextAtmosphere*.16f;
+        strength=clamp01(strength*.78f+target*.22f);
+        maxMode=autoLevel>=4;
+        nightMode=autoNight;
+        activity.onAutoHybrid(strength,autoLevel,autoNight,skyRatio);
     }
 
     @Override public void onSurfaceChanged(GL10 unused,int width,int height){
