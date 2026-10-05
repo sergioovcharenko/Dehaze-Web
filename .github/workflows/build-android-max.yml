@@ -1,4 +1,4 @@
-# Digital Dehazing Adaptive Object MAX v2
+# Digital Dehazing Adaptive Object MAX v2.2
 name: Build Digital Dehazing / Меті Туман Adaptive Object MAX
 on:
   push:
@@ -49,8 +49,8 @@ jobs:
           test -s "$apk"
           "${ANDROID_HOME}/build-tools/35.0.0/aapt" dump badging "$apk" | grep '^package:' | tee package.txt
           grep "name='ua.digitaldehazing.metituman.adaptiveobjectmax'" package.txt
-          cp "$apk" Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX.apk
-          sha256sum Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX.apk > Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX.apk.sha256
+          cp "$apk" Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX-2.2.apk
+          sha256sum Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX.apk > Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX-2.2.apk.sha256
           ls -lh Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX.apk
       - name: Upload Digital Dehazing MAX APK
         if: success()
@@ -69,9 +69,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag=digital-dehazing-adaptive-object-max-v2
+          tag=digital-dehazing-adaptive-object-max-v2.2
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --title "Digital Dehazing / Меті Туман Adaptive Object MAX v2 — окрема APK" --notes "Independent Android package ua.digitaldehazing.metituman.adaptiveobjectmax. Adaptive Object Dehaze uses real image structure only: DCP, transmission recovery, atmospheric light, edge-guided refinement, local contrast, detail recovery, adaptive denoise and temporally stabilized AUTO parameters. Installs alongside all previous Меті Туман / Digital Dehazing APKs." --prerelease
+            gh release create "$tag" --title "Digital Dehazing / Меті Туман Adaptive Object MAX v2.2 — окрема APK" --notes "Independent Android package ua.digitaldehazing.metituman.adaptiveobjectmax, version 2.2.0. Adaptive Object Dehaze uses only real image structure: DCP, transmission map, atmospheric light, guided edge refinement, weak-structure recovery, local contrast, detail recovery, adaptive denoise and temporally stabilized AUTO parameters. No sky protection mask. Installs alongside all previous Меті Туман / Digital Dehazing APKs." --prerelease
           fi
           gh release upload "$tag" Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX.apk Digital-Dehazing-Meti-Tuman-Adaptive-Object-MAX.apk.sha256 --clobber
           gh release view "$tag" --json url,assets
