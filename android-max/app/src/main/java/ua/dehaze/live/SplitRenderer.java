@@ -40,6 +40,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         "uniform float uMax;\n" +
         "uniform float uNight;\n" +
         "uniform float uAtmosphere;\n" +
+        "uniform float uMediaMode;\n" +
         "uniform vec2 uCrop;\n" +
         "uniform vec2 uPan;\n" +
         "vec2 rotateUV(vec2 uv){if(uRotation<45.0)return uv;if(uRotation<135.0)return vec2(uv.y,1.0-uv.x);if(uRotation<225.0)return vec2(1.0-uv.x,1.0-uv.y);return vec2(1.0-uv.y,uv.x);}\n" +
@@ -50,6 +51,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         "void main(){\n" +
         " vec3 c=grab(vUV);if(uEnhanced<0.5||uStrength<.001){gl_FragColor=vec4(c,1.0);return;}\n" +
         " float s=clamp(uStrength,0.0,1.0),mx=step(.5,uMax),night=step(.5,uNight);\n" +
+        " if(uMediaMode>.5){vec2 vp=uPixel*2.0;vec3 va=grab(vUV+vec2(vp.x,0.0)),vb=grab(vUV-vec2(vp.x,0.0)),vd=grab(vUV+vec2(0.0,vp.y)),ve=grab(vUV-vec2(0.0,vp.y));vec3 local=(va+vb+vd+ve)*.25;float ly=lum(c),edge=length(c-local);float sky=smoothstep(.62,.84,ly)*(1.0-smoothstep(.01,.065,edge))*smoothstep(.18,.88,vUV.y);float mask=1.0-.72*sky;float ms=max(s,.55);float t=clamp(1.0-ms*(.30+.18*ly),.34,1.0);vec3 A=vec3(clamp(uAtmosphere,.72,.92));vec3 rec=clamp((c-A)/t+A,0.0,1.0);rec+=clamp(c-local,-.13,.13)*(.48*ms*mask);float my=lum(local);rec=vec3(my)+(rec-vec3(my))*(1.0+.18*ms*mask);float mixV=clamp((.52+.34*ms)*mask,.0,.94);gl_FragColor=vec4(clamp(mix(c,rec,mixV),0.0,1.0),1.0);return;}\n" +
         " vec2 p1=uPixel*mix(1.5,1.25,mx),p3=uPixel*mix(3.5,3.0,mx);\n" +
         " vec3 l=grab(vUV-vec2(p1.x,0.0)),r=grab(vUV+vec2(p1.x,0.0)),u=grab(vUV+vec2(0.0,p1.y)),d=grab(vUV-vec2(0.0,p1.y));\n" +
         " vec3 q1=grab(vUV+vec2(p3.x,p3.y)),q2=grab(vUV+vec2(-p3.x,p3.y)),q3=grab(vUV+vec2(p3.x,-p3.y)),q4=grab(vUV-vec2(p3.x,p3.y));\n" +
@@ -103,12 +105,12 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     private final FloatBuffer quad;
     private final AtomicBoolean framePending=new AtomicBoolean(false);
     private final float[] stMatrix=new float[16];
-    private volatile boolean enhanced=true,fill=true,frozen=false,maxMode=true,nightMode=false,comparisonFit=false;
+    private volatile boolean enhanced=true,fill=false,frozen=false,maxMode=true,nightMode=false,comparisonFit=false,mediaMode=false;
     // 0: full-frame 50/50 wipe (no stretching), 1: separate FIT frames, 2: processed fullscreen.
     private volatile int viewMode=0;
     private volatile float zoom=1f,panX=0f,panY=0f;
     private volatile int userRotation=0;
-    private int cropLoc,panLoc,maxLoc,nightLoc,atmosphereLoc;
+    private int cropLoc,panLoc,maxLoc,nightLoc,atmosphereLoc,mediaModeLoc;
     private volatile float strength=.60f;
     private volatile float atmosphere=.82f;
     private volatile boolean manualMode=false;
@@ -138,6 +140,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     void setEnhanced(boolean value){enhanced=value;}
     void setMaxMode(boolean value){maxMode=value;}
     void setNightMode(boolean value){nightMode=value;}
+    void setMediaMode(boolean value){mediaMode=value;}
     void setComparisonFit(boolean value){comparisonFit=value;}
     void setFill(boolean value){fill=value;}
     void setViewMode(int value){viewMode=Math.max(0,Math.min(2,value));}
@@ -218,6 +221,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         maxLoc=GLES20.glGetUniformLocation(program,"uMax");
         nightLoc=GLES20.glGetUniformLocation(program,"uNight");
         atmosphereLoc=GLES20.glGetUniformLocation(program,"uAtmosphere");
+        mediaModeLoc=GLES20.glGetUniformLocation(program,"uMediaMode");
         cropLoc=GLES20.glGetUniformLocation(program,"uCrop");
         panLoc=GLES20.glGetUniformLocation(program,"uPan");
         int[] textures=new int[1];GLES20.glGenTextures(1,textures,0);
@@ -365,6 +369,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         GLES20.glUniform1f(maxLoc,maxMode?1f:0f);
         GLES20.glUniform1f(nightLoc,nightMode?1f:0f);
         GLES20.glUniform1f(atmosphereLoc,atmosphere);
+        if(mediaModeLoc>=0)GLES20.glUniform1f(mediaModeLoc,mediaMode?1f:0f);
         float z=Math.max(1f,zoom);
         float uniformCropX=cropX,uniformCropY=cropY;
         // uCrop is applied BEFORE rotateUV(), so 90/270-degree frames need
@@ -381,14 +386,14 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     private void drawViews(){
         final int mode=viewMode;
         if(mode==0){
-            // 50/50 is always one full-screen COVER frame. Never FIT here:
-            // FIT caused portrait/narrow previews with black side bars.
+            // 50/50 uses one shared full frame. FIT preserves source geometry;
+            // FILL is still available from the menu when the user wants edge crop.
             int middle=screenWidth/2;
             GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
             GLES20.glScissor(0,0,middle,screenHeight);
-            drawImage(0,0,screenWidth,screenHeight,false,true);
+            drawImage(0,0,screenWidth,screenHeight,false,fill);
             GLES20.glScissor(middle,0,screenWidth-middle,screenHeight);
-            drawImage(0,0,screenWidth,screenHeight,enhanced,true);
+            drawImage(0,0,screenWidth,screenHeight,enhanced,fill);
             GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         }else if(mode==1){
             // Independent original and processed previews: FIT by default,
@@ -397,7 +402,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
             drawImage(0,0,half,screenHeight,false,fill);
             drawImage(half,0,screenWidth-half,screenHeight,enhanced,fill);
         }else{
-            drawImage(0,0,screenWidth,screenHeight,enhanced,true);
+            drawImage(0,0,screenWidth,screenHeight,enhanced,fill);
         }
     }
 
