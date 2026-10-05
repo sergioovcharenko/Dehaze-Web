@@ -809,7 +809,7 @@ public final class MainActivity extends Activity {
         clearFreeze();
         stopMedia();usingFile=false;fileUri=null;
         renderer.setMediaMode(false);
-        renderer.setFill(false);fillMode=false;
+        renderer.setFill(true);fillMode=true;
         renderer.setComparisonFit(false);
         viewMode=0;
         renderer.setViewMode(0);
@@ -967,19 +967,19 @@ public final class MainActivity extends Activity {
             int displayDeg=display==Surface.ROTATION_90?90:display==Surface.ROTATION_180?180:display==Surface.ROTATION_270?270:0;
             Integer facing=c.get(CameraCharacteristics.LENS_FACING);
             int sensorDeg=(sensor==null?0:sensor);
-            // SurfaceTexture already supplies the producer transform in uMatrix.
-            // For a landscape buffer (e.g. 3072x1728) an additional sensor 90°
-            // rotation makes the GL viewport 9:16 and produces the narrow strip.
-            // Choose the stream first, then render by its real buffer geometry.
-            int metadataRotation=((sensorDeg-displayDeg)%360+360)%360;
-            Size size=pickSize(map.getOutputSizes(SurfaceTexture.class),0);
+            // Fixed-landscape tablet: orient the camera with Camera2 metadata.
+            // The previous build ignored this and produced a full-width but sideways frame.
+            // LIVE camera uses FILL after rotation so the image remains upright and wide
+            // instead of becoming a narrow portrait strip.
+            boolean front=facing!=null&&facing==CameraCharacteristics.LENS_FACING_FRONT;
+            int rotation=((sensorDeg+(front?displayDeg:-displayDeg))%360+360)%360;
+            Size size=pickSize(map.getOutputSizes(SurfaceTexture.class),rotation);
             if(size==null)throw new IllegalStateException("Немає SurfaceTexture preview для цієї камери");
-            int renderRotation=size.getWidth()>=size.getHeight()?0:90;
-            renderer.setCameraInfo(size.getWidth(),size.getHeight(),renderRotation,
+            renderer.setCameraInfo(size.getWidth(),size.getHeight(),rotation,
                 stamp!=null&&stamp==CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE_REALTIME);
-            // New preference key intentionally resets old 90° calibration values
-            // from builds where Active 10 Pro required a manual workaround.
             renderer.setUserRotation(cameraCorrectionDegrees);
+            renderer.setFill(true);
+            fillMode=true;
             cameraTexture.setDefaultBufferSize(size.getWidth(),size.getHeight());
             setState("Камера "+size.getWidth()+"×"+size.getHeight()+" • підготовка...");
             opening=true;
