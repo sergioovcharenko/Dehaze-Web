@@ -63,7 +63,7 @@ public final class MainActivity extends Activity {
     private TextView toggle;
     private TextView videoLabelsLeft,videoLabelsRight,zoomBadge,modeBadge;
     private FrameLayout root,drawer,videoArea;
-    private boolean fillMode=true,frozen=false,drawerVisible=false;
+    private boolean fillMode=false,frozen=false,drawerVisible=false;
     private int viewMode=0;  // 0 = full-frame 50/50 wipe, 1 = two previews, 2 = processed fullscreen
     private View drawerScrim;
     private ImageView freezeOverlay;
@@ -559,7 +559,7 @@ public final class MainActivity extends Activity {
         renderer=new SplitRenderer(this,glView,this::onCameraTextureReady,this::onFrameStats);
         renderer.setStrength(strength/100f);
         renderer.setMaxMode(true);
-        renderer.setFill(true);
+        renderer.setFill(false);
         renderer.setComparisonFit(false);
         renderer.setViewMode(0);
         glView.setRenderer(renderer);
@@ -569,7 +569,7 @@ public final class MainActivity extends Activity {
         // Camera frames continue to be drained behind it, so resume never
         // needs to restart a potentially blocked SurfaceTexture pipeline.
         freezeOverlay=new ImageView(this);
-        freezeOverlay.setScaleType(ImageView.ScaleType.FIT_XY);
+        freezeOverlay.setScaleType(ImageView.ScaleType.FIT_CENTER);
         freezeOverlay.setVisibility(View.GONE);
         freezeOverlay.setContentDescription("Зупинений кадр. Натисни, щоб продовжити.");
         freezeOverlay.setOnClickListener(v->resumeFreeze());
@@ -731,9 +731,13 @@ public final class MainActivity extends Activity {
 
             renderer.setCameraInfo(width,height,rotation,false);
             renderer.setUserRotation(0);
-            renderer.setFill(true);
+            renderer.setMediaMode(true);
+            renderer.setEnhanced(true);
+            enhanced=true;
+            if(toggle!=null)toggle.setText("Антитуман: ON");
+            renderer.setFill(false);
             renderer.setComparisonFit(false);
-            fillMode=true;
+            fillMode=false;
             viewMode=0;
             renderer.setViewMode(0);
             renderer.resetZoom();
@@ -755,7 +759,7 @@ public final class MainActivity extends Activity {
                 if(playerPlayPause!=null)playerPlayPause.setText("Ⅱ");
                 playerUiHandler.removeCallbacks(playerProgressTick);
                 playerUiHandler.post(playerProgressTick);
-                setState("Відео • FILL на весь екран • 50/50 Original / Processed");
+                setState("Відео • повний кадр без розтягування • 50/50 Original / Processed");
                 renderer.refresh();
             });
             mediaPlayer.setOnCompletionListener(mp->{
@@ -788,7 +792,8 @@ public final class MainActivity extends Activity {
     private void useCamera(){
         clearFreeze();
         stopMedia();usingFile=false;fileUri=null;
-        renderer.setFill(true);fillMode=true;
+        renderer.setMediaMode(false);
+        renderer.setFill(false);fillMode=false;
         renderer.setComparisonFit(false);
         viewMode=0;
         renderer.setViewMode(0);
