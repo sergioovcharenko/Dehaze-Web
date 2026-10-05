@@ -100,7 +100,7 @@ canvas{display:block;max-width:100%;height:auto;max-height:75vh;border-radius:7p
    <button id="videoModeNight" type="button">NIGHT/MAX</button>
  </div>
  <div class="control"><div class="line"><label for="videoStrength">Сила відеообробки</label><output id="videoStrengthVal">AUTO • 70%</output></div><input type="range" id="videoStrength" min="0" max="100" value="70" disabled></div>
- <p class="small" id="videoStatus" role="status">Adaptive Object WebGL. Відкрий локальний відеофайл або ввімкни камеру.</p>
+ <p class="small" id="videoStatus" role="status">Adaptive Object WebGL v17. Відкрий локальний відеофайл або ввімкни камеру.</p>
  <p class="note">Новий стек: Dark Channel / veil estimate + transmission + atmospheric light + edge-guided refinement + локальне підсилення слабких реальних структур + detail recovery + adaptive denoise. Захищених зон немає.</p>
 </div>
 </section>
@@ -127,7 +127,7 @@ canvas{display:block;max-width:100%;height:auto;max-height:75vh;border-radius:7p
 <p class="note">Фото не надсилається на сервер. AUTO Strong використовує Adaptive Object DCP для густішого серпанку без захищених зон. Деталі, яких немає у вихідному фото, алгоритм не відновлює.</p>
 </section>
 </main>
-<script src="./dehaze-dcp.js?v=5"></script>
+<script src="./dehaze-dcp-adaptive-v6.js"></script>
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
@@ -305,7 +305,7 @@ $('save').onclick=()=>{if($('save').disabled)return;after.toBlob(blob=>{if(!blob
 $('reset').onclick=()=>{image=null;$('photo').value='';if(objectURL)URL.revokeObjectURL(objectURL);objectURL=null;
 placeholder(before,inctx,'Оригінал');placeholder(after,outctx,'Результат');$('fileinfo').textContent='Фото не завантажене.';$('run').disabled=true;$('processTop').disabled=true;$('save').disabled=true;$('status').textContent='Обери фотографію.';$('details').textContent='Завантаж фото, щоб порівняти результат.'};
 </script>
-<script src="./video-dehaze.js?v=16"></script>
+<script src="./video-dehaze-adaptive-v17.js"></script>
 <script>
 (function(){
  const el=document.getElementById('offlineState');
