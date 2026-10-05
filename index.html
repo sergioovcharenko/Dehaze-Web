@@ -33,7 +33,7 @@ canvas{display:block;max-width:100%;height:auto;max-height:75vh;border-radius:7p
 [hidden]{display:none!important}
 .mode-tabs{display:flex;gap:8px;margin-bottom:14px}.mode-tabs button{flex:1;font-weight:700}
 #offlineState{font-size:12px;display:inline-block;margin-top:10px;padding:6px 11px;border-radius:999px;border:1px solid #3b876b;background:#17362f}
-.video-stack{display:grid;grid-template-columns:1fr;gap:12px}.video-stack.two-frames{grid-template-columns:1fr 1fr}.video-stack:not(.two-frames) #videoOriginalFig{display:none}.video-view-modes{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:10px 0}.video-presets{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:10px 0}.video-transport{display:grid;grid-template-columns:auto auto 1fr auto;gap:8px;align-items:center;margin:10px 0}.video-transport input{width:100%}@media(max-width:700px){.video-stack.two-frames{grid-template-columns:1fr}.video-presets{grid-template-columns:repeat(3,1fr)}.video-transport{grid-template-columns:auto auto 1fr}.video-transport .video-time{grid-column:1/-1;text-align:right}}
+.video-stack{display:grid;grid-template-columns:1fr;gap:12px}.video-stack.two-frames{grid-template-columns:1fr 1fr}.video-stack:not(.two-frames) #videoOriginalFig{position:absolute!important;width:2px!important;height:2px!important;left:-8px!important;top:-8px!important;opacity:.001!important;overflow:hidden!important;pointer-events:none!important;border:0!important}.video-stack:not(.two-frames) #videoOriginalFig .canvas,.video-stack:not(.two-frames) #videoOriginalFig video{width:2px!important;height:2px!important;min-height:0!important;padding:0!important}.video-view-modes{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:10px 0}.video-presets{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:10px 0}.video-transport{display:grid;grid-template-columns:auto auto 1fr auto;gap:8px;align-items:center;margin:10px 0}.video-transport input{width:100%}@media(max-width:700px){.video-stack.two-frames{grid-template-columns:1fr}.video-presets{grid-template-columns:repeat(3,1fr)}.video-transport{grid-template-columns:auto auto 1fr}.video-transport .video-time{grid-column:1/-1;text-align:right}}
 .video-stack figure{width:100%}
 .video-stack .canvas{min-height:160px;padding:6px}
 .video-stack canvas,.video-stack video{display:block;width:100%;height:auto;max-height:65vh;object-fit:contain;background:#050c16}
@@ -290,7 +290,7 @@ $('save').onclick=()=>{if($('save').disabled)return;after.toBlob(blob=>{if(!blob
 $('reset').onclick=()=>{image=null;$('photo').value='';if(objectURL)URL.revokeObjectURL(objectURL);objectURL=null;
 placeholder(before,inctx,'Оригінал');placeholder(after,outctx,'Результат');$('fileinfo').textContent='Фото не завантажене.';$('run').disabled=true;$('processTop').disabled=true;$('save').disabled=true;$('status').textContent='Обери фотографію.';$('details').textContent='Завантаж фото, щоб порівняти результат.'};
 </script>
-<script src="./video-dehaze.js?v=5"></script>
+<script src="./video-dehaze.js?v=6"></script>
 <script>
 (function(){
  const el=document.getElementById('offlineState');
