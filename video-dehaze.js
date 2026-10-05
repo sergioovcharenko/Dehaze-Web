@@ -6,6 +6,7 @@
  const $=id=>document.getElementById(id);
  const source=$('videoSource'),canvas=$('videoAfter'),status=$('videoStatus');
  const output=$('videoProcessedFig'),viewer=$('videoViewer'),caption=$('videoProcessedCaption');
+ const composite=$('videoCompositeStage'),originalFig=$('videoOriginalFig'),originalHolder=$('videoOriginalHolder');
  const filter=$('videoEnabled'),strength=$('videoStrength'),readout=$('videoStrengthVal');
  const seek=$('videoSeek'),time=$('videoTime'),playPause=$('videoPlayPause'),stopPlayback=$('videoStopPlayback');
  let stream=null,objectURL=null,gl=null,program=null,texture=null,vbo=null;
@@ -23,15 +24,31 @@
   const active=filter.checked;
   output.hidden=!active;
   viewer.classList.toggle('two-frames',active&&viewMode==='two');
-  $('videoOriginalFig').style.display='block';
   $('viewSplit').classList.toggle('selected',viewMode==='split');
   $('viewFull').classList.toggle('selected',viewMode==='full');
   $('viewTwo').classList.toggle('selected',viewMode==='two');
-  caption.textContent=viewMode==='split'
-   ? '50/50 • Оригінал / WebGL'
-   : viewMode==='full'
-   ? 'WebGL • повний кадр'
-   : 'WebGL • оброблений кадр';
+
+  if(viewMode==='two'){
+   originalFig.hidden=false;
+   if(source.parentElement!==originalHolder)originalHolder.appendChild(source);
+   composite.classList.remove('split','full');
+   canvas.style.position='static';
+   canvas.style.width='100%';
+   canvas.style.height='auto';
+   canvas.style.maxHeight='65vh';
+   caption.textContent='WebGL • оброблений кадр';
+  }else{
+   originalFig.hidden=true;
+   if(source.parentElement!==composite)composite.insertBefore(source,canvas);
+   canvas.style.position='absolute';
+   canvas.style.inset='0';
+   canvas.style.width='100%';
+   canvas.style.height='100%';
+   canvas.style.maxHeight='none';
+   composite.classList.toggle('split',viewMode==='split');
+   composite.classList.toggle('full',viewMode==='full');
+   caption.textContent=viewMode==='split'?'50/50 • Оригінал / WebGL':'WebGL • повний кадр';
+  }
  }
  function showPhoto(){
   stopRendering();
@@ -72,10 +89,8 @@
  uniform sampler2D uTex;
  uniform vec2 uPixel;
  uniform float uStrength;
- uniform float uSplit;
  void main(){
   vec3 c=texture2D(uTex,vUV).rgb;
-  if(uSplit>.5 && vUV.x<.5){gl_FragColor=vec4(c,1.0);return;}
   vec3 local=(texture2D(uTex,vUV+vec2(uPixel.x*2.0,0.0)).rgb+
               texture2D(uTex,vUV-vec2(uPixel.x*2.0,0.0)).rgb+
               texture2D(uTex,vUV+vec2(0.0,uPixel.y*2.0)).rgb+
@@ -115,7 +130,6 @@
    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,source);
    gl.uniform2f(gl.getUniformLocation(program,'uPixel'),1/w,1/h);
    gl.uniform1f(gl.getUniformLocation(program,'uStrength'),Number(strength.value)/100);
-   gl.uniform1f(gl.getUniformLocation(program,'uSplit'),viewMode==='split'?1:0);
    gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
    frameCounter++;
    const now=performance.now();
