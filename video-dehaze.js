@@ -7,14 +7,65 @@
  const source=$('videoSource'),canvas=$('videoAfter'),status=$('videoStatus');
  const output=$('videoProcessedFig'),viewer=$('videoViewer'),caption=$('videoProcessedCaption');
  const originalFig=$('videoOriginalFig'),sourceKeeper=$('videoSourceKeeper');
- const filter=$('videoEnabled'),strength=$('videoStrength'),readout=$('videoStrengthVal');
+ const filter=$('videoEnabled'),autoStrengthToggle=$('videoAutoStrength'),strength=$('videoStrength'),readout=$('videoStrengthVal');
  const seek=$('videoSeek'),time=$('videoTime'),playPause=$('videoPlayPause'),stopPlayback=$('videoStopPlayback');
  let stream=null,objectURL=null,gl=null,program=null,texture=null,vbo=null;
  let started=false,rendering=false,requested=false,fallbackRAF=0;
  let frameCounter=0,lastFps=0,seeking=false;
  let viewMode='split';
+ let autoStrengthValue=.70,lastAutoAnalysis=0;
+ const autoCanvas=document.createElement('canvas');
+ autoCanvas.width=64;autoCanvas.height=36;
+ const autoCtx=autoCanvas.getContext('2d',{willReadFrequently:true});
 
  function message(s){status.textContent=s;}
+ function clamp01(v){return Math.max(0,Math.min(1,v));}
+ function currentStrength(){
+  return autoStrengthToggle.checked?autoStrengthValue:Number(strength.value)/100;
+ }
+ function updateStrengthUi(){
+  const pct=Math.round(currentStrength()*100);
+  strength.disabled=autoStrengthToggle.checked;
+  strength.value=pct;
+  readout.textContent=autoStrengthToggle.checked?'AUTO • '+pct+'%':pct+'%';
+ }
+ function analyzeAutoStrength(now){
+  if(!autoStrengthToggle.checked||now-lastAutoAnalysis<1000||source.readyState<2)return;
+  lastAutoAnalysis=now;
+  try{
+   autoCtx.drawImage(source,0,0,64,36);
+   const d=autoCtx.getImageData(0,0,64,36).data;
+   const hist=new Uint32Array(256),prev=new Int16Array(64);
+   let sum=0,sat=0,edgeSum=0,edgeCount=0;
+   for(let y=0;y<36;y++){
+    let left=0;
+    for(let x=0;x<64;x++){
+     const i=(y*64+x)*4,r=d[i],g=d[i+1],b=d[i+2];
+     const L=Math.min(255,Math.round(.299*r+.587*g+.114*b));
+     hist[L]++;sum+=L;sat+=Math.max(r,g,b)-Math.min(r,g,b);
+     if(x){edgeSum+=Math.abs(L-left);edgeCount++;}
+     if(y){edgeSum+=Math.abs(L-prev[x]);edgeCount++;}
+     left=L;prev[x]=L;
+    }
+   }
+   const n=64*36;
+   let acc=0,p10=0,p90=255;
+   for(let i=0;i<256;i++){acc+=hist[i];if(acc>=n*.10){p10=i;break;}}
+   acc=0;
+   for(let i=0;i<256;i++){acc+=hist[i];if(acc>=n*.90){p90=i;break;}}
+   const mean=sum/n,range=p90-p10,edgeMean=edgeSum/Math.max(1,edgeCount),satMean=sat/n;
+   const lowContrast=clamp01((105-range)/105);
+   const lowTexture=clamp01((18-edgeMean)/18);
+   const grayness=clamp01((48-satMean)/48);
+   const brightFlat=clamp01((mean-95)/110)*lowTexture;
+   let hazeScore=clamp01(lowContrast*.48+lowTexture*.28+grayness*.16+brightFlat*.08);
+   let target=.35+.65*Math.pow(hazeScore,.82);
+   if(mean<58)target=.32+(target-.32)*.78;
+   if(range>125&&edgeMean>18)target=Math.min(target,.58);
+   autoStrengthValue=clamp01(autoStrengthValue*.78+target*.22);
+   updateStrengthUi();
+  }catch(e){}
+ }
  function fmt(sec){
   if(!isFinite(sec))return'00:00';
   sec=Math.max(0,Math.round(sec));
@@ -146,7 +197,8 @@
    gl.useProgram(program);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);
    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,source);
    gl.uniform2f(gl.getUniformLocation(program,'uPixel'),1/w,1/h);
-   gl.uniform1f(gl.getUniformLocation(program,'uStrength'),Number(strength.value)/100);
+   analyzeAutoStrength(performance.now());
+   gl.uniform1f(gl.getUniformLocation(program,'uStrength'),currentStrength());
    gl.uniform1f(gl.getUniformLocation(program,'uSplit'),viewMode==='split'?1:0);
    gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
    frameCounter++;
@@ -241,7 +293,12 @@
   if(filter.checked){message('Антитуман увімкнено — старий WebGL-алгоритм.');startRendering();}
   else{stopRendering();message('Антитуман вимкнено — оригінальне відео без обробки.');}
  });
- strength.addEventListener('input',()=>readout.textContent=strength.value+'%');
+ autoStrengthToggle.addEventListener('change',()=>{
+  if(autoStrengthToggle.checked){lastAutoAnalysis=0;message('AUTO сила увімкнена — сила підбирається за поточним кадром.');}
+  else message('AUTO сила вимкнена — використовуй ручний повзунок.');
+  updateStrengthUi();
+ });
+ strength.addEventListener('input',()=>{if(!autoStrengthToggle.checked)updateStrengthUi();});
 
  playPause.onclick=async()=>{
   if(stream)return;
@@ -268,5 +325,5 @@
  source.addEventListener('error',()=>message('Цей відеоформат браузер не підтримує. Спробуй MP4 (H.264).'));
  document.addEventListener('visibilitychange',()=>{if(document.hidden)stopRendering();else if(filter.checked&&!source.paused)startRendering();});
  window.dehazeShowPhoto=showPhoto;
- setView();updateTransport();
+ setView();updateTransport();updateStrengthUi();
 })();
