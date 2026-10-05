@@ -1,19 +1,37 @@
 'use strict';
-/* Video preview: one-pass WebGL processing of local MP4/WebM or browser camera.
-   No upload, no remote dependency, no frame queue, no claim of true multi-scale Fusion. */
+/* Existing preferred LIVE WebGL algorithm preserved.
+   Only presentation is changed: one canvas with 50/50 or full processed view,
+   plus an optional two-frame mode. */
 (() => {
  const $=id=>document.getElementById(id);
  const source=$('videoSource'),canvas=$('videoAfter'),status=$('videoStatus');
- const output=$('videoProcessedFig'),viewer=$('videoViewer');
+ const output=$('videoProcessedFig'),viewer=$('videoViewer'),caption=$('videoProcessedCaption');
  const filter=$('videoEnabled'),strength=$('videoStrength'),readout=$('videoStrengthVal');
+ const seek=$('videoSeek'),time=$('videoTime'),playPause=$('videoPlayPause'),stopPlayback=$('videoStopPlayback');
  let stream=null,objectURL=null,gl=null,program=null,texture=null,vbo=null;
- let enabled=false,started=false,rendering=false,requested=false,fallbackRAF=0;
- let frameCounter=0,lastFps=0;
+ let started=false,rendering=false,requested=false,fallbackRAF=0;
+ let frameCounter=0,lastFps=0,seeking=false;
+ let viewMode='split';
+
  function message(s){status.textContent=s;}
+ function fmt(sec){
+  if(!isFinite(sec))return'00:00';
+  sec=Math.max(0,Math.round(sec));
+  return String(Math.floor(sec/60)).padStart(2,'0')+':'+String(sec%60).padStart(2,'0');
+ }
  function setView(){
   const active=filter.checked;
-  viewer.classList.toggle('original-only',!active);
   output.hidden=!active;
+  viewer.classList.toggle('two-frames',active&&viewMode==='two');
+  $('videoOriginalFig').style.display='block';
+  $('viewSplit').classList.toggle('selected',viewMode==='split');
+  $('viewFull').classList.toggle('selected',viewMode==='full');
+  $('viewTwo').classList.toggle('selected',viewMode==='two');
+  caption.textContent=viewMode==='split'
+   ? '50/50 • Оригінал / WebGL'
+   : viewMode==='full'
+   ? 'WebGL • повний кадр'
+   : 'WebGL • оброблений кадр';
  }
  function showPhoto(){
   stopRendering();
@@ -34,7 +52,7 @@
   $('photoTab').setAttribute('aria-pressed','false');$('videoTab').setAttribute('aria-pressed','true');
   $('photoQuick').hidden=true;$('videoQuick').hidden=false;
   setView();
-  if(started&&source.paused===false&&filter.checked)startRendering();
+  if(started&&!source.paused&&filter.checked)startRendering();
  }
  function shader(type,src){
   const sh=gl.createShader(type);
@@ -54,18 +72,18 @@
  uniform sampler2D uTex;
  uniform vec2 uPixel;
  uniform float uStrength;
+ uniform float uSplit;
  void main(){
   vec3 c=texture2D(uTex,vUV).rgb;
+  if(uSplit>.5 && vUV.x<.5){gl_FragColor=vec4(c,1.0);return;}
   vec3 local=(texture2D(uTex,vUV+vec2(uPixel.x*2.0,0.0)).rgb+
               texture2D(uTex,vUV-vec2(uPixel.x*2.0,0.0)).rgb+
               texture2D(uTex,vUV+vec2(0.0,uPixel.y*2.0)).rgb+
               texture2D(uTex,vUV-vec2(0.0,uPixel.y*2.0)).rgb)*0.25;
   float l=dot(c,vec3(.299,.587,.114));
   float edge=length(c-local);
-  // Protect near-uniform bright regions, typically sky, to limit artifacts.
   float sky=smoothstep(.62,.84,l)*(1.0-smoothstep(.01,.065,edge))*smoothstep(.18,.88,vUV.y);
   float mask=1.0-sky*.95;
-  // Fast local contrast and restrained atmospheric-veil correction.
   float t=1.0-uStrength*(.26+.16*l);
   vec3 recovered=clamp((c-vec3(.83)) / max(t,.57)+vec3(.83),0.0,1.0);
   vec3 enhanced=mix(c,recovered,mask*.84);
@@ -97,29 +115,25 @@
    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,source);
    gl.uniform2f(gl.getUniformLocation(program,'uPixel'),1/w,1/h);
    gl.uniform1f(gl.getUniformLocation(program,'uStrength'),Number(strength.value)/100);
+   gl.uniform1f(gl.getUniformLocation(program,'uSplit'),viewMode==='split'?1:0);
    gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
    frameCounter++;
    const now=performance.now();
-   if(now-lastFps>1000){$('videoFps').textContent=String(Math.round(frameCounter*1000/(now-lastFps)))+' FPS обробки';frameCounter=0;lastFps=now;}
+   if(now-lastFps>1000){
+    $('videoFps').textContent=String(Math.round(frameCounter*1000/(now-lastFps)))+' FPS обробки';
+    frameCounter=0;lastFps=now;
+   }
   }catch(err){
    message('Помилка відеообробки: '+err.message);
    filter.checked=false;setView();stopRendering();
   }
  }
- function frameCallback(){
-  requested=false;
-  if(!rendering)return;
-  render();
-  requestFrame();
- }
+ function frameCallback(){requested=false;if(!rendering)return;render();requestFrame();}
  function requestFrame(){
   if(!rendering||requested||!filter.checked)return;
   requested=true;
-  if(typeof source.requestVideoFrameCallback==='function'){
-   source.requestVideoFrameCallback(frameCallback);
-  }else{
-   fallbackRAF=requestAnimationFrame(frameCallback);
-  }
+  if(typeof source.requestVideoFrameCallback==='function')source.requestVideoFrameCallback(frameCallback);
+  else fallbackRAF=requestAnimationFrame(frameCallback);
  }
  function startRendering(){
   if(!filter.checked||source.readyState<2||$('videoPreview').hidden)return;
@@ -134,15 +148,29 @@
   fallbackRAF=0;requested=false;
   $('videoFps').textContent='— FPS';
  }
+ function updateTransport(){
+  if(stream){
+   seek.disabled=true;playPause.disabled=true;stopPlayback.disabled=true;time.textContent='LIVE';
+   return;
+  }
+  seek.disabled=false;playPause.disabled=false;stopPlayback.disabled=false;
+  const dur=source.duration||0,pos=source.currentTime||0;
+  if(!seeking&&dur>0)seek.value=Math.round(pos/dur*1000);
+  time.textContent=fmt(pos)+' / '+fmt(dur);
+  playPause.textContent=source.paused?'▶':'Ⅱ';
+ }
  async function openFile(file){
   if(!file)return;
-  stopRendering();if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;source.srcObject=null;}
+  stopRendering();
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;source.srcObject=null;}
   if(objectURL)URL.revokeObjectURL(objectURL);
-  objectURL=URL.createObjectURL(file);source.src=objectURL;source.loop=true;source.controls=true;
+  objectURL=URL.createObjectURL(file);
+  source.src=objectURL;source.loop=false;source.controls=false;
   started=true;showVideo();
-  message('Локальний файл: '+file.name+' — відео не надсилається в інтернет.');
+  message('Локальний файл: '+file.name+' — старий WebGL-алгоритм без змін.');
   try{await source.play();if(filter.checked)startRendering();}
-  catch(e){message('Натисни Play на відео, щоб почати перегляд.');}
+  catch(e){message('Натисни ▶, щоб почати перегляд.');}
+  updateTransport();
  }
  async function openCamera(){
   if(!navigator.mediaDevices?.getUserMedia){message('Камера недоступна. Відкрий сайт через HTTPS та дозволь доступ.');return;}
@@ -153,33 +181,60 @@
    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}},audio:false});
    source.srcObject=stream;source.controls=false;source.loop=false;started=true;showVideo();
    await source.play();
-   message('Камера пристрою • обробка локально, без завантаження кадрів.');
+   message('Камера пристрою • старий WebGL-алгоритм • обробка локально.');
    if(filter.checked)startRendering();
+   updateTransport();
   }catch(e){message('Не вдалося запустити камеру: '+e.message);}
  }
  function stopVideo(){
   stopRendering();source.pause();
   if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;source.srcObject=null;}
   if(objectURL){URL.revokeObjectURL(objectURL);objectURL=null;source.removeAttribute('src');source.load();}
-  started=false;message('Відео зупинено.');setView();
+  started=false;seek.value=0;updateTransport();message('Відео зупинено.');setView();
  }
+
  $('photoTab').addEventListener('click',showPhoto);
  $('videoTab').addEventListener('click',showVideo);
  $('videoChoose').addEventListener('click',()=>$('videoFile').click());
  $('videoFile').addEventListener('change',e=>openFile(e.target.files[0]));
  $('videoCamera').addEventListener('click',openCamera);
  $('videoStop').addEventListener('click',stopVideo);
+
+ $('viewSplit').onclick=()=>{viewMode='split';setView();};
+ $('viewFull').onclick=()=>{viewMode='full';setView();};
+ $('viewTwo').onclick=()=>{viewMode='two';setView();};
+
  filter.addEventListener('change',()=>{
   setView();
-  if(filter.checked){message('Антитуман увімкнено — швидка GPU-обробка кадрів.');startRendering();}
+  if(filter.checked){message('Антитуман увімкнено — старий WebGL-алгоритм.');startRendering();}
   else{stopRendering();message('Антитуман вимкнено — оригінальне відео без обробки.');}
  });
  strength.addEventListener('input',()=>readout.textContent=strength.value+'%');
- source.addEventListener('playing',()=>{if(filter.checked)startRendering();});
- source.addEventListener('pause',stopRendering);
- source.addEventListener('ended',stopRendering);
+
+ playPause.onclick=async()=>{
+  if(stream)return;
+  try{if(source.paused)await source.play();else source.pause();updateTransport();}catch(e){}
+ };
+ stopPlayback.onclick=()=>{
+  if(stream)return;
+  source.pause();source.currentTime=0;updateTransport();
+ };
+ seek.addEventListener('input',()=>{
+  seeking=true;
+  if(!stream&&source.duration)time.textContent=fmt(source.duration*seek.value/1000)+' / '+fmt(source.duration);
+ });
+ seek.addEventListener('change',()=>{
+  if(!stream&&source.duration)source.currentTime=source.duration*seek.value/1000;
+  seeking=false;updateTransport();
+ });
+
+ source.addEventListener('playing',()=>{if(filter.checked)startRendering();updateTransport();});
+ source.addEventListener('pause',()=>{stopRendering();updateTransport();});
+ source.addEventListener('timeupdate',updateTransport);
+ source.addEventListener('loadedmetadata',updateTransport);
+ source.addEventListener('ended',()=>{stopRendering();updateTransport();});
  source.addEventListener('error',()=>message('Цей відеоформат браузер не підтримує. Спробуй MP4 (H.264).'));
- document.addEventListener('visibilitychange',()=>{if(document.hidden)stopRendering();else if(filter.checked)startRendering();});
+ document.addEventListener('visibilitychange',()=>{if(document.hidden)stopRendering();else if(filter.checked&&!source.paused)startRendering();});
  window.dehazeShowPhoto=showPhoto;
- setView();
+ setView();updateTransport();
 })();
