@@ -6,9 +6,10 @@
 <style>
 :root{color-scheme:dark;font:15px system-ui,-apple-system,Segoe UI,sans-serif;background:#0a1020;color:#e9f1ff}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 100% 0,#15375c,#0a1020 48%);min-height:100vh}
-header{padding:26px max(16px,calc((100vw - 1400px)/2));border-bottom:1px solid #2a3d56}
-h1{margin:0;font-size:clamp(27px,4vw,39px)}.sub{color:#9fb3d3;margin:7px 0 0}
-main{max-width:1400px;margin:18px auto;padding:0 14px;display:grid;grid-template-columns:minmax(0,1fr) minmax(295px,360px);gap:16px}
+.app-header{height:58px;padding:0 18px;display:flex;align-items:center;gap:12px;background:#292c30;border-bottom:1px solid #3a3e43;position:sticky;top:0;z-index:20}
+.app-dot{color:#66bec7;font-size:20px}.app-brand{font-size:20px;font-weight:800;white-space:nowrap}.app-header-spacer{flex:1}.app-header-meta{font-size:12px;color:#c1c6cd;white-space:nowrap}.app-photo-btn{background:#46695d;border-color:#587f70;font-weight:800;padding:11px 18px}
+#offlineState{font-size:11px;padding:5px 9px;border-radius:999px;border:1px solid #477469;background:#253f39;color:#d8ebe4}
+main{max-width:none;margin:0;padding:0;display:grid;grid-template-columns:minmax(0,1fr) 320px;min-height:calc(100vh - 58px);gap:0;background:#060c12}
 .preview-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px}.preview-toolbar h2{margin:0}.preview-actions{display:flex;gap:7px;flex-wrap:wrap}.preview-actions button{font-size:13px;padding:9px 11px}.preview-panel{align-self:start}.controls-panel{align-self:start}
 .panel{background:#121e31;border:1px solid #2c405b;border-radius:19px;padding:17px}
 h2{font-size:17px;margin:0 0 15px}h3{font-size:15px;margin:18px 0 10px}
@@ -52,16 +53,61 @@ canvas{display:block;max-width:100%;height:auto;max-height:75vh;border-radius:7p
 .video-options{display:flex;gap:9px;flex-wrap:wrap}
 #videoStatus{min-height:24px}
 @media(max-width:950px){main{grid-template-columns:1fr}.preview-panel{order:0}.controls-panel{order:1}.viewer{grid-template-columns:1fr}.canvas{min-height:160px}}
+
+.app-main-panel{border:0;border-radius:0;background:#060c12;padding:0;min-width:0}
+.app-side{border:0;border-left:1px solid #45494f;border-radius:0;background:#313439;padding:14px 12px;overflow:auto;max-height:calc(100vh - 58px)}
+.app-side h3{font-size:12px;color:#c2c6cb;margin:17px 0 8px;letter-spacing:.04em}
+.app-side .side-title{font-size:13px;color:#d9dde2;line-height:1.25;margin:2px 0 12px;text-transform:uppercase}
+.app-side button{width:100%;min-height:43px;margin:0 0 7px;background:#35393e;border:1px solid #61666c;border-radius:10px;font-weight:650}
+.app-side button.selected,.app-side button.primary{background:#46695d;border-color:#648f7f}
+.app-side .video-preset-modes{grid-template-columns:repeat(3,1fr);gap:6px}
+.app-side .video-preset-modes button{font-size:10px;min-height:36px;margin:0}
+#previewPanel .mode-tabs{position:absolute;left:-9999px}
+#previewPanel .preview-toolbar{height:0;margin:0;overflow:visible}
+#photoQuick{position:fixed;right:87px;top:9px;z-index:25}
+#photoQuick #processTop{display:none}
+#videoQuick{display:none!important}
+#videoPreview{min-height:calc(100vh - 58px);position:relative;background:#050a0f}
+#videoPreview .video-view-modes{display:none}
+#videoViewer{height:calc(100vh - 122px);display:block;padding:0;background:#05090d}
+#videoViewer figure{height:100%;border:0;border-radius:0;background:#05090d}
+#videoViewer figcaption{position:absolute;z-index:3;margin:14px;background:#1d2024d9;border:0;border-radius:9px;padding:7px 10px;font-size:12px}
+#videoProcessedFig .canvas{height:100%;min-height:0;padding:0}
+#videoProcessedFig canvas{width:100%;height:100%;max-height:none;object-fit:contain;border-radius:0;background:#05090d}
+#videoOriginalFig{position:absolute;inset:0}
+.video-transport{height:64px;margin:0;padding:8px 14px;background:#1c2025;border-top:1px solid #343941;grid-template-columns:44px 44px 1fr auto}
+.video-transport button{height:44px;width:44px;padding:0;border-radius:10px}
+.video-time{font-size:12px;color:#bac2ca}
+#videoStatus{font-size:11px;color:#adb4bc;margin:8px 0}
+#videoControlsPanel .video-controls{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 8px}
+#videoControlsPanel .video-controls label{background:#35393e;border:1px solid #5d6268;border-radius:10px;padding:10px}
+#videoControlsPanel .video-controls #videoFps{grid-column:1/-1;text-align:right;color:#bac2ca}
+#photoControls{border-radius:0;border:0;border-left:1px solid #45494f;background:#313439;max-height:calc(100vh - 58px);overflow:auto}
+#photoPreview{padding:14px}
+@media(max-width:950px){
+ main{grid-template-columns:1fr}
+ .app-side,#photoControls{border-left:0;border-top:1px solid #45494f;max-height:none}
+ #videoViewer{height:min(65vh,680px)}
+ .app-header-meta{display:none}
+}
+
 </style>
 </head>
 <body>
-<header><h1>DEHAZE <span style="color:#5bdcaa">WEB</span></h1><p class="sub">Антитуман для фото та відео • обробка на пристрої</p><span id="offlineState" role="status">Підготовка офлайн-режиму…</span></header>
+<header class="app-header">
+ <span class="app-dot">⊙</span>
+ <div class="app-brand">Digital Dehazing • Adaptive MAX</div>
+ <div class="app-header-spacer"></div>
+ <span class="app-header-meta">WebGL • Adaptive Object • локальна обробка</span>
+ <span id="offlineState" role="status">Підготовка офлайн…</span>
+ <button class="app-photo-btn" id="headerPhotoMax" type="button">Фото MAX</button>
+</header>
 <main>
-<section class="panel preview-panel" id="previewPanel">
+<section class="panel preview-panel app-main-panel" id="previewPanel">
 <div class="mode-tabs"><button id="photoTab" class="selected" aria-pressed="true">Фото</button><button id="videoTab" aria-pressed="false">Відео LIVE</button></div>
-<div class="preview-toolbar"><h2>Результат обробки</h2>
+<div class="preview-toolbar">
 <div class="preview-actions" id="photoQuick"><button id="uploadTop" type="button">Завантажити фото</button><button id="processTop" type="button" class="primary" disabled>Обробити</button></div>
-<div class="preview-actions" id="videoQuick" hidden><button id="videoChoose" type="button">Відкрити відео</button><button id="videoCamera" class="primary" type="button">Камера</button><button id="videoStop" type="button">Стоп</button></div></div>
+<div id="videoQuick" hidden></div></div>
 <input type="file" id="videoFile" accept="video/mp4,video/webm,video/quicktime,video/*" hidden>
 <div id="photoPreview">
 <div class="viewer">
@@ -71,11 +117,6 @@ canvas{display:block;max-width:100%;height:auto;max-height:75vh;border-radius:7p
 <p id="details">Завантаж фото, щоб порівняти результат.</p>
 </div>
 <div id="videoPreview" hidden>
- <div class="video-view-modes">
-   <button id="viewSplit" class="selected" type="button">50/50</button>
-   <button id="viewFull" type="button">Повне</button>
-   <button id="viewTwo" type="button">2 кадри</button>
- </div>
  <div class="video-stack" id="videoViewer">
    <figure id="videoProcessedFig"><figcaption id="videoProcessedCaption">50/50 • Оригінал / WebGL</figcaption><div class="canvas"><canvas id="videoAfter" width="640" height="360"></canvas></div></figure>
    <figure id="videoOriginalFig" hidden><figcaption>Оригінал</figcaption><div class="canvas" id="videoSourceKeeper"><video id="videoSource" playsinline muted></video></div></figure>
@@ -86,9 +127,24 @@ canvas{display:block;max-width:100%;height:auto;max-height:75vh;border-radius:7p
    <input id="videoSeek" type="range" min="0" max="1000" value="0">
    <span class="small video-time" id="videoTime">00:00 / 00:00</span>
  </div>
+ </div>
+</div>
+</section>
+<section class="panel controls-panel app-side" id="videoControlsPanel" hidden>
+ <div class="side-title">DIGITAL DEHAZING • МЕТІ ТУМАН ADAPTIVE MAX • ОФЛАЙН</div>
+ <button id="sidePhotoMax" type="button">▣ Фото MAX — вибрати</button>
+ <h3>ДЖЕРЕЛО</h3>
+ <button id="videoCamera" class="primary" type="button">⊙ Камера</button>
+ <button id="videoChoose" type="button">▣ Відкрити відео</button>
+ <button id="videoStop" type="button">■ Стоп</button>
+ <h3>ПОРІВНЯННЯ</h3>
+ <button id="viewSplit" class="selected" type="button">50/50 • весь кадр</button>
+ <button id="viewTwo" type="button">Два кадри • FIT</button>
+ <button id="viewFull" type="button">Тільки оброблене</button>
+ <h3>АНТИТУМАН</h3>
  <div class="video-controls">
-   <label><input type="checkbox" id="videoEnabled" checked>Антитуман</label>
-   <label><input type="checkbox" id="videoAutoStrength" checked>AUTO сила</label>
+   <label><input type="checkbox" id="videoEnabled" checked> ON</label>
+   <label><input type="checkbox" id="videoAutoStrength" checked> AUTO</label>
    <span id="videoFps">— FPS</span>
  </div>
  <div class="video-preset-modes" aria-label="Режим антитуману">
@@ -99,10 +155,9 @@ canvas{display:block;max-width:100%;height:auto;max-height:75vh;border-radius:7p
    <button id="videoModeHigh" type="button">HIGH</button>
    <button id="videoModeNight" type="button">NIGHT/MAX</button>
  </div>
- <div class="control"><div class="line"><label for="videoStrength">Сила відеообробки</label><output id="videoStrengthVal">AUTO • 70%</output></div><input type="range" id="videoStrength" min="0" max="100" value="70" disabled></div>
- <p class="small" id="videoStatus" role="status">Adaptive Object WebGL v17. Відкрий локальний відеофайл або ввімкни камеру.</p>
- <p class="note">Новий стек: Dark Channel / veil estimate + transmission + atmospheric light + edge-guided refinement + локальне підсилення слабких реальних структур + detail recovery + adaptive denoise. Захищених зон немає.</p>
-</div>
+ <div class="control"><div class="line"><label for="videoStrength">Сила</label><output id="videoStrengthVal">AUTO • 70%</output></div><input type="range" id="videoStrength" min="0" max="100" value="70" disabled></div>
+ <p class="small" id="videoStatus" role="status">Adaptive Object WebGL v18.</p>
+ <p class="note">DCP + transmission + atmospheric light + edge-guided refinement + локальне підсилення слабких реальних структур + adaptive denoise.</p>
 </section>
 <section class="panel controls-panel" id="photoControls">
 <h2>1. Завантаження</h2>
@@ -162,6 +217,8 @@ function setMode(m){
  : 'MANUAL — налаштування сили, CLAHE, гами та різкості для всього кадру.';
 }
 $('uploadTop').onclick=()=>$('photo').click();
+$('headerPhotoMax').onclick=()=>$('photo').click();
+$('sidePhotoMax').onclick=()=>$('photo').click();
 $('processTop').onclick=()=>$('run').click();
 $('autoSoft').onclick=()=>setMode('autoSoft');
 $('autoStrong').onclick=()=>setMode('autoStrong');
@@ -305,7 +362,7 @@ $('save').onclick=()=>{if($('save').disabled)return;after.toBlob(blob=>{if(!blob
 $('reset').onclick=()=>{image=null;$('photo').value='';if(objectURL)URL.revokeObjectURL(objectURL);objectURL=null;
 placeholder(before,inctx,'Оригінал');placeholder(after,outctx,'Результат');$('fileinfo').textContent='Фото не завантажене.';$('run').disabled=true;$('processTop').disabled=true;$('save').disabled=true;$('status').textContent='Обери фотографію.';$('details').textContent='Завантаж фото, щоб порівняти результат.'};
 </script>
-<script src="./video-dehaze-adaptive-v17.js"></script>
+<script src="./video-dehaze-adaptive-v18.js"></script>
 <script>
 (function(){
  const el=document.getElementById('offlineState');
