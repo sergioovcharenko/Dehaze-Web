@@ -1,8 +1,8 @@
 'use strict';
-const CACHE='dehaze-webgl-fallback-v13';
+const CACHE='dehaze-auto-strength-v15';
 const ASSETS=[
   './index.html',
-  './video-dehaze.js?v=13',
+  './video-dehaze.js?v=15',
   './dehaze-dcp.js?v=4',
   './manifest.webmanifest',
   './offline-icon.svg'
