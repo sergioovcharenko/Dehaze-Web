@@ -1,9 +1,9 @@
 'use strict';
-const CACHE='dehaze-auto-strength-v15';
+const CACHE='dehaze-adaptive-object-v16';
 const ASSETS=[
   './index.html',
-  './video-dehaze.js?v=15',
-  './dehaze-dcp.js?v=4',
+  './video-dehaze.js?v=16',
+  './dehaze-dcp.js?v=5',
   './manifest.webmanifest',
   './offline-icon.svg'
 ];
