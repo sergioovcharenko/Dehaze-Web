@@ -7,7 +7,7 @@
 :root{color-scheme:dark;font:15px system-ui,-apple-system,Segoe UI,sans-serif;background:#0a1020;color:#e9f1ff}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 100% 0,#15375c,#0a1020 48%);min-height:100vh}
 .app-header{height:58px;padding:0 18px;display:flex;align-items:center;gap:12px;background:#292c30;border-bottom:1px solid #3a3e43;position:sticky;top:0;z-index:20}
-.app-dot{color:#66bec7;font-size:20px}.app-brand{font-size:20px;font-weight:800;white-space:nowrap}.app-header-spacer{flex:1}.app-header-meta{font-size:12px;color:#c1c6cd;white-space:nowrap}.app-photo-btn{background:#46695d;border-color:#587f70;font-weight:800;padding:11px 18px}
+.app-dot{color:#66bec7;font-size:20px}.app-brand{font-size:20px;font-weight:800;white-space:nowrap}.app-header-spacer{flex:1}.app-header-meta{font-size:12px;color:#c1c6cd;white-space:nowrap}.app-photo-btn{background:#46695d;border-color:#587f70;font-weight:800;padding:11px 18px}.app-menu-btn{width:48px;height:42px;padding:0;font-size:21px;border-radius:12px;background:#30343a;border-color:#565b61}
 #offlineState{font-size:11px;padding:5px 9px;border-radius:999px;border:1px solid #477469;background:#253f39;color:#d8ebe4}
 main{max-width:none;margin:0;padding:0;display:grid;grid-template-columns:minmax(0,1fr) 320px;min-height:calc(100vh - 58px);gap:0;background:#060c12}
 .preview-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px}.preview-toolbar h2{margin:0}.preview-actions{display:flex;gap:7px;flex-wrap:wrap}.preview-actions button{font-size:13px;padding:9px 11px}.preview-panel{align-self:start}.controls-panel{align-self:start}
@@ -83,11 +83,15 @@ canvas{display:block;max-width:100%;height:auto;max-height:75vh;border-radius:7p
 #videoControlsPanel .video-controls #videoFps{grid-column:1/-1;text-align:right;color:#bac2ca}
 #photoControls{border-radius:0;border:0;border-left:1px solid #45494f;background:#313439;max-height:calc(100vh - 58px);overflow:auto}
 #photoPreview{padding:14px}
+body.side-hidden main{grid-template-columns:minmax(0,1fr) 0}
+body.side-hidden #videoControlsPanel{display:none!important}
 @media(max-width:950px){
  main{grid-template-columns:1fr}
  .app-side,#photoControls{border-left:0;border-top:1px solid #45494f;max-height:none}
  #videoViewer{height:min(65vh,680px)}
  .app-header-meta{display:none}
+ .app-brand{font-size:16px}
+ .app-photo-btn{padding:9px 12px}
 }
 
 </style>
@@ -100,6 +104,7 @@ canvas{display:block;max-width:100%;height:auto;max-height:75vh;border-radius:7p
  <span class="app-header-meta">WebGL • Adaptive Object • локальна обробка</span>
  <span id="offlineState" role="status">Підготовка офлайн…</span>
  <button class="app-photo-btn" id="headerPhotoMax" type="button">Фото MAX</button>
+ <button class="app-menu-btn" id="webMenu" type="button" aria-label="Меню">☰</button>
 </header>
 <main>
 <section class="panel preview-panel app-main-panel" id="previewPanel">
@@ -154,7 +159,7 @@ canvas{display:block;max-width:100%;height:auto;max-height:75vh;border-radius:7p
    <button id="videoModeNight" type="button">NIGHT/MAX</button>
  </div>
  <div class="control"><div class="line"><label for="videoStrength">Сила</label><output id="videoStrengthVal">AUTO • 70%</output></div><input type="range" id="videoStrength" min="0" max="100" value="70" disabled></div>
- <p class="small" id="videoStatus" role="status">Adaptive Object WebGL v18.</p>
+ <p class="small" id="videoStatus" role="status">Adaptive Object WebGL v19 • APK-style UI.</p>
  <p class="note">DCP + transmission + atmospheric light + edge-guided refinement + локальне підсилення слабких реальних структур + adaptive denoise.</p>
 </section>
 <section class="panel controls-panel" id="photoControls">
@@ -360,7 +365,7 @@ $('save').onclick=()=>{if($('save').disabled)return;after.toBlob(blob=>{if(!blob
 $('reset').onclick=()=>{image=null;$('photo').value='';if(objectURL)URL.revokeObjectURL(objectURL);objectURL=null;
 placeholder(before,inctx,'Оригінал');placeholder(after,outctx,'Результат');$('fileinfo').textContent='Фото не завантажене.';$('run').disabled=true;$('processTop').disabled=true;$('save').disabled=true;$('status').textContent='Обери фотографію.';$('details').textContent='Завантаж фото, щоб порівняти результат.'};
 </script>
-<script src="./video-dehaze-adaptive-v18.js"></script>
+<script src="./video-dehaze-adaptive-v19.js"></script>
 <script>
 (function(){
  const el=document.getElementById('offlineState');
