@@ -1,8 +1,8 @@
 'use strict';
-const CACHE='dehaze-layered-compare-v1';
+const CACHE='dehaze-balanced-v9';
 const ASSETS=[
   './index.html',
-  './video-dehaze.js?v=8',
+  './video-dehaze.js?v=9',
   './dehaze-dcp.js?v=4',
   './manifest.webmanifest',
   './offline-icon.svg'
