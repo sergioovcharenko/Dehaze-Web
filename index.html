@@ -35,13 +35,10 @@ canvas{display:block;max-width:100%;height:auto;max-height:75vh;border-radius:7p
 #offlineState{font-size:12px;display:inline-block;margin-top:10px;padding:6px 11px;border-radius:999px;border:1px solid #3b876b;background:#17362f}
 .video-stack{display:grid;grid-template-columns:1fr;gap:12px;position:relative}.video-stack.two-frames{grid-template-columns:1fr 1fr}
 .video-view-modes{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:10px 0}.video-view-modes button.selected{background:#2f6fa6;border-color:#6db8ff}
-.video-composite{position:relative;width:100%;overflow:hidden;background:#050c16;border-radius:7px;line-height:0}
-.video-composite video{display:block;width:100%;height:auto;max-height:65vh;object-fit:contain;background:#050c16}
-.video-composite canvas{position:absolute;inset:0;width:100%;height:100%;max-width:none;max-height:none;border-radius:0;object-fit:contain;pointer-events:none}
-.video-composite.split canvas{clip-path:inset(0 0 0 50%)}
-.video-composite.full canvas{clip-path:none}
-.video-divider{position:absolute;top:0;bottom:0;left:50%;width:1px;background:rgba(255,255,255,.42);pointer-events:none;z-index:3}
-.video-composite.full .video-divider{display:none}
+.video-source-keeper{position:absolute!important;width:2px!important;height:2px!important;left:-10px!important;top:-10px!important;opacity:.001!important;overflow:hidden!important;pointer-events:none!important}
+.video-source-keeper video{width:2px!important;height:2px!important;display:block!important}
+.video-stack.two-frames #videoSourceKeeper{position:static!important;width:auto!important;height:auto!important;left:auto!important;top:auto!important;opacity:1!important;overflow:visible!important;pointer-events:auto!important}
+.video-stack.two-frames #videoSourceKeeper video{width:100%!important;height:auto!important;max-height:65vh!important}
 #videoOriginalFig[hidden]{display:none!important}
 .video-transport{display:grid;grid-template-columns:auto auto 1fr auto;gap:8px;align-items:center;margin:10px 0}.video-transport input{width:100%}
 @media(max-width:700px){.video-stack.two-frames{grid-template-columns:1fr}.video-transport{grid-template-columns:auto auto 1fr}.video-transport .video-time{grid-column:1/-1;text-align:right}}
@@ -79,14 +76,8 @@ canvas{display:block;max-width:100%;height:auto;max-height:75vh;border-radius:7p
    <button id="viewTwo" type="button">2 кадри</button>
  </div>
  <div class="video-stack" id="videoViewer">
-   <figure id="videoProcessedFig"><figcaption id="videoProcessedCaption">50/50 • Оригінал / WebGL</figcaption>
-     <div class="canvas"><div id="videoCompositeStage" class="video-composite split">
-       <video id="videoSource" playsinline muted></video>
-       <canvas id="videoAfter" width="640" height="360"></canvas>
-       <div class="video-divider"></div>
-     </div></div>
-   </figure>
-   <figure id="videoOriginalFig" hidden><figcaption>Оригінал</figcaption><div class="canvas"><canvas id="videoOriginalCanvas" width="640" height="360"></canvas></div></figure>
+   <figure id="videoProcessedFig"><figcaption id="videoProcessedCaption">50/50 • Оригінал / WebGL</figcaption><div class="canvas"><canvas id="videoAfter" width="640" height="360"></canvas></div></figure>
+   <figure id="videoOriginalFig" hidden><figcaption>Оригінал</figcaption><div class="canvas" id="videoSourceKeeper"><video id="videoSource" playsinline muted></video></div></figure>
  </div>
  <div class="video-transport" id="videoTransport">
    <button id="videoPlayPause" type="button">▶</button>
@@ -308,7 +299,7 @@ $('save').onclick=()=>{if($('save').disabled)return;after.toBlob(blob=>{if(!blob
 $('reset').onclick=()=>{image=null;$('photo').value='';if(objectURL)URL.revokeObjectURL(objectURL);objectURL=null;
 placeholder(before,inctx,'Оригінал');placeholder(after,outctx,'Результат');$('fileinfo').textContent='Фото не завантажене.';$('run').disabled=true;$('processTop').disabled=true;$('save').disabled=true;$('status').textContent='Обери фотографію.';$('details').textContent='Завантаж фото, щоб порівняти результат.'};
 </script>
-<script src="./video-dehaze.js?v=13"></script>
+<script src="./video-dehaze.js?v=14"></script>
 <script>
 (function(){
  const el=document.getElementById('offlineState');
