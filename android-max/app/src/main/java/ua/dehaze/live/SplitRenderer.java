@@ -37,22 +37,28 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         "vec3 px(vec2 uv){vec2 p=clamp((uv-.5)*uCrop+.5+uPan,vec2(.002),vec2(.998));return texture2D(uCamera,(uMatrix*vec4(rot(p),0.0,1.0)).xy).rgb;}\n" +
         "float Y(vec3 c){return dot(c,vec3(.299,.587,.114));} float D(vec3 c){return min(c.r,min(c.g,c.b));}\n" +
         "void main(){\n" +
-        " vec3 c=px(vUV); if(uEnhanced<.5||uStrength<.001){gl_FragColor=vec4(c,1.0);return;}\n" +
-        " vec2 p=uPixel*2.35; vec3 l=px(vUV-vec2(p.x,0.0)); vec3 r=px(vUV+vec2(p.x,0.0)); vec3 t=px(vUV+vec2(0.0,p.y)); vec3 b=px(vUV-vec2(0.0,p.y));\n" +
-        " vec3 m=(l+r+t+b)*.25; float yc=Y(c); float ym=Y(m);\n" +
-        " float edge=clamp(abs(yc-ym)*7.0+length(c-m)*2.2,0.0,1.0);\n" +
-        " float weak=smoothstep(.004,.050,abs(yc-ym));\n" +
-        " float dark=min(D(c),min(min(D(l),D(r)),min(D(t),D(b))));\n" +
+        " vec3 c=px(vUV); if(uEnhanced<.5||uStrength<.015){gl_FragColor=vec4(c,1.0);return;}\n" +
+        " vec2 n=uPixel*1.8; vec2 w=uPixel*4.2;\n" +
+        " vec3 l=px(vUV-vec2(n.x,0.0)), r=px(vUV+vec2(n.x,0.0)), t=px(vUV+vec2(0.0,n.y)), b=px(vUV-vec2(0.0,n.y));\n" +
+        " vec3 q1=px(vUV+vec2(w.x,w.y)), q2=px(vUV+vec2(-w.x,w.y)), q3=px(vUV+vec2(w.x,-w.y)), q4=px(vUV-vec2(w.x,w.y));\n" +
+        " vec3 nearM=(l+r+t+b)*.25; vec3 wideM=(q1+q2+q3+q4)*.25;\n" +
+        " float yc=Y(c), yn=Y(nearM), yw=Y(wideM);\n" +
+        " float edge=clamp(abs(yc-yn)*6.0+length(c-nearM)*1.7,0.0,1.0);\n" +
+        " float weak=smoothstep(.004,.055,abs(yc-yw));\n" +
+        " float dark=min(D(c),min(min(min(D(l),D(r)),min(D(t),D(b))),min(min(D(q1),D(q2)),min(D(q3),D(q4)))));\n" +
         " float A=clamp(uAtmosphere,.74,.94); float veil=clamp(dark/max(A,.35),0.0,1.0);\n" +
-        " float objectMask=clamp(max(edge*.78,weak*.62)*smoothstep(.08,.72,veil),0.0,1.0);\n" +
+        " float objectMask=clamp(max(edge*.78,weak*.68)*smoothstep(.10,.72,veil),0.0,1.0);\n" +
         " float s=clamp(uStrength,0.0,1.0); if(uNight>.5)s*=.86;\n" +
-        " float omega=.70+.18*s+.025*uMax; float floorT=.43-.17*s-.035*objectMask*uMax+.04*uNight;\n" +
-        " float tr=clamp(1.0-omega*veil,max(.23,floorT),1.0);\n" +
+        " float omega=.68+.19*s+.02*uMax; float floorT=.46-.18*s-.03*objectMask*uMax+.035*uNight;\n" +
+        " float tr=clamp(1.0-omega*veil,max(.26,floorT),1.0);\n" +
         " vec3 rec=clamp((c-vec3(A))/tr+vec3(A),0.0,1.0);\n" +
-        " float mixv=clamp(s*(.36+.40*veil+.18*objectMask),0.0,.88); vec3 outc=mix(c,rec,mixv);\n" +
-        " vec3 detail=clamp(c-m,vec3(-.075),vec3(.075)); outc+=detail*s*(.16+.56*objectMask);\n" +
-        " float flat=1.0-smoothstep(.015,.13,edge); float dn=s*(.025+.075*uNight)*flat*smoothstep(.30,.78,veil); outc=mix(outc,m,clamp(dn,0.0,.12));\n" +
-        " float yo=Y(outc); outc=vec3(yo)+(outc-vec3(yo))*(1.0+.05*s+.07*objectMask);\n" +
+        " float deh=clamp(s*(.30+.38*veil+.20*objectMask),0.0,.82); vec3 outc=mix(c,rec,deh);\n" +
+        " vec3 base=nearM*.68+wideM*.32; vec3 detail=clamp(c-base,vec3(-.065),vec3(.065));\n" +
+        " outc+=detail*s*(.12+.46*objectMask);\n" +
+        " float yout=Y(outc); float minY=yc-.10*s; float maxY=yc+.08*s; float wanted=clamp(yout,minY,maxY);\n" +
+        " outc*=wanted/max(yout,.035);\n" +
+        " float flat=1.0-smoothstep(.02,.16,edge); float dn=s*(.02+.065*uNight)*flat*smoothstep(.34,.80,veil); outc=mix(outc,nearM,clamp(dn,0.0,.10));\n" +
+        " float yo=Y(outc); outc=vec3(yo)+(outc-vec3(yo))*(1.0+.035*s+.055*objectMask);\n" +
         " gl_FragColor=vec4(clamp(outc,0.0,1.0),1.0);}\n";
 
     // Conservative GLES2 fallback for GPUs/drivers that reject the full
@@ -314,10 +320,10 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         float darkMean=darkSum/count;
         float veilScore=clamp01((darkMean-90f)/80f);
         float hazeProxy=clamp01(contrastScore*.40f+textureScore*.24f+grayScore*.17f+veilScore*.19f);
-        int candidate=hazeProxy<.26f?0:hazeProxy<.34f?1:hazeProxy<.42f?2:hazeProxy<.50f?3:4;
+        int candidate=hazeProxy<.24f?0:hazeProxy<.30f?1:hazeProxy<.36f?2:hazeProxy<.43f?3:4;
         if(candidate==pendingAutoLevel)pendingAutoCount++;else{pendingAutoLevel=candidate;pendingAutoCount=1;}
         if(pendingAutoCount>=2||Math.abs(candidate-autoLevel)>=2){autoLevel=candidate;pendingAutoCount=0;}
-        float[] targets={.38f,.48f,.58f,.68f,.78f};
+        float[] targets={.02f,.22f,.42f,.58f,.70f};
         float target=targets[autoLevel];
         float mean=sum/count;
         boolean autoNight=mean<55f;
