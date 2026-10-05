@@ -305,7 +305,7 @@ placeholder(before,inctx,'Оригінал');placeholder(after,outctx,'Резу�
  if('serviceWorker' in navigator){
    navigator.serviceWorker.register('./sw.js',{scope:'./'})
     .then(()=>navigator.serviceWorker.ready)
-    .then(async()=>{if(await caches.has('dehaze-offline-v1'))el.textContent=navigator.onLine?'Офлайн готовий • можна відключити інтернет':'Офлайн • кешовані файли';})
+    .then(async()=>{if(await caches.has('digital-dehazing-v4'))el.textContent=navigator.onLine?'Офлайн готовий • можна відключити інтернет':'Офлайн • кешовані файли';})
     .catch(e=>{el.textContent='Офлайн-кеш недоступний: '+e.message;});
    navigator.serviceWorker.addEventListener('controllerchange',update);
  }else{el.textContent='Офлайн-кеш не підтримується цим браузером';}
