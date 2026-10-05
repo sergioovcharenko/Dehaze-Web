@@ -23,7 +23,10 @@
  }
  function setView(){
   const active=filter.checked;
-  output.hidden=!active;
+  // Never hide the figure containing the source <video>.
+  // If WebGL is off or fails, fall back to the original video.
+  output.hidden=false;
+  canvas.style.display=active?'block':'none';
   viewer.classList.toggle('two-frames',active&&viewMode==='two');
   $('viewSplit').classList.toggle('selected',viewMode==='split');
   $('viewFull').classList.toggle('selected',viewMode==='full');
@@ -31,7 +34,7 @@
 
   // The source <video> never moves. Some mobile browsers stop producing
   // frames for WebGL when a playing video is re-parented in the DOM.
-  if(viewMode==='two'){
+  if(viewMode==='two'&&active){
    originalFig.hidden=false;
    composite.classList.remove('split');
    composite.classList.add('full');
@@ -94,8 +97,8 @@
   float skyProtect=1.0-sky*.94;
 
   // Estimate veil density from luminance + low local structure.
-  float flat=1.0-smoothstep(.018,.10,edge);
-  float haze=clamp(l*.42+flat*.34+(1.0-length(c-local))*.12,0.0,1.0);
+  float flatness=1.0-smoothstep(.018,.10,edge);
+  float haze=clamp(l*.42+flatness*.34+(1.0-length(c-local))*.12,0.0,1.0);
 
   // Adaptive limiter: 100% remains available in dense haze, but clean/textured
   // regions automatically receive less processing to avoid an overcooked image.
@@ -118,7 +121,7 @@
 
   // Restrained color recovery; avoid oversaturation in already clear areas.
   float y2=dot(enhanced,vec3(.299,.587,.114));
-  enhanced=mix(vec3(y2),enhanced,1.0+.055*adaptiveS*texture);
+  enhanced=mix(vec3(y2),enhanced,1.0+.055*adaptiveS*texDetail);
 
   // Extra safety in very clean, high-detail regions.
   float safety=clamp(clean*.30+sky*.45,0.0,.62);
@@ -162,7 +165,7 @@
     frameCounter=0;lastFps=now;
    }
   }catch(err){
-   message('Помилка відеообробки: '+err.message);
+   message('WebGL недоступний: '+err.message+' • показую оригінальне відео.');
    filter.checked=false;setView();stopRendering();
   }
  }
@@ -176,7 +179,7 @@
  function startRendering(){
   if(!filter.checked||source.readyState<2||$('videoPreview').hidden)return;
   try{initGL();}
-  catch(err){filter.checked=false;setView();message(err.message);return;}
+  catch(err){filter.checked=false;setView();message('WebGL недоступний: '+err.message+' • показую оригінальне відео.');return;}
   rendering=true;lastFps=performance.now();frameCounter=0;
   requestFrame();
  }
