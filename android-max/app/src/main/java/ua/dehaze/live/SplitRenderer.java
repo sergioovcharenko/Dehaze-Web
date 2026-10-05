@@ -78,6 +78,24 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         " float mixD=clamp(s*(.30+.62*smoothstep(.08,.80,haze))+.10*objectBoost,0.0,.98);vec3 result=mix(c,rec,mixD);\n" +
         " gl_FragColor=vec4(clamp(result,0.0,1.0),1.0);\n" +
         "}";
+    private static final String FALLBACK_FRAGMENT =
+        "#extension GL_OES_EGL_image_external : require\n" +
+        "precision mediump float;\n" +
+        "varying vec2 vUV;\n" +
+        "uniform samplerExternalOES uCamera;\n" +
+        "uniform mat4 uMatrix;\n" +
+        "uniform float uRotation;\n" +
+        "uniform vec2 uPixel;\n" +
+        "uniform float uEnhanced;\n" +
+        "uniform float uStrength;\n" +
+        "uniform vec2 uCrop;\n" +
+        "uniform vec2 uPan;\n" +
+        "vec2 rot(vec2 uv){if(uRotation<45.0)return uv;if(uRotation<135.0)return vec2(uv.y,1.0-uv.x);if(uRotation<225.0)return vec2(1.0-uv.x,1.0-uv.y);return vec2(1.0-uv.y,uv.x);}\n" +
+        "vec3 grab(vec2 uv){vec2 p=clamp((uv-.5)*uCrop+.5+uPan,vec2(.001),vec2(.999));return texture2D(uCamera,(uMatrix*vec4(rot(p),0.0,1.0)).xy).rgb;}\n" +
+        "float lum(vec3 x){return dot(x,vec3(.299,.587,.114));}\n" +
+        "void main(){vec3 c=grab(vUV);if(uEnhanced<.5){gl_FragColor=vec4(c,1.0);return;}vec3 a=grab(vUV+vec2(uPixel.x*2.0,0.0));vec3 b=grab(vUV-vec2(uPixel.x*2.0,0.0));vec3 d=grab(vUV+vec2(0.0,uPixel.y*2.0));vec3 e=grab(vUV-vec2(0.0,uPixel.y*2.0));vec3 m=(a+b+d+e)*.25;float s=clamp(uStrength,0.0,1.0);float y=lum(c);float my=lum(m);vec3 r=c+(c-m)*(.35*s);r=(r-.5)*(1.0+.22*s)+.5;r*=mix(1.0,clamp(.92+.18*(my-y),.88,1.08),s);gl_FragColor=vec4(clamp(mix(c,r,.72*s),0.0,1.0),1.0);}\n";
+
+    private volatile boolean compatibilityShader=false;
     private final MainActivity activity;
     private final GLSurfaceView view;
     private final MainActivity.TextureCallback textureCallback;
@@ -160,16 +178,32 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         if(ok[0]==0)throw new RuntimeException("Shader: "+GLES20.glGetShaderInfoLog(shader));
         return shader;
     }
-    private int createProgram(){
+    private int linkProgram(String fragment){
         int vert=compile(GLES20.GL_VERTEX_SHADER,VERTEX);
-        int frag=compile(GLES20.GL_FRAGMENT_SHADER,FRAGMENT);
+        int frag=compile(GLES20.GL_FRAGMENT_SHADER,fragment);
         int p=GLES20.glCreateProgram();
         GLES20.glAttachShader(p,vert);GLES20.glAttachShader(p,frag);GLES20.glLinkProgram(p);
         int[] ok=new int[1];
         GLES20.glGetProgramiv(p,GLES20.GL_LINK_STATUS,ok,0);
-        if(ok[0]==0)throw new RuntimeException("Link: "+GLES20.glGetProgramInfoLog(p));
+        if(ok[0]==0){
+            String info=GLES20.glGetProgramInfoLog(p);
+            GLES20.glDeleteProgram(p);GLES20.glDeleteShader(vert);GLES20.glDeleteShader(frag);
+            throw new RuntimeException("Link: "+info);
+        }
         GLES20.glDeleteShader(vert);GLES20.glDeleteShader(frag);
         return p;
+    }
+    private int createProgram(){
+        try{
+            compatibilityShader=false;
+            return linkProgram(FRAGMENT);
+        }catch(RuntimeException primary){
+            // Some Android GLES2 drivers reject larger OES fragment shaders.
+            // Never terminate the Activity: fall back to a compact OES shader.
+            compatibilityShader=true;
+            android.util.Log.e("DigitalDehazing","Adaptive MAX shader unavailable; using compatibility renderer",primary);
+            return linkProgram(FALLBACK_FRAGMENT);
+        }
     }
 
     @Override public void onSurfaceCreated(GL10 unused,EGLConfig config) {
@@ -201,7 +235,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         },new Handler(Looper.getMainLooper()));
         framePending.set(false);textureHasFrame=false;lastStatsNanos=0;
         lastAnalysisNs=0;initAnalysisTarget();
-        activity.runOnUiThread(()->textureCallback.onReady(surfaceTexture));
+        activity.runOnUiThread(()->{ textureCallback.onReady(surfaceTexture); if(compatibilityShader) activity.onGpuCompatibilityMode(); });
     }
 
 
