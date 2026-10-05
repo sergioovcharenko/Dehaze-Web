@@ -39,7 +39,6 @@ canvas{display:block;max-width:100%;height:auto;max-height:75vh;border-radius:7p
 .video-composite video{display:block;width:100%;height:auto;max-height:65vh;object-fit:contain;background:#050c16}
 .video-composite canvas{position:absolute;inset:0;width:100%;height:100%;max-width:none;max-height:none;border-radius:0;object-fit:contain;pointer-events:none}
 .video-composite.split canvas{clip-path:inset(0 0 0 50%)}
-.video-composite.full video{visibility:hidden}
 .video-composite.full canvas{clip-path:none}
 .video-divider{position:absolute;top:0;bottom:0;left:50%;width:1px;background:rgba(255,255,255,.42);pointer-events:none;z-index:3}
 .video-composite.full .video-divider{display:none}
@@ -87,7 +86,7 @@ canvas{display:block;max-width:100%;height:auto;max-height:75vh;border-radius:7p
        <div class="video-divider"></div>
      </div></div>
    </figure>
-   <figure id="videoOriginalFig" hidden><figcaption>Оригінал</figcaption><div class="canvas" id="videoOriginalHolder"></div></figure>
+   <figure id="videoOriginalFig" hidden><figcaption>Оригінал</figcaption><div class="canvas"><canvas id="videoOriginalCanvas" width="640" height="360"></canvas></div></figure>
  </div>
  <div class="video-transport" id="videoTransport">
    <button id="videoPlayPause" type="button">▶</button>
@@ -309,7 +308,7 @@ $('save').onclick=()=>{if($('save').disabled)return;after.toBlob(blob=>{if(!blob
 $('reset').onclick=()=>{image=null;$('photo').value='';if(objectURL)URL.revokeObjectURL(objectURL);objectURL=null;
 placeholder(before,inctx,'Оригінал');placeholder(after,outctx,'Результат');$('fileinfo').textContent='Фото не завантажене.';$('run').disabled=true;$('processTop').disabled=true;$('save').disabled=true;$('status').textContent='Обери фотографію.';$('details').textContent='Завантаж фото, щоб порівняти результат.'};
 </script>
-<script src="./video-dehaze.js?v=10"></script>
+<script src="./video-dehaze.js?v=11"></script>
 <script>
 (function(){
  const el=document.getElementById('offlineState');
