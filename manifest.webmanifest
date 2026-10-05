@@ -3,7 +3,7 @@
   "short_name": "Dehazing",
   "description": "Digital dehazing for camera and local video with local processing.",
   "lang": "uk",
-  "start_url": "./digital-dehazing.html",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
