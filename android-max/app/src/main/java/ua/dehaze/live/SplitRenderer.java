@@ -30,10 +30,66 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
     private static final String FRAGMENT =
         "#extension GL_OES_EGL_image_external : require\n" +
         "precision mediump float;\n" +
-        "varying vec2 vUV; uniform samplerExternalOES uCamera; uniform mat4 uMatrix; uniform float uRotation; uniform vec2 uPixel; uniform float uEnhanced; uniform float uStrength; uniform float uMax; uniform vec2 uCrop; uniform vec2 uPan;\n" +
+        "varying vec2 vUV;\n" +
+        "uniform samplerExternalOES uCamera;\n" +
+        "uniform mat4 uMatrix;\n" +
+        "uniform float uRotation;\n" +
+        "uniform vec2 uPixel;\n" +
+        "uniform float uEnhanced;\n" +
+        "uniform float uStrength;\n" +
+        "uniform float uMax;\n" +
+        "uniform float uNight;\n" +
+        "uniform float uAtmosphere;\n" +
+        "uniform float uMediaMode;\n" +
+        "uniform vec2 uCrop;\n" +
+        "uniform vec2 uPan;\n" +
         "vec2 rotateUV(vec2 uv){if(uRotation<45.0)return uv;if(uRotation<135.0)return vec2(uv.y,1.0-uv.x);if(uRotation<225.0)return vec2(1.0-uv.x,1.0-uv.y);return vec2(1.0-uv.y,uv.x);}\n" +
-        "vec3 grab(vec2 uv){vec2 p=clamp((uv-.5)*uCrop+.5+uPan,vec2(.001),vec2(.999));return texture2D(uCamera,(uMatrix*vec4(rotateUV(p),0.0,1.0)).xy).rgb;} float lum(vec3 c){return dot(c,vec3(.299,.587,.114));} float dc(vec3 c){return min(c.r,min(c.g,c.b));}\n" +
-        "void main(){vec3 c=grab(vUV);if(uEnhanced<.5||uStrength<.001){gl_FragColor=vec4(c,1.);return;} vec2 p2=uPixel*2.,p4=uPixel*4.; vec3 a=grab(vUV+vec2(p2.x,0.)),b=grab(vUV-vec2(p2.x,0.)),d=grab(vUV+vec2(0.,p2.y)),e=grab(vUV-vec2(0.,p2.y)); vec3 q1=grab(vUV+p4),q2=grab(vUV+vec2(-p4.x,p4.y)),q3=grab(vUV+vec2(p4.x,-p4.y)),q4=grab(vUV-p4); vec3 l2=(a+b+d+e)*.25,l4=(q1+q2+q3+q4)*.25; float y=lum(c),edge=clamp(length(c-l2)*3.2+abs(y-lum(l4))*2.2,0.,1.); float dark=min(dc(c),min(min(dc(a),dc(b)),min(dc(d),dc(e)))); dark=min(dark,min(min(dc(q1),dc(q2)),min(dc(q3),dc(q4)))); float low=1.-smoothstep(.025,.16,edge),haze=clamp(dark*.70+y*.18+low*.12,0.,1.); float s=clamp(uStrength,0.,1.),t=clamp(1.-mix(.62,.88,s)*haze,mix(.38,.22,s),1.); vec3 A=mix(vec3(.82),vec3(.94),clamp(haze*.9+.08,0.,1.)); vec3 rec=clamp((c-A)/t+A,0.,1.); float structure=smoothstep(.015,.20,edge)*smoothstep(.20,.82,haze); rec+=clamp(c-l2,-.11,.11)*(s*(.30+.85*structure)); rec+=clamp(c-l4,-.08,.08)*(s*.28*structure); float ly=lum(l4); rec=vec3(ly)+(rec-vec3(ly))*(1.+s*(.10+.30*structure)); rec=mix(rec,l2,.07*s*low*smoothstep(.35,.85,haze)); vec3 r=mix(c,rec,clamp(s*(.38+.58*smoothstep(.10,.78,haze)),0.,.97)); float rl=lum(r); r=mix(vec3(rl),r,1.+.12*s); gl_FragColor=vec4(clamp(r,0.,1.),1.);}\n";
+        "vec3 grab(vec2 uv){vec2 p=clamp((uv-.5)*uCrop+.5+uPan,vec2(.001),vec2(.999));return texture2D(uCamera,(uMatrix*vec4(rotateUV(p),0.0,1.0)).xy).rgb;}\n" +
+        "float lum(vec3 c){return dot(c,vec3(.299,.587,.114));}\n" +
+        "float dc(vec3 c){return min(c.r,min(c.g,c.b));}\n" +
+        "void main(){\n" +
+        " vec3 c=grab(vUV);\n" +
+        " if(uEnhanced<.5||uStrength<.001){gl_FragColor=vec4(c,1.0);return;}\n" +
+        " vec2 p1=uPixel*1.75,p4=uPixel*4.5;\n" +
+        " vec3 a=grab(vUV+vec2(p1.x,0.0)),b=grab(vUV-vec2(p1.x,0.0)),d=grab(vUV+vec2(0.0,p1.y)),e=grab(vUV-vec2(0.0,p1.y));\n" +
+        " vec3 q1=grab(vUV+vec2(p4.x,p4.y)),q2=grab(vUV+vec2(-p4.x,p4.y)),q3=grab(vUV+vec2(p4.x,-p4.y)),q4=grab(vUV-vec2(p4.x,p4.y));\n" +
+        " vec3 nearMean=(a+b+d+e)*.25,wideMean=(q1+q2+q3+q4)*.25;\n" +
+        " float y=lum(c),yn=lum(nearMean),yw=lum(wideMean);\n" +
+        " float e1=abs(y-yn)+length(c-nearMean)*.42;\n" +
+        " float e2=abs(yn-yw)+abs(y-yw)*.55;\n" +
+        " float structure=clamp(smoothstep(.004,.085,e1+.62*e2),0.0,1.0);\n" +
+        " float weakStructure=smoothstep(.003,.040,abs(y-yw))*(1.0-smoothstep(.12,.26,e1));\n" +
+        " float darkNear=min(dc(c),min(min(dc(a),dc(b)),min(dc(d),dc(e))));\n" +
+        " float darkWide=min(min(dc(q1),dc(q2)),min(dc(q3),dc(q4)));\n" +
+        " float A=clamp(uAtmosphere,.72,.96);\n" +
+        " float hazeNear=clamp(darkNear/max(A,.35),0.0,1.0);\n" +
+        " float hazeWide=clamp(min(darkNear,darkWide)/max(A,.35),0.0,1.0);\n" +
+        " float guidedHaze=mix(hazeWide,hazeNear,clamp(.10+.78*structure,0.0,1.0));\n" +
+        " float veil=clamp(guidedHaze*.78+(1.0-structure)*.12+y*.10,0.0,1.0);\n" +
+        " float objectMask=clamp(max(structure*.82,weakStructure)*smoothstep(.10,.74,veil),0.0,1.0);\n" +
+        " float s=clamp(uStrength*(1.0+.06*uMax),0.0,1.0);\n" +
+        " if(uNight>.5)s*=.88;\n" +
+        " float omega=clamp(mix(.68,.91,s)*(1.0+.035*uMax),.62,.94);\n" +
+        " float floorT=mix(.42,.23,s)-.035*objectMask*uMax+.035*uNight;\n" +
+        " float t=clamp(1.0-omega*veil,max(.19,floorT),1.0);\n" +
+        " vec3 Avec=vec3(A);\n" +
+        " vec3 recovered=clamp((c-Avec)/t+Avec,0.0,1.0);\n" +
+        " float dehazeMix=clamp(s*(.42+.45*smoothstep(.10,.78,veil)),0.0,.94);\n" +
+        " vec3 result=mix(c,recovered,dehazeMix);\n" +
+        " vec3 localMean=nearMean*.72+wideMean*.28;\n" +
+        " vec3 realDetail=clamp(c-localMean,vec3(-.085),vec3(.085));\n" +
+        " float detailGain=s*(.18+.70*objectMask+.18*uMax*objectMask);\n" +
+        " result+=realDetail*detailGain;\n" +
+        " float localDelta=clamp(lum(result)-lum(localMean),-.07,.07);\n" +
+        " result+=vec3(localDelta)*s*(.08+.24*objectMask);\n" +
+        " float flat=1.0-smoothstep(.008,.055,e1);\n" +
+        " float denoise=s*(.035+.095*uNight)*flat*smoothstep(.25,.78,veil);\n" +
+        " result=mix(result,nearMean,clamp(denoise,0.0,.16));\n" +
+        " float ry=lum(result);\n" +
+        " float colorGain=1.0+.055*s+.095*objectMask*(1.0-.45*uNight);\n" +
+        " result=vec3(ry)+(result-vec3(ry))*colorGain;\n" +
+        " gl_FragColor=vec4(clamp(result,0.0,1.0),1.0);\n" +
+        "}\n";
     private final MainActivity activity;
     private final GLSurfaceView view;
     private final MainActivity.TextureCallback textureCallback;
@@ -229,7 +285,8 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         final int[] hist=new int[256];
         final int[] previousRow=new int[SAMPLE_W];
         float sum=0f,edgeSum=0f,saturation=0f;
-        int edgeCount=0,skyCount=0;
+        int edgeCount=0;
+        float darkSum=0f;
         for(int y=0;y<SAMPLE_H;y++){
             int left=0;
             for(int x=0;x<SAMPLE_W;x++){
@@ -241,7 +298,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
                 int min=Math.min(red,Math.min(green,blue));
                 int max=Math.max(red,Math.max(green,blue));
                 saturation+=max-min;
-                if(y>=SAMPLE_H/2 && luminance>=150 && (max-min)<=42)skyCount++;
+                darkSum+=min;
                 hist[luminance]++;
                 sum+=luminance;
                 if(x>0){edgeSum+=Math.abs(luminance-left);edgeCount++;}
@@ -253,30 +310,28 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         for(int i=0;i<256;i++){acc+=hist[i];if(acc>=count*.10){p10=i;break;}}
         acc=0;
         for(int i=0;i<256;i++){acc+=hist[i];if(acc>=count*.90){p90=i;break;}}
-        float contrastScore=clamp01((105f-(p90-p10))/100f);
+        float contrastScore=clamp01((118f-(p90-p10))/110f);
         float edgeMean=edgeSum/Math.max(1,edgeCount);
-        float textureScore=clamp01((18f-edgeMean)/18f);
+        float textureScore=clamp01((16f-edgeMean)/16f);
         float saturationMean=saturation/count;
-        float grayScore=clamp01((48f-saturationMean)/48f);
-        float skyRatio=clamp01(skyCount/(float)Math.max(1,count/2));
-        float hazeProxy=clamp01(contrastScore*.47f+textureScore*.33f+grayScore*.20f);
-        // Large bright smooth sky must not be interpreted as dense fog.
-        hazeProxy=clamp01(hazeProxy*(1f-.42f*skyRatio));
-        int candidate=hazeProxy<.22f?0:hazeProxy<.40f?1:hazeProxy<.57f?2:hazeProxy<.72f?3:4;
+        float grayScore=clamp01((42f-saturationMean)/42f);
+        float darkMean=darkSum/count;
+        float veilScore=clamp01((darkMean-90f)/80f);
+        float hazeProxy=clamp01(contrastScore*.40f+textureScore*.24f+grayScore*.17f+veilScore*.19f);
+        int candidate=hazeProxy<.26f?0:hazeProxy<.34f?1:hazeProxy<.42f?2:hazeProxy<.50f?3:4;
         if(candidate==pendingAutoLevel)pendingAutoCount++;else{pendingAutoLevel=candidate;pendingAutoCount=1;}
         if(pendingAutoCount>=2||Math.abs(candidate-autoLevel)>=2){autoLevel=candidate;pendingAutoCount=0;}
-        float[] targets={.14f,.30f,.45f,.60f,.75f};
+        float[] targets={.38f,.48f,.58f,.68f,.78f};
         float target=targets[autoLevel];
         float mean=sum/count;
-        boolean autoNight=mean<58f;
-        if(autoNight)target=Math.max(.24f,target*.78f);
-        if(skyRatio>.55f)target*=.86f;
-        float nextAtmosphere=Math.max(.74f,Math.min(.90f,(p90+18f)/255f));
-        atmosphere=atmosphere*.84f+nextAtmosphere*.16f;
-        strength=clamp01(strength*.78f+target*.22f);
+        boolean autoNight=mean<55f;
+        if(autoNight)target=Math.max(.30f,target*.82f);
+        float nextAtmosphere=Math.max(.74f,Math.min(.93f,(p90+12f)/255f));
+        atmosphere=atmosphere*.86f+nextAtmosphere*.14f;
+        strength=clamp01(strength*.82f+target*.18f);
         maxMode=autoLevel>=4;
         nightMode=autoNight;
-        activity.onAutoHybrid(strength,autoLevel,autoNight,skyRatio);
+        activity.onAutoHybrid(strength,autoLevel,autoNight);
     }
 
     @Override public void onSurfaceChanged(GL10 unused,int width,int height){
