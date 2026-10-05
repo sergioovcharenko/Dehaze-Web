@@ -6,7 +6,7 @@ const original=$('before'),result=$('after');
 const originalContext=original.getContext('2d',{willReadFrequently:true}),
       resultContext=result.getContext('2d',{willReadFrequently:true});
 let picture=null,imageUrl=null,processed=false,busy=false,variant='max',auto=85;
-const inputs=['strength','sky','detail','noise'];
+const inputs=['strength','detail','noise'];
 function setStatus(msg){$('status').textContent=msg;}
 function placeholder(canvas,context,msg){
  canvas.width=640;canvas.height=360;
@@ -130,7 +130,6 @@ function localContrast(src,w,h,opts){
    luts.push(lut);
  }
  const out=new Uint8ClampedArray(src.length);
- const skyProtect=opts.sky/100;
  for(let y=0;y<h;y++){
    const fy=(y+.5)/th-.5,ty0=clamp(Math.floor(fy),0,ny-1),
          ty1=Math.min(ny-1,ty0+1),ay=clamp(fy-ty0,0,1);
@@ -146,10 +145,7 @@ function localContrast(src,w,h,opts){
      const texture=(weights[k00]*(1-ax)+weights[k10]*ax)*(1-ay)+
            (weights[k01]*(1-ax)+weights[k11]*ax)*ay;
      const mapped=v0*(1-ay)+v1*ay;
-     const highlight=clamp((lum-164)/68,0,1);
-     const top=clamp((.7-y/h)/.5,0,1);
-     const protect=1-highlight*top*skyProtect;
-     const delta=clamp(mapped-lum,-45,45)*texture*opts.gain*protect;
+     const delta=clamp(mapped-lum,-45,45)*texture*opts.gain;
      out[i]=clamp(src[i]+delta);
      out[i+1]=clamp(src[i+1]+delta);
      out[i+2]=clamp(src[i+2]+delta);
@@ -177,18 +173,16 @@ function adaptiveDenoise(src,w,h,intensity){
  }
  return out;
 }
-function fineDetail(src,w,h,power,skyProtect){
+function fineDetail(src,w,h,power){
  if(power<=0)return src;
- const out=new Uint8ClampedArray(src),amount=(power/100)*.6,protect=skyProtect/100;
+ const out=new Uint8ClampedArray(src),amount=(power/100)*.62;
  for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
    const i=(y*w+x)*4;
-   const lum=.299*src[i]+.587*src[i+1]+.114*src[i+2];
-   const sky=clamp((lum-172)/67,0,1)*clamp((.7-y/h)/.6,0,1);
-   const factor=amount*(1-sky*protect);
    for(let c=0;c<3;c++){
      const blur=(src[i+c-4]+src[i+c+4]+src[i+c-w*4]+src[i+c+w*4])*.25;
-     const edge=clamp(src[i+c]-blur,-25,25);
-     out[i+c]=clamp(src[i+c]+edge*factor);
+     const edge=clamp(src[i+c]-blur,-24,24);
+     const signal=clamp((Math.abs(edge)-.8)/11,0,1);
+     out[i+c]=clamp(src[i+c]+edge*amount*(.20+.80*signal));
    }
  }
  return out;
@@ -202,7 +196,7 @@ async function process(){
  busy=true;$('panel').classList.add('busy');
  $('process').disabled=true;$('quickProcess').disabled=true;
  $('save').disabled=true;$('saveTop').disabled=true;
- setStatus('Обробка MAX • оцінювання туману → DCP → guided filter → локальний контраст…');
+ setStatus('Обробка MAX • AUTO haze → DCP → guided transmission → Adaptive Object → деталі…');
  await new Promise(resolve=>setTimeout(resolve,70));
  const started=performance.now();
  try{
@@ -213,25 +207,22 @@ async function process(){
    const frame=ctx.getImageData(0,0,w,h);
    const source=new Uint8ClampedArray(frame.data);
    const strength=Number($('manual').checked?$('strength').value:auto);
-   const sky=Number($('sky').value),detail=Number($('detail').value),
-         noise=Number($('noise').value);
+   const detail=Number($('detail').value),noise=Number($('noise').value);
    let output;
    if(strength===0){
      output=source;
    }else{
      if(typeof dehazeStrongDCP!=='function')
        throw Error('Не завантажився офлайн-алгоритм DCP.');
-     const recovered=dehazeStrongDCP(source,w,h,{
-       strength,skyProtect:sky
-     });
+     const recovered=dehazeStrongDCP(source,w,h,{strength,maxMode:variant==='max'});
      // Multistage quality pipeline. Each stage preserves true pixels; no
      // generative AI or invented textures are used.
      const contrasted=localContrast(recovered,w,h,{
-       sky,clip:variant==='max'?2.2:1.5,
+       clip:variant==='max'?2.2:1.5,
        gain:(variant==='max'?.43:.27)*strength/100
      });
      const denoised=adaptiveDenoise(contrasted,w,h,noise);
-     output=fineDetail(denoised,w,h,detail,sky);
+     output=fineDetail(denoised,w,h,detail);
    }
    frame.data.set(output);
    result.width=w;result.height=h;
@@ -239,7 +230,7 @@ async function process(){
    processed=true;
    $('save').disabled=false;$('saveTop').disabled=false;
    $('info').textContent=w+' × '+h+' • '+(variant==='max'?'AUTO MAX':'AUTO')+
-     ' • сила '+strength+'% • захист неба '+sky+'%';
+     ' • сила '+strength+'% • Adaptive Object DCP';
    setStatus('Готово за '+((performance.now()-started)/1000).toFixed(1)+
      ' с. Результат збережи в Галерею.');
  }catch(e){
