@@ -6,7 +6,8 @@
  const $=id=>document.getElementById(id);
  const source=$('videoSource'),canvas=$('videoAfter'),status=$('videoStatus');
  const output=$('videoProcessedFig'),viewer=$('videoViewer'),caption=$('videoProcessedCaption');
- const composite=$('videoCompositeStage'),originalFig=$('videoOriginalFig'),originalHolder=$('videoOriginalHolder');
+ const composite=$('videoCompositeStage'),originalFig=$('videoOriginalFig'),originalCanvas=$('videoOriginalCanvas');
+ const originalCtx=originalCanvas.getContext('2d',{alpha:false});
  const filter=$('videoEnabled'),strength=$('videoStrength'),readout=$('videoStrengthVal');
  const seek=$('videoSeek'),time=$('videoTime'),playPause=$('videoPlayPause'),stopPlayback=$('videoStopPlayback');
  let stream=null,objectURL=null,gl=null,program=null,texture=null,vbo=null;
@@ -28,23 +29,15 @@
   $('viewFull').classList.toggle('selected',viewMode==='full');
   $('viewTwo').classList.toggle('selected',viewMode==='two');
 
+  // The source <video> never moves. Some mobile browsers stop producing
+  // frames for WebGL when a playing video is re-parented in the DOM.
   if(viewMode==='two'){
    originalFig.hidden=false;
-   if(source.parentElement!==originalHolder)originalHolder.appendChild(source);
-   composite.classList.remove('split','full');
-   canvas.style.position='static';
-   canvas.style.width='100%';
-   canvas.style.height='auto';
-   canvas.style.maxHeight='65vh';
+   composite.classList.remove('split');
+   composite.classList.add('full');
    caption.textContent='WebGL • оброблений кадр';
   }else{
    originalFig.hidden=true;
-   if(source.parentElement!==composite)composite.insertBefore(source,canvas);
-   canvas.style.position='absolute';
-   canvas.style.inset='0';
-   canvas.style.width='100%';
-   canvas.style.height='100%';
-   canvas.style.maxHeight='none';
    composite.classList.toggle('split',viewMode==='split');
    composite.classList.toggle('full',viewMode==='full');
    caption.textContent=viewMode==='split'?'50/50 • Оригінал / WebGL':'WebGL • повний кадр';
@@ -153,6 +146,10 @@
    const scale=Math.min(1,maxSide/Math.max(width,height));
    const w=Math.max(2,Math.round(width*scale)),h=Math.max(2,Math.round(height*scale));
    if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;gl.viewport(0,0,w,h);}
+   if(viewMode==='two'){
+    if(originalCanvas.width!==w||originalCanvas.height!==h){originalCanvas.width=w;originalCanvas.height=h;}
+    originalCtx.drawImage(source,0,0,w,h);
+   }
    gl.useProgram(program);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);
    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,source);
    gl.uniform2f(gl.getUniformLocation(program,'uPixel'),1/w,1/h);
