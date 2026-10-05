@@ -97,16 +97,32 @@
               texture2D(uTex,vUV-vec2(0.0,uPixel.y*2.0)).rgb)*0.25;
   float l=dot(c,vec3(.299,.587,.114));
   float edge=length(c-local);
-  float sky=smoothstep(.60,.84,l)*(1.0-smoothstep(.012,.070,edge))*smoothstep(.16,.90,vUV.y);
-  float mask=1.0-sky*.92;
-  // Natural LIVE dehaze: preserve microtexture and avoid crushed dark areas.
-  float t=1.0-uStrength*(.20+.11*l);
-  vec3 recovered=clamp((c-vec3(.84)) / max(t,.66)+vec3(.84),0.0,1.0);
-  vec3 enhanced=mix(c,recovered,mask*.66);
-  enhanced+=clamp(c-local,-.075,.075)*(.22*uStrength*mask);
+  float sky=smoothstep(.60,.84,l)*(1.0-smoothstep(.012,.075,edge))*smoothstep(.16,.90,vUV.y);
+  float skyProtect=1.0-sky*.94;
+
+  // Estimate veil density from luminance + low local structure.
+  float flat=1.0-smoothstep(.018,.10,edge);
+  float haze=clamp(l*.42+flat*.34+(1.0-length(c-local))*.12,0.0,1.0);
+
+  // Stronger haze removal than the previous soft version, but keep a safe floor.
+  float t=clamp(1.0-uStrength*(.26+.20*haze),.52,1.0);
+  vec3 A=vec3(.86);
+  vec3 recovered=clamp((c-A)/t+A,0.0,1.0);
+
+  // Blend dehaze mainly where haze is detected; protect bright smooth sky.
+  float dehazeMix=clamp((.42+.42*haze)*uStrength*skyProtect,0.0,.86);
+  vec3 enhanced=mix(c,recovered,dehazeMix);
+
+  // Recover real local detail without sharpening flat fog/sky.
+  float texture=smoothstep(.018,.16,edge);
+  enhanced+=clamp(c-local,-.085,.085)*(.30*uStrength*texture*skyProtect);
+
+  // Mild color recovery only on textured ground/objects.
   float y2=dot(enhanced,vec3(.299,.587,.114));
-  enhanced=mix(vec3(y2),enhanced,1.0+.035*uStrength*mask);
-  enhanced=mix(c,enhanced,.82);
+  enhanced=mix(vec3(y2),enhanced,1.0+.07*uStrength*texture*skyProtect);
+
+  // Final safety blend prevents crushed blacks and overprocessed look.
+  enhanced=mix(c,enhanced,.90);
   gl_FragColor=vec4(clamp(enhanced,0.0,1.0),1.0);
  }`);
   program=gl.createProgram();gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);
