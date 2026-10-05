@@ -1,8 +1,8 @@
 'use strict';
-const CACHE='dehaze-stable-video-v11';
+const CACHE='dehaze-glsl-fix-v12';
 const ASSETS=[
   './index.html',
-  './video-dehaze.js?v=11',
+  './video-dehaze.js?v=12',
   './dehaze-dcp.js?v=4',
   './manifest.webmanifest',
   './offline-icon.svg'
