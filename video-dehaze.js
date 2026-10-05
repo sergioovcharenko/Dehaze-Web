@@ -97,12 +97,16 @@
               texture2D(uTex,vUV-vec2(0.0,uPixel.y*2.0)).rgb)*0.25;
   float l=dot(c,vec3(.299,.587,.114));
   float edge=length(c-local);
-  float sky=smoothstep(.62,.84,l)*(1.0-smoothstep(.01,.065,edge))*smoothstep(.18,.88,vUV.y);
-  float mask=1.0-sky*.95;
-  float t=1.0-uStrength*(.26+.16*l);
-  vec3 recovered=clamp((c-vec3(.83)) / max(t,.57)+vec3(.83),0.0,1.0);
-  vec3 enhanced=mix(c,recovered,mask*.84);
-  enhanced+=clamp(c-local,-.13,.13)*(.40*uStrength*mask);
+  float sky=smoothstep(.60,.84,l)*(1.0-smoothstep(.012,.070,edge))*smoothstep(.16,.90,vUV.y);
+  float mask=1.0-sky*.92;
+  // Natural LIVE dehaze: preserve microtexture and avoid crushed dark areas.
+  float t=1.0-uStrength*(.20+.11*l);
+  vec3 recovered=clamp((c-vec3(.84)) / max(t,.66)+vec3(.84),0.0,1.0);
+  vec3 enhanced=mix(c,recovered,mask*.66);
+  enhanced+=clamp(c-local,-.075,.075)*(.22*uStrength*mask);
+  float y2=dot(enhanced,vec3(.299,.587,.114));
+  enhanced=mix(vec3(y2),enhanced,1.0+.035*uStrength*mask);
+  enhanced=mix(c,enhanced,.82);
   gl_FragColor=vec4(clamp(enhanced,0.0,1.0),1.0);
  }`);
   program=gl.createProgram();gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);
@@ -121,7 +125,7 @@
  function render(){
   if(!rendering||!filter.checked||source.paused||source.readyState<2||$('videoPreview').hidden)return;
   try{
-   const width=source.videoWidth,height=source.videoHeight,maxSide=1280;
+   const width=source.videoWidth,height=source.videoHeight,maxSide=1920;
    if(!width||!height)return;
    const scale=Math.min(1,maxSide/Math.max(width,height));
    const w=Math.max(2,Math.round(width*scale)),h=Math.max(2,Math.round(height*scale));
@@ -181,7 +185,7 @@
   objectURL=URL.createObjectURL(file);
   source.src=objectURL;source.loop=false;source.controls=false;
   started=true;showVideo();
-  message('Локальний файл: '+file.name+' — старий WebGL-алгоритм без змін.');
+  message('Локальний файл: '+file.name+' — WebGL HQ 1080p • природна обробка.');
   try{await source.play();if(filter.checked)startRendering();}
   catch(e){message('Натисни ▶, щоб почати перегляд.');}
   updateTransport();
@@ -195,7 +199,7 @@
    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}},audio:false});
    source.srcObject=stream;source.controls=false;source.loop=false;started=true;showVideo();
    await source.play();
-   message('Камера пристрою • старий WebGL-алгоритм • обробка локально.');
+   message('Камера пристрою • WebGL HQ 1080p • обробка локально.');
    if(filter.checked)startRendering();
    updateTransport();
   }catch(e){message('Не вдалося запустити камеру: '+e.message);}
