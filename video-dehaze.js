@@ -99,8 +99,8 @@
 
   // Adaptive limiter: 100% remains available in dense haze, but clean/textured
   // regions automatically receive less processing to avoid an overcooked image.
-  float texture=smoothstep(.018,.16,edge);
-  float clean=clamp((1.0-haze)*(.55+.45*texture),0.0,1.0);
+  float texDetail=smoothstep(.018,.16,edge);
+  float clean=clamp((1.0-haze)*(.55+.45*texDetail),0.0,1.0);
   float adaptiveS=uStrength*(1.0-.42*clean);
   adaptiveS*=mix(.34,1.0,skyProtect);
 
@@ -114,7 +114,7 @@
   vec3 enhanced=mix(c,recovered,dehazeMix);
 
   // Recover real detail only where texture exists.
-  enhanced+=clamp(c-local,-.082,.082)*(.28*adaptiveS*texture);
+  enhanced+=clamp(c-local,-.082,.082)*(.28*adaptiveS*texDetail);
 
   // Restrained color recovery; avoid oversaturation in already clear areas.
   float y2=dot(enhanced,vec3(.299,.587,.114));
