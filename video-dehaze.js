@@ -6,8 +6,7 @@
  const $=id=>document.getElementById(id);
  const source=$('videoSource'),canvas=$('videoAfter'),status=$('videoStatus');
  const output=$('videoProcessedFig'),viewer=$('videoViewer'),caption=$('videoProcessedCaption');
- const composite=$('videoCompositeStage'),originalFig=$('videoOriginalFig'),originalCanvas=$('videoOriginalCanvas');
- const originalCtx=originalCanvas.getContext('2d',{alpha:false});
+ const originalFig=$('videoOriginalFig'),sourceKeeper=$('videoSourceKeeper');
  const filter=$('videoEnabled'),strength=$('videoStrength'),readout=$('videoStrengthVal');
  const seek=$('videoSeek'),time=$('videoTime'),playPause=$('videoPlayPause'),stopPlayback=$('videoStopPlayback');
  let stream=null,objectURL=null,gl=null,program=null,texture=null,vbo=null;
@@ -23,28 +22,21 @@
  }
  function setView(){
   const active=filter.checked;
-  // Never hide the figure containing the source <video>.
-  // If WebGL is off or fails, fall back to the original video.
   output.hidden=false;
-  canvas.style.display=active?'block':'none';
   viewer.classList.toggle('two-frames',active&&viewMode==='two');
   $('viewSplit').classList.toggle('selected',viewMode==='split');
   $('viewFull').classList.toggle('selected',viewMode==='full');
   $('viewTwo').classList.toggle('selected',viewMode==='two');
 
-  // The source <video> never moves. Some mobile browsers stop producing
-  // frames for WebGL when a playing video is re-parented in the DOM.
-  if(viewMode==='two'&&active){
+  if(active&&viewMode==='two'){
    originalFig.hidden=false;
-   composite.classList.remove('split');
-   composite.classList.add('full');
    caption.textContent='WebGL • оброблений кадр';
   }else{
    originalFig.hidden=true;
-   composite.classList.toggle('split',viewMode==='split');
-   composite.classList.toggle('full',viewMode==='full');
-   caption.textContent=viewMode==='split'?'50/50 • Оригінал / WebGL':'WebGL • повний кадр';
+   caption.textContent=viewMode==='split'?'50/50 • Оригінал / WebGL':
+      viewMode==='full'?'WebGL • повний кадр':'Оригінал';
   }
+  canvas.style.display=active?'block':'none';
  }
  function showPhoto(){
   stopRendering();
@@ -85,8 +77,10 @@
  uniform sampler2D uTex;
  uniform vec2 uPixel;
  uniform float uStrength;
+ uniform float uSplit;
  void main(){
   vec3 c=texture2D(uTex,vUV).rgb;
+  if(uSplit>.5 && vUV.x<.5){gl_FragColor=vec4(c,1.0);return;}
   vec3 local=(texture2D(uTex,vUV+vec2(uPixel.x*2.0,0.0)).rgb+
               texture2D(uTex,vUV-vec2(uPixel.x*2.0,0.0)).rgb+
               texture2D(uTex,vUV+vec2(0.0,uPixel.y*2.0)).rgb+
@@ -149,14 +143,11 @@
    const scale=Math.min(1,maxSide/Math.max(width,height));
    const w=Math.max(2,Math.round(width*scale)),h=Math.max(2,Math.round(height*scale));
    if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;gl.viewport(0,0,w,h);}
-   if(viewMode==='two'){
-    if(originalCanvas.width!==w||originalCanvas.height!==h){originalCanvas.width=w;originalCanvas.height=h;}
-    originalCtx.drawImage(source,0,0,w,h);
-   }
    gl.useProgram(program);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);
    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,source);
    gl.uniform2f(gl.getUniformLocation(program,'uPixel'),1/w,1/h);
    gl.uniform1f(gl.getUniformLocation(program,'uStrength'),Number(strength.value)/100);
+   gl.uniform1f(gl.getUniformLocation(program,'uSplit'),viewMode==='split'?1:0);
    gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
    frameCounter++;
    const now=performance.now();
@@ -166,7 +157,7 @@
    }
   }catch(err){
    message('WebGL недоступний: '+err.message+' • показую оригінальне відео.');
-   filter.checked=false;setView();stopRendering();
+   filter.checked=false;originalFig.hidden=false;viewer.classList.add('two-frames');canvas.style.display='none';stopRendering();
   }
  }
  function frameCallback(){requested=false;if(!rendering)return;render();requestFrame();}
@@ -179,7 +170,7 @@
  function startRendering(){
   if(!filter.checked||source.readyState<2||$('videoPreview').hidden)return;
   try{initGL();}
-  catch(err){filter.checked=false;setView();message('WebGL недоступний: '+err.message+' • показую оригінальне відео.');return;}
+  catch(err){filter.checked=false;originalFig.hidden=false;viewer.classList.add('two-frames');canvas.style.display='none';message('WebGL недоступний: '+err.message+' • показую оригінальне відео.');return;}
   rendering=true;lastFps=performance.now();frameCounter=0;
   requestFrame();
  }
