@@ -33,7 +33,7 @@ canvas{display:block;max-width:100%;height:auto;max-height:75vh;border-radius:7p
 [hidden]{display:none!important}
 .mode-tabs{display:flex;gap:8px;margin-bottom:14px}.mode-tabs button{flex:1;font-weight:700}
 #offlineState{font-size:12px;display:inline-block;margin-top:10px;padding:6px 11px;border-radius:999px;border:1px solid #3b876b;background:#17362f}
-.video-stack{display:grid;grid-template-columns:1fr;gap:12px}
+.video-stack{display:grid;grid-template-columns:1fr;gap:12px}.video-stack.two-frames{grid-template-columns:1fr 1fr}.video-stack:not(.two-frames) #videoOriginalFig{display:none}.video-view-modes{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:10px 0}.video-presets{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:10px 0}.video-transport{display:grid;grid-template-columns:auto auto 1fr auto;gap:8px;align-items:center;margin:10px 0}.video-transport input{width:100%}@media(max-width:700px){.video-stack.two-frames{grid-template-columns:1fr}.video-presets{grid-template-columns:repeat(3,1fr)}.video-transport{grid-template-columns:auto auto 1fr}.video-transport .video-time{grid-column:1/-1;text-align:right}}
 .video-stack figure{width:100%}
 .video-stack .canvas{min-height:160px;padding:6px}
 .video-stack canvas,.video-stack video{display:block;width:100%;height:auto;max-height:65vh;object-fit:contain;background:#050c16}
@@ -62,14 +62,24 @@ canvas{display:block;max-width:100%;height:auto;max-height:75vh;border-radius:7p
 <p id="details">Завантаж фото, щоб порівняти результат.</p>
 </div>
 <div id="videoPreview" hidden>
+ <div class="video-view-modes">
+   <button id="viewSplit" class="selected" type="button">50/50</button>
+   <button id="viewFull" type="button">Повне</button>
+   <button id="viewTwo" type="button">2 кадри</button>
+ </div>
  <div class="video-stack" id="videoViewer">
-   <figure id="videoProcessedFig"><figcaption>Антитуман • WebGL</figcaption><div class="canvas"><canvas id="videoAfter" width="640" height="360"></canvas></div></figure>
-   <figure><figcaption>Оригінал</figcaption><div class="canvas"><video id="videoSource" playsinline muted controls></video></div></figure>
+   <figure id="videoProcessedFig"><figcaption id="videoProcessedCaption">50/50 • Оригінал / Digital Dehazing</figcaption><div class="canvas"><canvas id="videoAfter" width="640" height="360"></canvas></div></figure>
+   <figure id="videoOriginalFig"><figcaption>Оригінал</figcaption><div class="canvas"><video id="videoSource" playsinline muted></video></div></figure>
+ </div>
+ <div class="video-transport" id="videoTransport">
+   <button id="videoPlayPause" type="button">▶</button><button id="videoStopPlayback" type="button">■</button>
+   <input id="videoSeek" type="range" min="0" max="1000" value="0"><span class="small video-time" id="videoTime">00:00 / 00:00</span>
  </div>
  <div class="video-controls"><label><input type="checkbox" id="videoEnabled" checked>Антитуман</label><span id="videoFps">— FPS</span></div>
- <div class="control"><div class="line"><label for="videoStrength">Сила відеообробки</label><output id="videoStrengthVal">55%</output></div><input type="range" id="videoStrength" min="0" max="100" value="55"></div>
- <p class="small" id="videoStatus" role="status">Відкрий локальний відеофайл або ввімкни камеру. Кадри не передаються на сервер.</p>
- <p class="note">Для LIVE використовується швидкий WebGL-фільтр, а не повний фотографічний Fusion. RTSP з Topotek у браузері напряму не підтримується; інтеграція з QGC — окремий етап.</p>
+ <div class="video-presets"><button id="videoAuto" class="selected" type="button">AUTO</button><button id="videoLow" type="button">LOW</button><button id="videoMedium" type="button">MEDIUM</button><button id="videoHigh" type="button">HIGH</button><button id="videoNight" type="button">NIGHT</button></div>
+ <div class="control"><div class="line"><label for="videoStrength">Сила відеообробки</label><output id="videoStrengthVal">AUTO • 45%</output></div><input type="range" id="videoStrength" min="0" max="100" value="45" disabled></div>
+ <p class="small" id="videoStatus" role="status">AUTO HYBRID: CLEAR → LIGHT → MEDIUM → STRONG → ADAPTIVE OBJECT. Відкрий відео або камеру.</p>
+ <p class="note">В AUTO базове зображення зберігає м’який WebGL-стиль. Сильний DCP/Adaptive Object підключається лише при достатньому тумані та реальній текстурі. Без AI-домальовування.</p>
 </div>
 </section>
 <section class="panel controls-panel" id="photoControls">
@@ -280,7 +290,7 @@ $('save').onclick=()=>{if($('save').disabled)return;after.toBlob(blob=>{if(!blob
 $('reset').onclick=()=>{image=null;$('photo').value='';if(objectURL)URL.revokeObjectURL(objectURL);objectURL=null;
 placeholder(before,inctx,'Оригінал');placeholder(after,outctx,'Результат');$('fileinfo').textContent='Фото не завантажене.';$('run').disabled=true;$('processTop').disabled=true;$('save').disabled=true;$('status').textContent='Обери фотографію.';$('details').textContent='Завантаж фото, щоб порівняти результат.'};
 </script>
-<script src="./video-dehaze.js?v=2"></script>
+<script src="./video-dehaze.js?v=5"></script>
 <script>
 (function(){
  const el=document.getElementById('offlineState');
