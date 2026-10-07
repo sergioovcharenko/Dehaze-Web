@@ -62,7 +62,7 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         " vec3 result=mix(c,rec,clamp(s*(.38+.58*smoothstep(.10,.78,haze)),0.0,.97));\n" +
         " float ry=lum(result); result=mix(vec3(ry),result,1.0+.12*s); gl_FragColor=vec4(clamp(result,0.0,1.0),1.0);\n" +
         "}";
-    private final MainActivity activity;
+    // Conservative fallback for GPU shader compatibility.\n    private static final String FRAGMENT_COMPAT = FRAGMENT;\n    private final MainActivity activity;
     private final GLSurfaceView view;
     private final MainActivity.TextureCallback textureCallback;
     private final MainActivity.StatsCallback statsCallback;
