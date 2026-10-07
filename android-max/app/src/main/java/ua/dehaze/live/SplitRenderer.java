@@ -45,16 +45,22 @@ public final class SplitRenderer implements GLSurfaceView.Renderer {
         "float lum(vec3 c){return dot(c,vec3(.299,.587,.114));}\n" +
         "float dc(vec3 c){return min(c.r,min(c.g,c.b));}\n" +
         "void main(){\n" +
-        " vec3 c=grab(vUV);if(uEnhanced<.5||uStrength<.001){gl_FragColor=vec4(c,1.);return;}\n" +
-        " vec2 p2=uPixel*2.,p4=uPixel*4.;vec3 a=grab(vUV+vec2(p2.x,0.)),b=grab(vUV-vec2(p2.x,0.)),d=grab(vUV+vec2(0.,p2.y)),e=grab(vUV-vec2(0.,p2.y));\n" +
-        " vec3 q1=grab(vUV+p4),q2=grab(vUV+vec2(-p4.x,p4.y)),q3=grab(vUV+vec2(p4.x,-p4.y)),q4=grab(vUV-p4);\n" +
-        " vec3 l2=(a+b+d+e)*.25,l4=(q1+q2+q3+q4)*.25;float y=lum(c);float edge=clamp(length(c-l2)*3.2+abs(y-lum(l4))*2.2,0.,1.);\n" +
-        " float dark=min(dc(c),min(min(dc(a),dc(b)),min(dc(d),dc(e))));dark=min(dark,min(min(dc(q1),dc(q2)),min(dc(q3),dc(q4))));\n" +
-        " float low=1.-smoothstep(.025,.16,edge);float haze=clamp(dark*.70+y*.18+low*.12,0.,1.);float s=clamp(uStrength,0.,1.);\n" +
-        " float t=clamp(1.-mix(.62,.88,s)*haze,mix(.38,.22,s),1.);vec3 A=mix(vec3(.82),vec3(.94),clamp(haze*.9+.08,0.,1.));vec3 rec=clamp((c-A)/t+A,0.,1.);\n" +
-        " float structure=smoothstep(.015,.20,edge)*smoothstep(.20,.82,haze);rec+=clamp(c-l2,-.11,.11)*(s*(.30+.85*structure));rec+=clamp(c-l4,-.08,.08)*(s*.28*structure);\n" +
-        " float ly=lum(l4);rec=vec3(ly)+(rec-vec3(ly))*(1.+s*(.10+.30*structure));rec=mix(rec,l2,.07*s*low*smoothstep(.35,.85,haze));\n" +
-        " vec3 result=mix(c,rec,clamp(s*(.38+.58*smoothstep(.10,.78,haze)),0.,.97));float rl=lum(result);result=mix(vec3(rl),result,1.+.12*s);gl_FragColor=vec4(clamp(result,0.,1.),1.);\n" +
+        " vec3 c=grab(vUV); if(uEnhanced<0.5||uStrength<.001){gl_FragColor=vec4(c,1.0);return;}\n" +
+        " vec2 p2=uPixel*2.0,p4=uPixel*4.0;\n" +
+        " vec3 a=grab(vUV+vec2(p2.x,0.0)),b=grab(vUV-vec2(p2.x,0.0)),d=grab(vUV+vec2(0.0,p2.y)),e=grab(vUV-vec2(0.0,p2.y));\n" +
+        " vec3 q1=grab(vUV+vec2(p4.x,p4.y)),q2=grab(vUV+vec2(-p4.x,p4.y)),q3=grab(vUV+vec2(p4.x,-p4.y)),q4=grab(vUV-vec2(p4.x,p4.y));\n" +
+        " vec3 l2=(a+b+d+e)*.25,l4=(q1+q2+q3+q4)*.25;\n" +
+        " float y=lum(c),edge=clamp(length(c-l2)*3.2+abs(y-lum(l4))*2.2,0.0,1.0);\n" +
+        " float dark=min(dc(c),min(min(dc(a),dc(b)),min(dc(d),dc(e)))); dark=min(dark,min(min(dc(q1),dc(q2)),min(dc(q3),dc(q4))));\n" +
+        " float lowTex=1.0-smoothstep(.025,.16,edge),haze=clamp(dark*.70+y*.18+lowTex*.12,0.0,1.0);\n" +
+        " float s=clamp(uStrength,0.0,1.0),omega=mix(.62,.88,s),t=clamp(1.0-omega*haze,mix(.38,.22,s),1.0);\n" +
+        " vec3 A=mix(vec3(.82),vec3(.94),clamp(haze*.9+.08,0.0,1.0)),rec=clamp((c-A)/t+A,0.0,1.0);\n" +
+        " float structure=smoothstep(.015,.20,edge)*smoothstep(.20,.82,haze);\n" +
+        " rec+=clamp(c-l2,-.11,.11)*(s*(.30+.85*structure)); rec+=clamp(c-l4,-.08,.08)*(s*.28*structure);\n" +
+        " float ly=lum(l4); rec=vec3(ly)+(rec-vec3(ly))*(1.0+s*(.10+.30*structure));\n" +
+        " rec=mix(rec,l2,.07*s*lowTex*smoothstep(.35,.85,haze));\n" +
+        " vec3 result=mix(c,rec,clamp(s*(.38+.58*smoothstep(.10,.78,haze)),0.0,.97));\n" +
+        " float ry=lum(result); result=mix(vec3(ry),result,1.0+.12*s); gl_FragColor=vec4(clamp(result,0.0,1.0),1.0);\n" +
         "}";
     private final MainActivity activity;
     private final GLSurfaceView view;
