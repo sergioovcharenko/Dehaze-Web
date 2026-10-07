@@ -1,6 +1,6 @@
 plugins { id 'com.android.application' }
 // Build trigger: 2.2.3 camera + Adaptive5
-// merge-trigger 2.2.4
+// build 2.2.5 full adaptive stack
 android {
     namespace 'ua.dehaze.live'
     compileSdk 35
@@ -9,8 +9,8 @@ android {
         applicationId 'ua.digitaldehazing.metituman.adaptiveobjectmax'
         minSdk 26
         targetSdk 35
-        versionCode 9
-        versionName '2.2.4'
+        versionCode 10
+        versionName '2.2.5'
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
