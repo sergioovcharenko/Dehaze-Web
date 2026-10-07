@@ -1,0 +1,75 @@
+name: Build Dehaze Benchmark 2x3
+
+on:
+  push:
+    branches:
+      - feat/dehaze-benchmark-2x3
+    paths:
+      - 'android-dehaze-benchmark/**'
+      - '.github/workflows/build-dehaze-benchmark-2x3.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dehaze-benchmark-2x3
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Configure Android SDK
+        run: |
+          set -euo pipefail
+          sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$sdk" >> "$GITHUB_ENV"
+          tool="$sdk/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$tool"
+          yes | "$tool" --licenses >/dev/null 2>&1 || true
+          "$tool" 'platforms;android-35' 'build-tools;35.0.0' 'platform-tools'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Build debug APK
+        run: gradle -p android-dehaze-benchmark --no-daemon --stacktrace assembleDebug
+
+      - name: Verify package and permissions
+        run: |
+          set -euo pipefail
+          apk=android-dehaze-benchmark/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          aapt="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          "$aapt" dump badging "$apk" | tee badging.txt
+          grep "name='ua.meti.dehazebenchmark'" badging.txt
+          if "$aapt" dump permissions "$apk" | grep -q 'android.permission.INTERNET'; then
+            echo "Unexpected INTERNET permission"; exit 1
+          fi
+          if "$aapt" dump permissions "$apk" | grep -q 'android.permission.CAMERA'; then
+            echo "Unexpected CAMERA permission"; exit 1
+          fi
+          cp "$apk" Dehaze-Benchmark-2x3.apk
+          sha256sum Dehaze-Benchmark-2x3.apk > Dehaze-Benchmark-2x3.apk.sha256
+          ls -lh Dehaze-Benchmark-2x3.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dehaze-Benchmark-2x3
+          path: |
+            Dehaze-Benchmark-2x3.apk
+            Dehaze-Benchmark-2x3.apk.sha256
+          if-no-files-found: error
+          retention-days: 90
