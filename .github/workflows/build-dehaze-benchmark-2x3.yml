@@ -73,3 +73,26 @@ jobs:
             CAP-Video-Test-2x3.apk.sha256
           if-no-files-found: error
           retention-days: 90
+
+      - name: Emulator startup smoke test
+        uses: ReactiveCircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            set -eu
+            adb install -r CAP-Video-Test-2x3.apk
+            adb logcat -c
+            adb shell am start -W -n ua.meti.dehazecaptest/ua.dehaze.benchmark.MainActivity | tee start.txt
+            sleep 5
+            pid="$(adb shell pidof ua.meti.dehazecaptest | tr -d '\r')"
+            test -n "$pid"
+            adb shell dumpsys activity activities | grep -q 'ua.meti.dehazecaptest/ua.dehaze.benchmark.MainActivity'
+            if adb logcat -d | grep -E 'FATAL EXCEPTION|Process: ua\.meti\.dehazecaptest' | grep -q 'ua.meti.dehazecaptest'; then
+              echo "Application crashed during startup"
+              adb logcat -d | tail -400
+              exit 1
+            fi
+            echo "Startup smoke test passed; pid=$pid"
