@@ -1,4 +1,4 @@
-name: Build CAP Video Test 2x3
+name: Build PURE CAP Video Test 2x3
 
 on:
   push:
@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: dehaze-cap-2x3-final-safe2
+  group: pure-cap-2x3-final
   cancel-in-progress: true
 
 jobs:
@@ -60,17 +60,17 @@ jobs:
           if "$aapt" dump permissions "$apk" | grep -q 'android.permission.CAMERA'; then
             echo "Unexpected CAMERA permission"; exit 1
           fi
-          cp "$apk" CAP-Video-Test-2x3-SAFE.apk
-          sha256sum CAP-Video-Test-2x3-SAFE.apk > CAP-Video-Test-2x3-SAFE.apk.sha256
-          ls -lh CAP-Video-Test-2x3-SAFE.apk
+          cp "$apk" PURE-CAP-Video-Test-2x3.apk
+          sha256sum PURE-CAP-Video-Test-2x3.apk > PURE-CAP-Video-Test-2x3.apk.sha256
+          ls -lh PURE-CAP-Video-Test-2x3.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: CAP-Video-Test-2x3-SAFE
+          name: PURE-CAP-Video-Test-2x3
           path: |
-            CAP-Video-Test-2x3-SAFE.apk
-            CAP-Video-Test-2x3-SAFE.apk.sha256
+            PURE-CAP-Video-Test-2x3.apk
+            PURE-CAP-Video-Test-2x3.apk.sha256
           if-no-files-found: error
           retention-days: 90
 
@@ -83,7 +83,7 @@ jobs:
           disable-animations: true
           script: |
             set -eu
-            adb install -r CAP-Video-Test-2x3-SAFE.apk
+            adb install -r PURE-CAP-Video-Test-2x3.apk
             adb logcat -c
             adb shell am start -W -n ua.meti.dehazecaptest.safe/ua.dehaze.benchmark.MainActivity | tee start.txt
             sleep 5
