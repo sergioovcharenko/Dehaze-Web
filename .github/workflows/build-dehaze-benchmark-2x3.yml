@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: dehaze-cap-2x3-safe
+  group: dehaze-cap-2x3-final-safe
   cancel-in-progress: true
 
 jobs:
