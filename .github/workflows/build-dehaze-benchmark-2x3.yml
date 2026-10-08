@@ -60,17 +60,17 @@ jobs:
           if "$aapt" dump permissions "$apk" | grep -q 'android.permission.CAMERA'; then
             echo "Unexpected CAMERA permission"; exit 1
           fi
-          cp "$apk" CAP-Video-Test-2x3.apk
-          sha256sum CAP-Video-Test-2x3.apk > CAP-Video-Test-2x3.apk.sha256
-          ls -lh CAP-Video-Test-2x3.apk
+          cp "$apk" CAP-Video-Test-2x3-SAFE.apk
+          sha256sum CAP-Video-Test-2x3-SAFE.apk > CAP-Video-Test-2x3-SAFE.apk.sha256
+          ls -lh CAP-Video-Test-2x3-SAFE.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: CAP-Video-Test-2x3
+          name: CAP-Video-Test-2x3-SAFE
           path: |
-            CAP-Video-Test-2x3.apk
-            CAP-Video-Test-2x3.apk.sha256
+            CAP-Video-Test-2x3-SAFE.apk
+            CAP-Video-Test-2x3-SAFE.apk.sha256
           if-no-files-found: error
           retention-days: 90
 
@@ -83,14 +83,14 @@ jobs:
           disable-animations: true
           script: |
             set -eu
-            adb install -r CAP-Video-Test-2x3.apk
+            adb install -r CAP-Video-Test-2x3-SAFE.apk
             adb logcat -c
             adb shell am start -W -n ua.meti.dehazecaptest/ua.dehaze.benchmark.MainActivity | tee start.txt
             sleep 5
             pid="$(adb shell pidof ua.meti.dehazecaptest | tr -d '\r')"
             test -n "$pid"
             adb shell dumpsys activity activities | grep -q 'ua.meti.dehazecaptest/ua.dehaze.benchmark.MainActivity'
-            if adb logcat -d | grep -E 'FATAL EXCEPTION|Process: ua\.meti\.dehazecaptest' | grep -q 'ua.meti.dehazecaptest'; then
+            if adb logcat -d | grep -E 'FATAL EXCEPTION|Process: ua.meti.dehazecaptest.safe' | grep -q 'ua.meti.dehazecaptest'; then
               echo "Application crashed during startup"
               adb logcat -d | tail -400
               exit 1
