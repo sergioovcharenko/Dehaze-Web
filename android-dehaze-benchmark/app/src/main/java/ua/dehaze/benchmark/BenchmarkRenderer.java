@@ -78,6 +78,18 @@ public final class BenchmarkRenderer implements GLSurfaceView.Renderer {
         "  gl_FragColor=vec4(clamp(r,0.0,1.0),1.0);\n" +
         "}";
 
+
+    private static final String SAFE_FRAGMENT =
+        "#extension GL_OES_EGL_image_external : require\n" +
+        "precision mediump float;\n" +
+        "varying vec2 vUV;\n" +
+        "uniform samplerExternalOES uVideo;\n" +
+        "uniform mat4 uMatrix;\n" +
+        "uniform vec2 uPixel;\n" +
+        "uniform float uMode;\n" +
+        "vec3 at(vec2 uv){vec2 q=clamp(uv,vec2(.002),vec2(.998));return texture2D(uVideo,(uMatrix*vec4(q,0.0,1.0)).xy).rgb;}\n" +
+        "void main(){vec3 c=at(vUV);if(uMode<.5){gl_FragColor=vec4(c,1.0);return;}vec3 l=(at(vUV+vec2(uPixel.x*2.0,0.0))+at(vUV-vec2(uPixel.x*2.0,0.0))+at(vUV+vec2(0.0,uPixel.y*2.0))+at(vUV-vec2(0.0,uPixel.y*2.0)))*.25;float y=dot(c,vec3(.299,.587,.114));float s=clamp(.28+.09*uMode,.32,.78);float t=max(.42,1.0-s*(.20+.16*y));vec3 r=clamp((c-vec3(.88))/t+vec3(.88),0.0,1.0);r=mix(c,r,.55+.05*uMode);r+=clamp(c-l,vec3(-.06),vec3(.06))*.10;gl_FragColor=vec4(clamp(r,0.0,1.0),1.0);}\n";
+
     private final GLSurfaceView view;
     private final Callback callback;
     private final FloatBuffer quad;
@@ -123,7 +135,19 @@ public final class BenchmarkRenderer implements GLSurfaceView.Renderer {
 
     @Override public void onSurfaceCreated(GL10 gl,EGLConfig config){
         GLES20.glClearColor(.015f,.017f,.020f,1f);
-        program=makeProgram();GLES20.glUseProgram(program);
+        try{
+            program=makeProgram();
+        }catch(RuntimeException fullShaderError){
+            android.util.Log.w("CapVideoTest","Full CAP shader unavailable; using SAFE shader",fullShaderError);
+            int vs=compile(GLES20.GL_VERTEX_SHADER,VERTEX);
+            int fs=compile(GLES20.GL_FRAGMENT_SHADER,SAFE_FRAGMENT);
+            program=GLES20.glCreateProgram();
+            GLES20.glAttachShader(program,vs);GLES20.glAttachShader(program,fs);GLES20.glLinkProgram(program);
+            int[] ok=new int[1];GLES20.glGetProgramiv(program,GLES20.GL_LINK_STATUS,ok,0);
+            GLES20.glDeleteShader(vs);GLES20.glDeleteShader(fs);
+            if(ok[0]==0)throw new RuntimeException("SAFE shader link: "+GLES20.glGetProgramInfoLog(program));
+        }
+        GLES20.glUseProgram(program);
         aPosition=GLES20.glGetAttribLocation(program,"aPosition");
         uMatrix=GLES20.glGetUniformLocation(program,"uMatrix");
         uPixel=GLES20.glGetUniformLocation(program,"uPixel");
