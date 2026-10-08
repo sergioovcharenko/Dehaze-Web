@@ -28,11 +28,11 @@ public final class MainActivity extends Activity implements BenchmarkRenderer.Ca
     private static final int PICK_VIDEO = 42;
     private static final String[] NAMES = {
         "ORIGINAL",
-        "GPU FAST",
-        "DCP LITE",
-        "CAP",
-        "BC/CR LITE",
-        "RETINEX"
+        "CAP SOFT",
+        "CAP BALANCED",
+        "CAP STRONG",
+        "CAP + DCP",
+        "CAP + RETINEX"
     };
 
     private FrameLayout root;
@@ -120,7 +120,7 @@ public final class MainActivity extends Activity implements BenchmarkRenderer.Ca
         bar.setBackgroundColor(Color.rgb(35, 38, 43));
 
         TextView title = new TextView(this);
-        title.setText("DEHAZE VIDEO BENCHMARK 2×3");
+        title.setText("CAP VIDEO TEST 2×3");
         title.setTextColor(Color.WHITE);
         title.setTextSize(15);
         title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
